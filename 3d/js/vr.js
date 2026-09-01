@@ -176,7 +176,7 @@ class VRManager {
     }
     if (pressed && !this._recenterHeld) {
       this._grab = null;
-      this.hooks.placeDiorama(this._lastViewerPose);
+      this.hooks.placeDiorama(this._lastHeadPose);
     }
     this._recenterHeld = pressed;
   }
@@ -189,6 +189,13 @@ class VRManager {
   get inputSourceCount() {
     const session = this.renderer.xr.getSession();
     return session ? session.inputSources.length : 0;
+  }
+
+  _isIdentity(m) {
+    const e = m.elements;
+    return e[0] === 1 && e[5] === 1 && e[10] === 1 && e[15] === 1 &&
+      e[12] === 0 && e[13] === 0 && e[14] === 0 &&
+      e[1] === 0 && e[2] === 0 && e[4] === 0 && e[6] === 0 && e[8] === 0 && e[9] === 0;
   }
 
   _makeDiagBoard() {
@@ -209,10 +216,11 @@ class VRManager {
   _updateDiagBoard() {
     const session = this.renderer.xr.getSession();
     const sources = session ? Array.from(session.inputSources) : [];
-    // info card for the first seconds only; the persistent no-controller
-    // warning lives on the sign beside the play area instead
+    // stays up while placement is pending (something is wrong then); the
+    // persistent no-controller warning lives on the sign beside the play area
     const show = this.presenting &&
-      performance.now() - this._sessionStartedAt < 8000;
+      (this._needsPlacement ||
+        performance.now() - this._sessionStartedAt < 8000);
     this._diag.mesh.visible = show;
     if (!show || this._diagFrame++ % 30 !== 0) return;
 
@@ -221,15 +229,21 @@ class VRManager {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.font = "22px monospace";
     ctx.fillStyle = "#6fce7e";
-    const lines = ["XR session active · input sources: " + sources.length];
+    const d = this.dioramaRoot;
+    const lines = [
+      "build " + (window.__LEM3D_BUILD || "?") + " · sources: " + sources.length,
+      "pose: " + (this._lastHeadPose ? "ok" : "none") +
+        " · placed: " + (this._needsPlacement ? "NO" : "yes"),
+      "diorama s=" + d.scale.x.toFixed(4) + " @ " +
+        d.position.toArray().map((v) => v.toFixed(1)).join(","),
+    ];
     for (const src of sources) {
       lines.push(
         "· " + (src.handedness || "?") + " / " + src.targetRayMode +
         (src.gamepad ? " / pad " + src.gamepad.buttons.length + " btn" : " / no gamepad"));
     }
     if (sources.length === 0) {
-      lines.push("no controllers detected —");
-      lines.push("wake them / press any button");
+      lines.push("no controllers — mouse fallback on");
       ctx.fillStyle = "#ffd866";
     }
     lines.forEach((l, i) => ctx.fillText(l, 14, 34 + i * 30));
@@ -285,20 +299,37 @@ class VRManager {
       this._diag.mesh.visible = false;
       return;
     }
-    this._updateDiagBoard();
-    // the authoritative head pose comes from the XR frame; the camera object
-    // only receives it during render (AFTER this update), so placing from the
-    // camera on the first frame would use the desktop pose - kilometers away
-    let viewerPose = null;
+    // the authoritative head pose comes from the XR frame (the user camera
+    // only receives it during render, AFTER this update - placing from it on
+    // the first frame would use the desktop pose, kilometers away). Fallback:
+    // the XR camera rig, which three poses before our callback; an identity
+    // matrix means it has no pose yet.
+    let headPose = null;
     try {
-      const frame = this.renderer.xr.getFrame && this.renderer.xr.getFrame();
+      const frame = this.renderer.xr.getFrame ? this.renderer.xr.getFrame() : null;
       const refSpace = this.renderer.xr.getReferenceSpace();
-      viewerPose = frame && refSpace ? frame.getViewerPose(refSpace) : null;
+      const vp = frame && refSpace ? frame.getViewerPose(refSpace) : null;
+      if (vp) {
+        const t = vp.transform;
+        headPose = {
+          pos: new THREE.Vector3(t.position.x, t.position.y, t.position.z),
+          quat: new THREE.Quaternion(
+            t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w),
+        };
+      }
     } catch (e) { /* pose not available yet */ }
-    this._lastViewerPose = viewerPose;
-    if (this._needsPlacement && viewerPose) {
+    if (!headPose) {
+      const xrCam = this.renderer.xr.getCamera();
+      if (xrCam && !this._isIdentity(xrCam.matrixWorld)) {
+        headPose = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+        xrCam.matrixWorld.decompose(headPose.pos, headPose.quat, new THREE.Vector3());
+      }
+    }
+    this._lastHeadPose = headPose;
+    this._updateDiagBoard();
+    if (this._needsPlacement && headPose) {
       try {
-        if (this.hooks.placeDiorama(viewerPose)) this._needsPlacement = false;
+        if (this.hooks.placeDiorama(headPose)) this._needsPlacement = false;
       } catch (e) {
         console.error("[vr] placement failed:", e);
         this._needsPlacement = false;

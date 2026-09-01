@@ -14,7 +14,8 @@
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
 
-  console.log("[3d] build 2026-08-31.2 (vr diagnostics)");
+  window.__LEM3D_BUILD = "2026-08-31.4";
+  console.log("[3d] build " + window.__LEM3D_BUILD);
   window.addEventListener("unhandledrejection", (e) => {
     console.warn("[3d] unhandled rejection:", e.reason,
       e.reason && e.reason.stack ? e.reason.stack : "(no stack)");
@@ -421,15 +422,14 @@
    * valid pose, so it runs on the first rendered XR frame, not sessionstart;
    * returns false to request a retry when the level isn't loaded yet.
    */
-  function placeDioramaForXR(viewerPose) {
+  function placeDioramaForXR(headPose) {
     if (!session) return false;
     const s = VR_PIXEL_SCALE;
     const headPos = new THREE.Vector3();
     const headQuat = new THREE.Quaternion();
-    if (viewerPose) {
-      const t = viewerPose.transform;
-      headPos.set(t.position.x, t.position.y, t.position.z);
-      headQuat.set(t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w);
+    if (headPose && headPose.pos) {
+      headPos.copy(headPose.pos);
+      headQuat.copy(headPose.quat);
     } else {
       // mid-session callers without a frame pose: the camera is valid by then
       camera.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
