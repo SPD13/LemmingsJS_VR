@@ -72,6 +72,19 @@
   const factory = new Lemmings.GameFactory("../");
   const raycaster = new THREE.Raycaster();
 
+  const audio = new GameAudio();
+  const audioResources = {}; // one GameResources per game type for ADLIB data
+  const soundBtn = document.getElementById("btn-sound");
+  const renderSoundBtn = () => {
+    soundBtn.textContent = "sound: " + (audio.enabled ? "on" : "off");
+  };
+  soundBtn.addEventListener("click", () => {
+    audio.setEnabled(!audio.enabled);
+    renderSoundBtn();
+    if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
+  });
+  renderSoundBtn();
+
   // per-level session state, rebuilt on every level load
   let session = null;
 
@@ -80,6 +93,7 @@
     try {
       if (session.game && session.game.getGameTimer()) session.game.stop();
     } catch (e) { /* already stopped */ }
+    audio.stopAll();
     if (session.editor) session.editor.dispose();
     session.lemmingPool.dispose();
     session.objectPool.dispose();
@@ -116,6 +130,15 @@
       profile = await DepthProfiles.load(profileUrl);
     }
     const depthMap = buildDepthMap(level, groundData, profile);
+
+    // music: the original rotates tunes with the level ordinal
+    if (!audioResources[state.gameType]) {
+      audioResources[state.gameType] = await factory.getGameResources(state.gameType);
+    }
+    audio.setResources(audioResources[state.gameType], config);
+    const musicTrack = state.group * 30 + state.level;
+    audio.playMusic(musicTrack);
+    audio.playSfx(SFX.LETSGO);
 
     const resources = new SessionResources();
 
@@ -178,6 +201,7 @@
     // our per-tick bridge; registered after Game's own handler so it runs
     // after the sim step and GameGui render
     let lastTickTime = performance.now();
+    const prevActions = new Map(); // lemming id -> action name, for SFX cues
     game.getGameTimer().onGameTick.on(() => {
       lastTickTime = performance.now();
 
@@ -188,11 +212,19 @@
 
       lemCapture.begin();
       const lems = game.getLemmingManager().lemmings;
+      let tickSfx = null; // at most one effect per tick (nuke-proofing)
       for (let i = 0; i < lems.length; i++) {
-        if (lems[i].removed) continue;
-        lemCapture.tag = lems[i].id;
-        lems[i].render(lemCapture);
+        const lem = lems[i];
+        const action = lem.removed || !lem.action ? null : lem.action.getActionName();
+        if (action !== prevActions.get(lem.id)) {
+          prevActions.set(lem.id, action);
+          if (action && SFX_BY_ACTION[action] != null) tickSfx = SFX_BY_ACTION[action];
+        }
+        if (lem.removed) continue;
+        lemCapture.tag = lem.id;
+        lem.render(lemCapture);
       }
+      if (tickSfx != null) audio.playSfx(tickSfx);
       lemmingPool.sync(lemCapture.items, () => LEMMING_Z, true);
       particles.sync(lemCapture.particles);
 
@@ -235,7 +267,7 @@
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
       lemmingPool, objectPool, particles, resources, depthMap, profile,
-      groundData, profileUrl,
+      groundData, profileUrl, musicTrack,
       getLastTickTime: () => lastTickTime,
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
@@ -370,7 +402,10 @@
       return;
     }
     const lem = session.game.getLemmingManager().getLemmingAt(simX, simY);
-    if (lem) session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
+    if (lem) {
+      session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
+      audio.playSfx(SFX.ASSIGN);
+    }
   }
 
   // Sticky hover: once a lemming is acquired, the yellow ring follows it as
@@ -798,6 +833,7 @@
   // debug handle for the console / automated checks
   window.__lem3d = {
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
+    audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     get session() { return session; },
   };
 

@@ -128,8 +128,13 @@ camera, renderer, controls}` for console debugging and automated checks.
 - Objects extrude like all sprites but still sit at fixed depths (background
   objects behind the slab, others in front); no shape classes (exit
   interiors, hinged hatches, water shaders) yet.
-- `VGASPEC` special levels untested; no audio; steel areas and multi-entrance
+- `VGASPEC` special levels untested; steel areas and multi-entrance
   behavior inherited as-is from LemmingsJS.
+- Audio (music + SFX) plays through the engine's own AdLib/OPL synth
+  (`js/audio.js`; "sound" button toggles, persisted). SFX indexes into
+  ADLIB.DAT are a best-effort mapping — audition with
+  `__lem3d.audio.playSfx(n)` in the console and adjust the `SFX` table.
+  No VR spatialization yet.
 - Replay-based 2D-vs-3D end-state comparison is manual for now (`r` dump +
   `?replay=`); an automated harness is Phase 0 debt.
 - The VR mode is logic-verified (placement math, controller pick path,
