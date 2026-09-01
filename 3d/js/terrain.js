@@ -282,28 +282,31 @@ class TerrainMesh {
           if (nc !== c && DEPTH_BANDS[nc].front < band.front) return DEPTH_BANDS[nc].front;
           return null;
         };
-        const vMid = (py + 0.5) / H;
+        // walls sample the pixel's own centre: a texel-boundary UV would pick
+        // up the neighbour, which at a silhouette is empty (black)
+        const uMid = (px + 0.5) / W, vMid = (py + 0.5) / H;
+        const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
         let base = wallBase(px - 1, py);
         if (base !== null) {
           pushQuad([[px, py, base], [px, py, z00], [px, py + 1, z01], [px, py + 1, base]],
-            [[u0, v0], [u0, v0], [u0, v1], [u0, v1]], SHADE_LEFT);
+            wallUv, SHADE_LEFT);
         }
         base = wallBase(px + 1, py);
         if (base !== null) {
           pushQuad([[px + 1, py, base], [px + 1, py, z10],
                     [px + 1, py + 1, z11], [px + 1, py + 1, base]],
-            [[u1, v0], [u1, v0], [u1, v1], [u1, v1]], SHADE_RIGHT);
+            wallUv, SHADE_RIGHT);
         }
         base = wallBase(px, py - 1);
         if (base !== null) {
           pushQuad([[px, py, base], [px + 1, py, base], [px + 1, py, z10], [px, py, z00]],
-            [[u0, vMid], [u1, vMid], [u1, vMid], [u0, vMid]], SHADE_TOP);
+            wallUv, SHADE_TOP);
         }
         base = wallBase(px, py + 1);
         if (base !== null) {
           pushQuad([[px, py + 1, base], [px + 1, py + 1, base],
                     [px + 1, py + 1, z11], [px, py + 1, z01]],
-            [[u0, vMid], [u1, vMid], [u1, vMid], [u0, vMid]], SHADE_BOTTOM);
+            wallUv, SHADE_BOTTOM);
         }
       }
     }
