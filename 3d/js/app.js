@@ -25,7 +25,10 @@
   });
 
   const params = new URLSearchParams(location.search);
+  let embossStored = null;
+  try { embossStored = localStorage.getItem("lem3d-emboss"); } catch (e) {}
   const state = {
+    emboss: embossStored === "on", // colour-keyed terrain relief, off by default
     gameType: parseInt(params.get("type") || "1", 10),
     group: parseInt(params.get("group") || "0", 10),
     level: parseInt(params.get("level") || "0", 10),
@@ -92,6 +95,20 @@
     if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
   });
   renderSoundBtn();
+
+  // master switch for colour-keyed terrain relief (per-piece tags in the editor)
+  const embossBtn = document.getElementById("btn-emboss");
+  const renderEmbossBtn = () => {
+    embossBtn.textContent = "3D terrain: " + (state.emboss ? "on" : "off");
+  };
+  embossBtn.addEventListener("click", () => {
+    state.emboss = !state.emboss;
+    try { localStorage.setItem("lem3d-emboss", state.emboss ? "on" : "off"); } catch (e) {}
+    renderEmbossBtn();
+    if (session) session.rebuildRelief();
+  });
+  renderEmbossBtn();
+
   audio.configureSpatial({
     isActive: () => renderer.xr.isPresenting,
     getListenerMatrix: () => camera.matrixWorld,
@@ -150,6 +167,8 @@
       profile = await DepthProfiles.load(profileUrl);
     }
     const depthMap = buildDepthMap(level, groundData, profile);
+    const pieceMap = buildPieceMap(level, groundData);
+    const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss);
 
     // music: the original rotates tunes with the level ordinal
     if (!audioResources[state.gameType]) {
@@ -167,7 +186,7 @@
     worldGroup.position.y = level.height;
     dioramaRoot.add(worldGroup);
 
-    const terrain = new TerrainMesh(worldGroup, level, depthMap, resources);
+    const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources);
 
     // dark backdrop behind the terrain so holes read as depth, not void
     const backdrop = new THREE.Mesh(
@@ -287,8 +306,13 @@
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
       lemmingPool, objectPool, particles, resources, depthMap, profile,
-      groundData, profileUrl, musicTrack,
+      groundData, profileUrl, musicTrack, pieceMap,
       getLastTickTime: () => lastTickTime,
+      // re-derive the colour-keyed relief (master switch or a per-piece tag)
+      rebuildRelief: () => {
+        session.terrain.setRelief(
+          buildReliefMap(level, pieceMap, session.profile, state.emboss));
+      },
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
     layoutGuiPanel();
