@@ -1,16 +1,15 @@
 "use strict";
 /**
- * World library: a catalog of every tileset ("world") with a rendered
- * miniature of a representative level. Clicking a card loads that level with
- * the piece editor already enabled — the entry point for tagging sessions.
- * A green mark below a miniature means a tagging file for that world exists
- * in 3d/profiles/.
+ * World library: every level of both games, grouped by tileset ("world").
+ * Clicking a level tile loads that level with the piece editor enabled —
+ * the entry point for tagging sessions. A green mark on a world's header
+ * means a tagging file for that world exists in 3d/profiles/.
  *
- * Discovery: ground-set files (GROUND<n>O.DAT) are probed per game, then the
- * level order is scanned front to back, loading levels until each set has a
- * representative (VGASPEC special levels carry no piece data and are
- * skipped). The set->level mapping is cached in localStorage so later opens
- * only load one level per world for the miniatures.
+ * Discovery scans the complete level order once, recording each level's
+ * ground set (VGASPEC special levels carry no piece data and are skipped);
+ * the mapping is cached in localStorage. Tile miniatures are rendered
+ * lazily (IntersectionObserver + a sequential load queue) so opening the
+ * library doesn't load ~220 levels up front.
  */
 
 const WORLD_NAMES = {
@@ -18,7 +17,7 @@ const WORLD_NAMES = {
   2: ["Brick", "Rock", "Snow", "Bubble"],
 };
 const GAME_LABELS = { 1: "Lemmings", 2: "Oh No! More Lemmings" };
-const LIBRARY_CACHE_KEY = "lem3d-worlds-v1";
+const LIBRARY_CACHE_KEY = "lem3d-worlds-v2";
 
 class WorldLibrary {
   /** enterWorld(gameType, group, level) loads the level with the editor on. */
@@ -39,6 +38,14 @@ class WorldLibrary {
       this._populate(true);
     });
     this._populated = false;
+    this._loadChain = Promise.resolve();
+    this._observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        this._observer.unobserve(entry.target);
+        this._queueThumb(entry.target);
+      }
+    });
   }
 
   toggle() { this.isOpen ? this.close() : this.open(); }
@@ -56,7 +63,12 @@ class WorldLibrary {
 
   _readCache() {
     try {
-      return JSON.parse(localStorage.getItem(LIBRARY_CACHE_KEY)) || null;
+      const mapping = JSON.parse(localStorage.getItem(LIBRARY_CACHE_KEY));
+      // require the per-level shape (older caches held one level per set)
+      for (const worlds of Object.values(mapping || {})) {
+        if (!worlds.every((w) => Array.isArray(w.levels))) return null;
+      }
+      return mapping || null;
     } catch (e) { return null; }
   }
 
@@ -73,7 +85,7 @@ class WorldLibrary {
         mapping = await this._discover();
         this._writeCache(mapping);
       }
-      await this._renderCards(mapping);
+      await this._renderWorlds(mapping);
       this.dom.status.textContent = "";
     } catch (err) {
       this.dom.status.textContent = "library failed to build — see console";
@@ -82,20 +94,18 @@ class WorldLibrary {
     }
   }
 
-  /** Find one representative (group, level) per ground set, per game type. */
+  /** Scan every level of both games and record its ground set. */
   async _discover() {
-    const mapping = {}; // gameType -> [{set, group, level, name}]
+    const mapping = {}; // gameType -> [{set, levels: [{group, level, name}]}]
     for (const gameType of [1, 2]) {
       const config = await this.factory.getConfig(gameType).catch(() => null);
       if (!config) continue;
-      const sets = await this._probeGroundSets(config.path);
-      if (sets.length === 0) continue;
       const resources = await this.factory.getGameResources(gameType);
-      const found = new Map();
+      const bySet = new Map();
       const groups = config.level.order.length;
       const total = config.level.order.reduce((n, g) => n + g.length, 0);
       let scanned = 0;
-      scan: for (let g = 0; g < groups; g++) {
+      for (let g = 0; g < groups; g++) {
         for (let l = 0; l < config.level.getGroupLength(g); l++) {
           this.dom.status.textContent =
             "scanning " + GAME_LABELS[gameType] + " levels… " + (++scanned) + "/" + total;
@@ -105,92 +115,100 @@ class WorldLibrary {
             const gd = window.__lem3dGroundData;
             if (!gd || !gd.lr) continue; // special level, no piece data
             const set = gd.lr.graphicSet1 != null ? gd.lr.graphicSet1 : 0;
-            if (!found.has(set)) {
-              found.set(set, { set, group: g, level: l, name: level.name.trim() });
-              if (found.size >= sets.length) break scan;
-            }
+            if (!bySet.has(set)) bySet.set(set, { set, levels: [] });
+            bySet.get(set).levels.push({ group: g, level: l, name: level.name.trim() });
           } catch (e) { /* unreadable level: skip */ }
         }
       }
-      mapping[gameType] = Array.from(found.values()).sort((a, b) => a.set - b.set);
+      mapping[gameType] = Array.from(bySet.values()).sort((a, b) => a.set - b.set);
     }
     return mapping;
   }
 
-  async _probeGroundSets(path) {
-    const sets = [];
-    for (let i = 0; i < 10; i++) {
-      const res = await fetch("../" + path + "/GROUND" + i + "O.DAT", { method: "HEAD" })
-        .catch(() => null);
-      if (res && res.ok) sets.push(i);
-    }
-    return sets;
-  }
-
-  async _renderCards(mapping) {
+  async _renderWorlds(mapping) {
     for (const gameType of Object.keys(mapping).map(Number)) {
       const worlds = mapping[gameType];
       if (!worlds || worlds.length === 0) continue;
-      const header = document.createElement("div");
-      header.className = "lib-game";
-      header.textContent = GAME_LABELS[gameType] || "game " + gameType;
-      this.dom.grid.appendChild(header);
+      const gameHeader = document.createElement("div");
+      gameHeader.className = "lib-game";
+      gameHeader.textContent = GAME_LABELS[gameType] || "game " + gameType;
+      this.dom.grid.appendChild(gameHeader);
 
       const config = await this.factory.getConfig(gameType);
-      const resources = await this.factory.getGameResources(gameType);
       const slug = (config.path || "game").replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const names = WORLD_NAMES[gameType] || [];
+      const groupNames = config.level.groups || [];
 
       for (const world of worlds) {
-        this.dom.status.textContent =
-          "rendering " + (GAME_LABELS[gameType] || "") + " miniatures…";
-        const card = await this._buildCard(gameType, slug, resources, world);
-        this.dom.grid.appendChild(card);
+        const header = document.createElement("div");
+        header.className = "lib-world";
+        const title = document.createElement("span");
+        title.textContent = (names[world.set] || "World") + " · set " + world.set +
+          " · " + world.levels.length + " levels";
+        header.appendChild(title);
+        const mark = document.createElement("span");
+        mark.className = "lib-mark";
+        header.appendChild(mark);
+        fetch("profiles/" + slug + "-g" + world.set + ".json", { method: "HEAD" })
+          .then((res) => {
+            mark.textContent = res.ok ? "✔ tagged" : "not tagged";
+            if (res.ok) mark.classList.add("tagged");
+          }).catch(() => { mark.textContent = "not tagged"; });
+        this.dom.grid.appendChild(header);
+
+        const tiles = document.createElement("div");
+        tiles.className = "lib-tiles";
+        for (const entry of world.levels) {
+          tiles.appendChild(this._buildTile(gameType, groupNames, entry));
+        }
+        this.dom.grid.appendChild(tiles);
       }
     }
   }
 
-  async _buildCard(gameType, slug, resources, world) {
-    const card = document.createElement("div");
-    card.className = "lib-card";
+  _buildTile(gameType, groupNames, entry) {
+    const tile = document.createElement("div");
+    tile.className = "lib-tile";
 
     const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 40;
-    card.appendChild(canvas);
-    try {
-      const level = await resources.getLevel(world.group, world.level);
-      this._drawMiniature(canvas, level);
-    } catch (e) { /* leave the miniature blank */ }
+    canvas.width = 240;
+    canvas.height = 24;
+    canvas.dataset.gameType = gameType;
+    canvas.dataset.group = entry.group;
+    canvas.dataset.level = entry.level;
+    tile.appendChild(canvas);
+    this._observer.observe(canvas); // miniature renders when scrolled into view
 
     const label = document.createElement("div");
     label.className = "lib-label";
-    const names = WORLD_NAMES[gameType] || [];
-    label.textContent = (names[world.set] || "World") + " · set " + world.set;
-    card.appendChild(label);
+    label.textContent =
+      (groupNames[entry.group] || "Group " + entry.group) + " " + (entry.level + 1);
+    tile.appendChild(label);
 
     const sub = document.createElement("div");
     sub.className = "lib-sub";
-    sub.textContent = world.name;
-    card.appendChild(sub);
+    sub.textContent = entry.name;
+    sub.title = entry.name;
+    tile.appendChild(sub);
 
-    const mark = document.createElement("div");
-    mark.className = "lib-mark";
-    card.appendChild(mark);
-    const profileUrl = "profiles/" + slug + "-g" + world.set + ".json";
-    fetch(profileUrl, { method: "HEAD" }).then((res) => {
-      if (res.ok) {
-        mark.classList.add("tagged");
-        mark.textContent = "✔ tagged";
-      } else {
-        mark.textContent = "not tagged";
-      }
-    }).catch(() => { mark.textContent = "not tagged"; });
-
-    card.addEventListener("click", () => {
+    tile.addEventListener("click", () => {
       this.close();
-      this.enterWorld(gameType, world.group, world.level);
+      this.enterWorld(gameType, entry.group, entry.level);
     });
-    return card;
+    return tile;
+  }
+
+  /** Sequentially load a level and draw its miniature into the tile canvas. */
+  _queueThumb(canvas) {
+    this._loadChain = this._loadChain.then(async () => {
+      if (canvas.dataset.drawn || !this.isOpen && !canvas.isConnected) return;
+      try {
+        const resources = await this.factory.getGameResources(+canvas.dataset.gameType);
+        const level = await resources.getLevel(+canvas.dataset.group, +canvas.dataset.level);
+        this._drawMiniature(canvas, level);
+        canvas.dataset.drawn = "1";
+      } catch (e) { /* leave the miniature blank */ }
+    });
   }
 
   /** Downscale the level's ground image into the card canvas (mask as alpha). */

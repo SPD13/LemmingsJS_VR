@@ -28,11 +28,12 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   original panel (release rate, skills, pause, nuke, speed)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `r` dump the replay string to the console
-- `w` (or the "worlds" button) opens the world library: one miniature per
-  tileset across both games, with a green "✔ tagged" mark when a profile file
-  exists in `profiles/`. Clicking a miniature loads a representative level of
-  that world with the piece editor already enabled. The set→level catalog is
-  cached in localStorage ("rescan" rebuilds it).
+- `w` (or the "worlds" button) opens the world library: every level of both
+  games, grouped by tileset, one miniature tile per level — click any tile to
+  jump straight to that level with the piece editor already enabled. A world
+  header shows its level count and a green "✔ tagged" mark when a profile
+  file exists in `profiles/`. The catalog is cached in localStorage ("rescan"
+  rebuilds it); miniatures render lazily as you scroll.
 - `e` toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
