@@ -21,8 +21,9 @@ const PORTAL_EXIT_DEPTH = 14;
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
-const PORTAL_FLAP_DROP = 0.5;      // doors hang this far below the ceiling
-const PORTAL_FLAP_THICK = 1;       // and are a game pixel thick
+const PORTAL_PANEL_THICK = 1;      // the ceiling square is a game pixel thick
+const PORTAL_FLAP_GAP = 0.5;       // doors hang this far below its underside
+const PORTAL_FLAP_THICK = 1;       // and are a game pixel thick themselves
 
 /** Stash the object list and their metadata as the level is built. */
 (function installObjectDataHook() {
@@ -203,9 +204,10 @@ function buildFlapGeometry(frame, doorRows, halfWidth, depth, sign) {
   const span = doorRows.length;
   const positions = [], colors = [], uvs = [], indices = [];
   const xFar = sign * halfWidth;
-  // hung just under the ceiling: shut flush in its own plane the doors would
-  // z-fight the square, and the landscape would flicker through them
-  const yTop = PORTAL_FLAP_DROP, yBot = PORTAL_FLAP_DROP + PORTAL_FLAP_THICK;
+  // hung under the ceiling's underside: shut flush in its own plane the doors
+  // would z-fight the square, and the landscape would flicker through them
+  const yTop = PORTAL_PANEL_THICK + PORTAL_FLAP_GAP;
+  const yBot = yTop + PORTAL_FLAP_THICK;
   const zAt = (k) => depth / 2 - (k / span) * depth;
   const quad = (verts, shade) => {
     const base = positions.length / 3;
@@ -324,25 +326,48 @@ function buildCeilingGeometry(frame) {
   const span = farY - nearY + 1;
   const zOf = (y) => side / 2 - ((y - nearY) / span) * side; // centred on z=0
 
-  // --- the square, one strip per sprite row ---
+  // --- the square: a slab a pixel thick, one strip per sprite row ---
   const panel = { positions: [], colors: [], uvs: [], indices: [] };
   const inPanel = new Uint8Array(w * h);
-  const strip = (r, y, zNear, zFar) => {
-    for (let x = r.min; x <= r.max; x++) if (mask[y * w + x]) inPanel[y * w + x] = 1;
-    const xl = centre - side / 2, xr = centre + side / 2;
-    const u0 = r.min / w, u1 = (r.max + 1) / w, v0 = y / h, v1 = (y + 1) / h;
+  const yTop = nearY, yBot = nearY + PORTAL_PANEL_THICK;
+  const xl = centre - side / 2, xr = centre + side / 2;
+  const quad = (verts, shade) => {
     const base = panel.positions.length / 3;
-    for (const [px, pz, pu, pv] of [
-      [xl, zNear, u0, v0], [xr, zNear, u1, v0], [xr, zFar, u1, v1], [xl, zFar, u0, v1],
-    ]) {
-      panel.positions.push(px, nearY, pz);
-      panel.colors.push(1, 1, 1);
+    for (const [px, py, pz, pu, pv] of verts) {
+      panel.positions.push(px, py, pz);
+      panel.colors.push(shade, shade, shade);
       panel.uvs.push(pu, pv);
     }
     panel.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
+  const strip = (r, y, zNear, zFar) => {
+    for (let x = r.min; x <= r.max; x++) if (mask[y * w + x]) inPanel[y * w + x] = 1;
+    const u0 = r.min / w, u1 = (r.max + 1) / w, v0 = y / h, v1 = (y + 1) / h;
+    // the landscape overhead, and the same ceiling seen from underneath
+    quad([[xl, yTop, zNear, u0, v0], [xr, yTop, zNear, u1, v0],
+          [xr, yTop, zFar, u1, v1], [xl, yTop, zFar, u0, v1]], SPRITE_SHADE_FRONT);
+    quad([[xl, yBot, zFar, u0, v1], [xr, yBot, zFar, u1, v1],
+          [xr, yBot, zNear, u1, v0], [xl, yBot, zNear, u0, v0]], SPRITE_SHADE_FRONT);
+    // the pixel of cut edge down each long side
+    quad([[xl, yTop, zNear, u0, v0], [xl, yTop, zFar, u0, v1],
+          [xl, yBot, zFar, u0, v1], [xl, yBot, zNear, u0, v0]], SPRITE_SHADE_LEFT);
+    quad([[xr, yTop, zFar, u1, v1], [xr, yTop, zNear, u1, v0],
+          [xr, yBot, zNear, u1, v0], [xr, yBot, zFar, u1, v1]], SPRITE_SHADE_RIGHT);
+  };
   for (let y = nearY; y <= farY; y++) strip(rows[y], y, zOf(y), zOf(y + 1));
   if (panel.indices.length === 0) return null;
+
+  // and the near and far edges, closing the slab
+  const rNear = rows[nearY], rFar = rows[farY];
+  const zNearEnd = zOf(nearY), zFarEnd = zOf(farY + 1);
+  const uNear0 = rNear.min / w, uNear1 = (rNear.max + 1) / w, vNear = nearY / h;
+  const uFar0 = rFar.min / w, uFar1 = (rFar.max + 1) / w, vFar = (farY + 1) / h;
+  quad([[xl, yTop, zNearEnd, uNear0, vNear], [xr, yTop, zNearEnd, uNear1, vNear],
+        [xr, yBot, zNearEnd, uNear1, vNear], [xl, yBot, zNearEnd, uNear0, vNear]],
+       SPRITE_SHADE_TOP);
+  quad([[xr, yTop, zFarEnd, uFar1, vFar], [xl, yTop, zFarEnd, uFar0, vFar],
+        [xl, yBot, zFarEnd, uFar0, vFar], [xr, yBot, zFarEnd, uFar1, vFar]],
+       SPRITE_SHADE_BOTTOM);
 
   // Nothing else from the sprite is drawn. The rest of it is the same hatch
   // in 2D perspective - the trapezoid's walls and the shading around them -
