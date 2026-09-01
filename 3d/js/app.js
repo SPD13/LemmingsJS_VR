@@ -186,6 +186,10 @@
     const depthMap = buildDepthMap(level, groundData, profile);
     const pieceMap = buildPieceMap(level, groundData);
     const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss);
+    // entrances/exits become real openings; this also carves the terrain
+    // behind them (render only - collision is untouched)
+    const portals = buildPortals(level, profile, depthMap);
+    const portalIndices = new Set(portals.map((p) => p.index));
 
     // music: the original rotates tunes with the level ordinal
     if (!audioResources[state.gameType]) {
@@ -241,6 +245,15 @@
     worldGroup.add(ring);
 
     const materialCache = new SpriteMaterialCache(resources);
+
+    // openings: recessed geometry, textured with the object's current frame
+    for (const portal of portals) {
+      resources.track(portal.geometry);
+      portal.mesh = new THREE.Mesh(portal.geometry,
+        materialCache.forFrame(portal.animation.frames[0]).material);
+      portal.mesh.position.set(portal.originX, portal.originY, OBJECT_Z);
+      worldGroup.add(portal.mesh);
+    }
     const lemmingPool = new BillboardPool(worldGroup, materialCache);
     const objectPool = new BillboardPool(worldGroup, materialCache);
     const particles = new ParticleCloud(worldGroup, LEMMING_Z + 1);
@@ -263,7 +276,19 @@
 
       objCapture.begin();
       game.objectManager.render(objCapture);
-      objectPool.sync(objCapture.items, (layer) =>
+      // objects drawn as openings have their own geometry: drop the flat copy
+      // (ObjectManager emits exactly one draw per object, in list order) and
+      // keep their texture in step with the animation
+      const objectItems = portalIndices.size === 0 ? objCapture.items
+        : objCapture.items.filter((_, i) => !portalIndices.has(i));
+      if (portalIndices.size > 0) {
+        const tick = game.getGameTimer().getGameTicks();
+        for (const portal of portals) {
+          const frame = portal.animation.getFrame(tick);
+          if (frame) portal.mesh.material = materialCache.forFrame(frame).material;
+        }
+      }
+      objectPool.sync(objectItems, (layer) =>
         layer < 0 ? OBJECT_BG_Z : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z, false);
 
       lemCapture.begin();

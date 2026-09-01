@@ -100,6 +100,16 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   relief with shaded edge walls (the plan's "characters get volume", §5.5)
   and cached. `HeadlessStage` satisfies the Stage contract for
   `DisplayImage` without a canvas.
+- `js/portals.js` — entrances and exits as real openings (plan §5.4). Their
+  sprites are perspective drawings of a box, so instead of keying depth off
+  brightness the opening is rebuilt geometrically: a distance transform of the
+  sprite's silhouette says how far inside each pixel lies, and that becomes
+  recession (rim flush with the sprite plane, interior falling away and
+  darkening). The terrain behind is carved from the render-only depth map so
+  the tunnel isn't filled — collision is never touched. Which objects are
+  openings comes from the profile (`objects.byId[<id>] = {shape, depth}`),
+  defaulting to entrances (object id 1) and anything carrying the EXIT_LEVEL
+  trigger.
 - `js/depth.js` — depth compositing (plan §5.1). A per-pixel depth-class
   buffer (backdrop / terrain / relief / overlay) is built by replaying the
   compositor's terrain piece list with the original draw-flag semantics.
