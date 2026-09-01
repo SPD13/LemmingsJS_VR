@@ -28,9 +28,10 @@ const SHADE_TOP = 0.85;
 const SHADE_BOTTOM = 0.5;
 
 class TerrainMesh {
-  constructor(parent, level, depthMap, resources) {
+  constructor(parent, level, depthMap, reliefMap, resources) {
     this.level = level;
     this.depth = depthMap;
+    this.relief = reliefMap || new Uint8Array(level.width * level.height);
     this.resources = resources;
     this.w = level.width;
     this.h = level.height;
@@ -76,6 +77,34 @@ class TerrainMesh {
     return this.depth[x + y * this.w];
   }
 
+  /** Colour-keyed relief height at a pixel (0 when the effect is off). */
+  _reliefAt(x, y) {
+    if (x < 0 || x >= this.w || y < 0 || y >= this.h) return 0;
+    return this.relief[x + y * this.w];
+  }
+
+  /** Front face depth of a pixel: its class band plus its relief. */
+  _frontAt(x, y) {
+    const c = this._classAt(x, y);
+    if (c === DepthClass.EMPTY) return null;
+    return DEPTH_BANDS[c].front + this._reliefAt(x, y);
+  }
+
+  /** Greedy-meshing key: pixels merge only with the same class and height. */
+  _keyAt(x, y) {
+    const c = this._classAt(x, y);
+    if (c === DepthClass.EMPTY) return 0;
+    return c * (RELIEF_MAX + 1) + this._reliefAt(x, y);
+  }
+
+  /** Swap in a new relief map (the 3D-terrain toggle) and re-mesh. */
+  setRelief(reliefMap) {
+    this.relief = reliefMap || new Uint8Array(this.w * this.h);
+    for (let cy = 0; cy < this.chunksY; cy++) {
+      for (let cx = 0; cx < this.chunksX; cx++) this._rebuildChunk(cx, cy);
+    }
+  }
+
   _refillTexRect(x0, y0, w, h) {
     const src = this.level.groundImage;
     const mask = this.maskLayer.groundMask;
@@ -108,6 +137,7 @@ class TerrainMesh {
   _applyMutation(x, y, depthClass) {
     if (x < 0 || x >= this.w || y < 0 || y >= this.h) return;
     this.depth[x + y * this.w] = depthClass;
+    this.relief[x + y * this.w] = 0; // dug holes and built bricks are flat
     const i = (y * this.w + x) * 4;
     const src = this.level.groundImage;
     this.texData[i] = src[i];
@@ -153,16 +183,20 @@ class TerrainMesh {
   }
 
   /**
-   * Wall span at the boundary between class c and its neighbor nc, or null.
-   * Emitted only from the taller class and only over the exposed height, so
-   * two classes never produce coplanar overlapping walls.
+   * Wall span between a pixel and its neighbour, or null. Emitted only from
+   * the taller side and only over the exposed height, so two pixels never
+   * produce coplanar overlapping walls. Works off per-pixel front heights,
+   * so colour-keyed relief gets its own little walls too.
    */
-  _wallSpan(c, nc) {
-    if (nc === c) return null;
-    const band = DEPTH_BANDS[c];
-    if (nc === DepthClass.EMPTY) return [band.back, band.front];
-    const nBand = DEPTH_BANDS[nc];
-    if (nBand.front < band.front) return [nBand.front, band.front];
+  _wallSpanAt(x, y, nx, ny) {
+    const c = this._classAt(x, y);
+    if (c === DepthClass.EMPTY) return null;
+    const front = this._frontAt(x, y);
+    if (this._classAt(nx, ny) === DepthClass.EMPTY) {
+      return [DEPTH_BANDS[c].back, front];
+    }
+    const nFront = this._frontAt(nx, ny);
+    if (nFront < front) return [nFront, front];
     return null;
   }
 
@@ -188,21 +222,22 @@ class TerrainMesh {
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
 
-    // --- front + back faces from greedy same-class rectangles ---
+    // --- front + back faces from greedy same-class, same-height rectangles ---
     const visited = new Uint8Array(cw * ch);
     for (let ly = 0; ly < ch; ly++) {
       for (let lx = 0; lx < cw; lx++) {
         if (visited[ly * cw + lx]) continue;
         const c = this._classAt(x0 + lx, y0 + ly);
         if (c === DepthClass.EMPTY) continue;
+        const key = this._keyAt(x0 + lx, y0 + ly);
         let rw = 1;
         while (lx + rw < cw && !visited[ly * cw + lx + rw] &&
-               this._classAt(x0 + lx + rw, y0 + ly) === c) rw++;
+               this._keyAt(x0 + lx + rw, y0 + ly) === key) rw++;
         let rh = 1;
         expand: while (ly + rh < ch) {
           for (let i = 0; i < rw; i++) {
             if (visited[(ly + rh) * cw + lx + i] ||
-                this._classAt(x0 + lx + i, y0 + ly + rh) !== c) break expand;
+                this._keyAt(x0 + lx + i, y0 + ly + rh) !== key) break expand;
           }
           rh++;
         }
@@ -210,12 +245,13 @@ class TerrainMesh {
           for (let xx = 0; xx < rw; xx++) visited[(ly + yy) * cw + lx + xx] = 1;
 
         const band = DEPTH_BANDS[c];
+        const front = this._frontAt(x0 + lx, y0 + ly);
         const px = x0 + lx, py = y0 + ly;
         const u0 = px / W, u1 = (px + rw) / W;
         const v0 = py / H, v1 = (py + rh) / H;
         pushQuad(
-          [[px, py, band.front], [px + rw, py, band.front],
-           [px + rw, py + rh, band.front], [px, py + rh, band.front]],
+          [[px, py, front], [px + rw, py, front],
+           [px + rw, py + rh, front], [px, py + rh, front]],
           [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
           SHADE_FRONT * band.frontShade
         );
@@ -239,14 +275,12 @@ class TerrainMesh {
         let ly = 0;
         while (ly < ch) {
           const c = this._classAt(px, y0 + ly);
-          const span = c === DepthClass.EMPTY
-            ? null : this._wallSpan(c, this._classAt(px + dir, y0 + ly));
+          const span = this._wallSpanAt(px, y0 + ly, px + dir, y0 + ly);
           if (!span) { ly++; continue; }
           let run = 1;
           while (ly + run < ch) {
             const c2 = this._classAt(px, y0 + ly + run);
-            const s2 = c2 === DepthClass.EMPTY
-              ? null : this._wallSpan(c2, this._classAt(px + dir, y0 + ly + run));
+            const s2 = this._wallSpanAt(px, y0 + ly + run, px + dir, y0 + ly + run);
             if (c2 !== c || spanKey(s2) !== spanKey(span)) break;
             run++;
           }
@@ -268,14 +302,12 @@ class TerrainMesh {
         let lx = 0;
         while (lx < cw) {
           const c = this._classAt(x0 + lx, py);
-          const span = c === DepthClass.EMPTY
-            ? null : this._wallSpan(c, this._classAt(x0 + lx, py + dir));
+          const span = this._wallSpanAt(x0 + lx, py, x0 + lx, py + dir);
           if (!span) { lx++; continue; }
           let run = 1;
           while (lx + run < cw) {
             const c2 = this._classAt(x0 + lx + run, py);
-            const s2 = c2 === DepthClass.EMPTY
-              ? null : this._wallSpan(c2, this._classAt(x0 + lx + run, py + dir));
+            const s2 = this._wallSpanAt(x0 + lx + run, py, x0 + lx + run, py + dir);
             if (c2 !== c || spanKey(s2) !== spanKey(span)) break;
             run++;
           }

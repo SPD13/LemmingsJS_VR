@@ -39,6 +39,7 @@ class PieceEditor {
       info: document.getElementById("ed-info"),
       classBtns: Array.from(document.querySelectorAll("#hud-editor [data-class]")),
       autoBtn: document.getElementById("ed-auto"),
+      embossBtn: document.getElementById("ed-emboss"),
       resetBtn: document.getElementById("ed-reset"),
       saveBtn: document.getElementById("ed-save"),
       exportBtn: document.getElementById("ed-export"),
@@ -46,11 +47,13 @@ class PieceEditor {
     };
     this._onClassBtn = (e) => this.setClass(e.target.dataset.class);
     this._onAutoBtn = () => this.setClass(null);
+    this._onEmbossBtn = () => this.toggleEmboss();
     this._onResetBtn = () => this.resetAll();
     this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
     this.dom.classBtns.forEach((b) => b.addEventListener("click", this._onClassBtn));
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
+    this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
     this.dom.resetBtn.addEventListener("click", this._onResetBtn);
     this.dom.saveBtn.addEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.addEventListener("click", this._onExportBtn);
@@ -168,6 +171,19 @@ class PieceEditor {
     this._renderInfo();
   }
 
+  /** Turn colour-keyed 3D relief on/off for the selected piece. */
+  toggleEmboss() {
+    if (this.selectedId == null) return;
+    if (!this.s.profile) this.s.profile = {};
+    const p = this.s.profile;
+    if (!p.emboss) p.emboss = { byId: {} };
+    if (!p.emboss.byId) p.emboss.byId = {};
+    p.emboss.byId[this.selectedId] = !embossEnabledFor(this.selectedId, p);
+    DepthProfiles._cache.set(this.profileUrl, p);
+    if (this.s.rebuildRelief) this.s.rebuildRelief();
+    this._renderInfo();
+  }
+
   cycleClass() {
     if (this.selectedId == null) return;
     const order = ["terrain", "relief", "backdrop", "overlay", null];
@@ -207,6 +223,9 @@ class PieceEditor {
     this.dom.autoBtn.disabled = !btnsOn;
     this.dom.autoBtn.classList.toggle("active",
       btnsOn && !this._override(this.selectedId));
+    this.dom.embossBtn.disabled = !btnsOn;
+    this.dom.embossBtn.classList.toggle("active",
+      btnsOn && embossEnabledFor(this.selectedId, this.s.profile));
     if (!this._hasPieceData) {
       this.dom.info.textContent = "no piece data for this level (special level)";
       return;
@@ -220,7 +239,9 @@ class PieceEditor {
     this.dom.info.textContent =
       "piece " + this.selectedId + " · " + n + " placement" + (n === 1 ? "" : "s") +
       " · " + (override ? "tagged: " + override
-                        : "auto: " + this._autoClasses(this.selectedId).join("/"));
+                        : "auto: " + this._autoClasses(this.selectedId).join("/")) +
+      " · 3D shade " +
+      (embossEnabledFor(this.selectedId, this.s.profile) ? "on" : "off");
   }
 
   /** POST the profile to the launcher server, which writes 3d/profiles/. */
@@ -278,6 +299,7 @@ class PieceEditor {
     this._highlightMat.dispose();
     this.dom.classBtns.forEach((b) => b.removeEventListener("click", this._onClassBtn));
     this.dom.autoBtn.removeEventListener("click", this._onAutoBtn);
+    this.dom.embossBtn.removeEventListener("click", this._onEmbossBtn);
     this.dom.resetBtn.removeEventListener("click", this._onResetBtn);
     this.dom.saveBtn.removeEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.removeEventListener("click", this._onExportBtn);

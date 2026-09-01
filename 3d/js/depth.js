@@ -67,6 +67,95 @@ function depthClassForPiece(piece, profile) {
   return DepthClassByName[terrainCfg.default] || DepthClass.TERRAIN;
 }
 
+/** Maximum colour-keyed relief on terrain, in game pixels. */
+const RELIEF_MAX = 4;
+
+/**
+ * Piece id per pixel (stored as id+1; 0 = no piece), replaying the compositor
+ * in the same order as buildDepthMap. Lets per-piece settings — like the
+ * colour-keyed relief below — be resolved for any pixel.
+ */
+function buildPieceMap(level, groundData) {
+  const W = level.width, H = level.height;
+  const map = new Uint8Array(W * H);
+  const usable = groundData && groundData.lr &&
+    groundData.lr.levelWidth === W && groundData.lr.levelHeight === H &&
+    Array.isArray(groundData.lr.terrains);
+  if (!usable) return map;
+
+  for (const piece of groundData.lr.terrains) {
+    const src = groundData.terraImages[piece.id];
+    if (!src) continue;
+    const pixBuf = src.frames[0];
+    const w = src.width, h = src.height;
+    const props = piece.drawProperties;
+    for (let y = 0; y < h; y++) {
+      const outY = y + piece.y;
+      if (outY < 0 || outY >= H) continue;
+      const sourceY = props.isUpsideDown ? (h - y - 1) : y;
+      for (let x = 0; x < w; x++) {
+        if ((pixBuf[sourceY * w + x] & 0x80) !== 0) continue; // transparent
+        const outX = x + piece.x;
+        if (outX < 0 || outX >= W) continue;
+        const idx = outY * W + outX;
+        if (props.isErase) { map[idx] = 0; continue; }
+        if (props.noOverwrite && map[idx] !== 0) continue;
+        if (props.onlyOverwrite && map[idx] === 0) continue;
+        map[idx] = (piece.id + 1) & 0xff;
+      }
+    }
+  }
+  return map;
+}
+
+/** Does this piece id get colour-keyed relief? Pieces opt out, not in. */
+function embossEnabledFor(pieceId, profile) {
+  const cfg = (profile && profile.emboss) || {};
+  const byId = cfg.byId || {};
+  if (Object.prototype.hasOwnProperty.call(byId, pieceId)) return !!byId[pieceId];
+  return cfg.default !== false;
+}
+
+/**
+ * Per-pixel relief height (0..RELIEF_MAX) keyed off pixel brightness: the
+ * tilesets shade a single hue, so lighter pixels read as raised. The
+ * brightness range is measured across the pixels actually being embossed, so
+ * every tileset uses the full range instead of a fixed global threshold.
+ * `enabled` false (the default) returns a flat map.
+ */
+function buildReliefMap(level, pieceMap, profile, enabled) {
+  const W = level.width, H = level.height;
+  const relief = new Uint8Array(W * H);
+  if (!enabled) return relief;
+
+  const embossById = new Uint8Array(256);
+  for (let id = 0; id < 255; id++) {
+    embossById[id + 1] = embossEnabledFor(id, profile) ? 1 : 0;
+  }
+
+  const img = level.groundImage;
+  const mask = level.getGroundMaskLayer().groundMask;
+  const luma = (i) => {
+    const o = i * 4;
+    return (img[o] * 299 + img[o + 1] * 587 + img[o + 2] * 114) / 1000;
+  };
+
+  let lo = 255, hi = 0;
+  for (let i = 0; i < W * H; i++) {
+    if (!mask[i] || !embossById[pieceMap[i]]) continue;
+    const l = luma(i);
+    if (l < lo) lo = l;
+    if (l > hi) hi = l;
+  }
+  if (hi <= lo) return relief;
+
+  for (let i = 0; i < W * H; i++) {
+    if (!mask[i] || !embossById[pieceMap[i]]) continue;
+    relief[i] = Math.round(((luma(i) - lo) / (hi - lo)) * RELIEF_MAX);
+  }
+  return relief;
+}
+
 /**
  * Build the depth buffer for a loaded level.
  * groundData may be null (VGASPEC special levels, or a stale stash): then

@@ -35,6 +35,11 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   header shows its level count and a green "✔ tagged" mark when a profile
   file exists in `profiles/`. The catalog is cached in localStorage ("rescan"
   rebuilds it); miniatures render lazily as you scroll.
+- "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
+  shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
+  giving rock and grass real texture. Off by default (it multiplies the
+  terrain's triangle count), persisted in localStorage; individual pieces can
+  opt out with "3D shade" in the piece editor.
 - `e` toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
