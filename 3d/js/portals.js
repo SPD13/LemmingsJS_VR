@@ -19,11 +19,8 @@ const PORTAL_ENTRANCE_ID = 1;      // level-object id of an entrance
 const PORTAL_DEFAULT_DEPTH = 12;   // game pixels of recession
 const PORTAL_EXIT_DEPTH = 14;
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
-// The artist's viewing distance, in hatch widths: the trapezoid fixes the
-// ratio between the near and far edge distances but not the absolute scale,
-// so this sets how deep a given taper reads. Larger = deeper hatch.
-const PORTAL_VIEW_DISTANCE = 5;
 const PORTAL_FLAP_THICKNESS = 1;   // the doors are thin flat panels
+const PORTAL_FRAME_DEPTH = 4;      // the beams and legs around the opening
 const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
 
@@ -256,18 +253,26 @@ function buildFlapGeometry(uv, halfWidth, depth, sign) {
   return geom;
 }
 
-function buildCeilingGeometry(frame, depth) {
-  const w = frame.width, h = frame.height, mask = frame.getMask();
-  const buf = frame.getBuffer();
+/**
+ * The entrance hatch, built simply:
+ *   - one flat square lying parallel to the ground, carrying the grey rim and
+ *     the landscape drawn inside it. The sprite draws that square in
+ *     perspective, so each of its rows is laid down as a depth slice
+ *     stretched to the square's full width, which undoes the perspective.
+ *   - the surrounding frame, pillars and legs as a slab of the same depth.
+ * The two door flaps are separate meshes so they can swing (see below).
+ */
+function buildCeilingGeometry(frame) {
+  const w = frame.width, h = frame.height;
+  const mask = frame.getMask(), buf = frame.getBuffer();
   const dist = spriteInteriorDistance(frame);
 
-  // Separate the door from its frame without naming a single colour: the
-  // frame's colours are the ones drawn on the sprite's outline, so interior
-  // pixels painted in anything else are the door.
+  // Tell the door from its frame without naming a colour: the frame's colours
+  // are the ones drawn on the sprite's outline, so interior pixels painted in
+  // anything else are the door.
   const outline = new Set();
-  for (let i = 0; i < w * h; i++) {
-    if (mask[i] && dist[i] <= 1) outline.add(buf[i]);
-  }
+  for (let i = 0; i < w * h; i++) if (mask[i] && dist[i] <= 1) outline.add(buf[i]);
+
   const rows = [];
   for (let y = 0; y < h; y++) {
     let min = null, max = null;
@@ -286,93 +291,60 @@ function buildCeilingGeometry(frame, depth) {
     if (rows[y] && rows[y].width > nearW) { nearW = rows[y].width; nearY = y; }
   }
   if (nearY < 0) return null;
-  // follow the taper down, ignoring stray single pixels below the door
   let farY = nearY;
   for (let y = nearY + 1; y < h; y++) {
     if (!rows[y] || rows[y].width > rows[y - 1].width) break;
     if (rows[y].width < nearW * 0.4) break;
     farY = y;
   }
-  if (farY - nearY < 2) return null; // no taper: not a panel in perspective
+  if (farY - nearY < 2) return null; // no taper: not drawn in perspective
 
-  // How deep the hatch is comes from the trapezoid itself. Under perspective
-  // a constant width scales with 1/distance, so near/far width is exactly how
-  // much farther the back edge lies: d_far = d_near * (w_near / w_far). The
-  // depth is then d_near * (ratio - 1) - the one thing the drawing cannot
-  // tell us is d_near, the artist's viewing distance, so that is expressed in
-  // hatch widths and kept as a constant.
-  const farW = rows[farY].width;
-  depth = farW > 0 && farW < nearW
-    ? PORTAL_VIEW_DISTANCE * nearW * (nearW / farW - 1)
-    : nearW;
-  // The grey border drawn beside the opening is its rim, part of the ceiling
-  // rather than the vertical frame: widen each row over the pixels that run
-  // straight out from the door, so the rim lies flat around the square.
+  // the grey border beside the opening is its rim and belongs to the square
   for (let y = nearY; y <= farY; y++) {
     const r = rows[y];
-    for (let n = 0; n < PORTAL_RIM_MAX && r.min > 0 && mask[y * w + r.min - 1]; n++) {
-      r.min--;
-    }
-    for (let n = 0; n < PORTAL_RIM_MAX && r.max < w - 1 && mask[y * w + r.max + 1]; n++) {
-      r.max++;
-    }
+    for (let n = 0; n < PORTAL_RIM_MAX && r.min > 0 && mask[y * w + r.min - 1]; n++) r.min--;
+    for (let n = 0; n < PORTAL_RIM_MAX && r.max < w - 1 && mask[y * w + r.max + 1]; n++) r.max++;
     r.width = r.max - r.min + 1;
   }
-  nearW = rows[nearY].width;
+  const side = rows[nearY].width;                       // a square: side x side
+  const centre = (rows[nearY].min + rows[nearY].max + 1) / 2;
+  const span = farY - nearY + 1;
+  const zOf = (y) => side / 2 - ((y - nearY) / span) * side; // centred on z=0
 
-  const span = farY - nearY;
-  const nearCentre = (rows[nearY].min + rows[nearY].max + 1) / 2;
-  const rowAt = (y) => rows[Math.max(nearY, Math.min(farY, y))];
-  // un-project a sprite x on row y onto the flat panel
-  const panelX = (x, y) => {
-    const r = rowAt(y);
-    const centre = (r.min + r.max + 1) / 2;
-    return nearCentre + (x - centre) * (nearW / r.width);
-  };
-  // centred on the object's plane, so a lemming spawning there drops through
-  // the middle of the square rather than off its front edge
-  const panelZ = (y) =>
-    depth / 2 - ((Math.max(nearY, Math.min(farY, y)) - nearY) / span) * depth;
-
+  // --- the square, one strip per sprite row ---
   const panel = { positions: [], colors: [], uvs: [], indices: [] };
   const inPanel = new Uint8Array(w * h);
   for (let y = nearY; y <= farY; y++) {
     const r = rows[y];
-    for (let x = r.min; x <= r.max; x++) {
-      const i = y * w + x;
-      if (!mask[i]) continue;
-      inPanel[i] = 1;
-      const zTop = panelZ(y), zBottom = panelZ(y + 1);
-      const corners = [
-        [panelX(x, y), nearY, zTop, x / w, y / h],
-        [panelX(x + 1, y), nearY, zTop, (x + 1) / w, y / h],
-        [panelX(x + 1, y + 1), nearY, zBottom, (x + 1) / w, (y + 1) / h],
-        [panelX(x, y + 1), nearY, zBottom, x / w, (y + 1) / h],
-      ];
-      const base = panel.positions.length / 3;
-      for (const [cx, cy, cz, cu, cv] of corners) {
-        panel.positions.push(cx, cy, cz);
-        const shade = 1 - 0.45 * Math.min(1, -cz / depth); // dimmer further in
-        panel.colors.push(shade, shade, shade);
-        panel.uvs.push(cu, cv);
-      }
-      panel.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    for (let x = r.min; x <= r.max; x++) if (mask[y * w + x]) inPanel[y * w + x] = 1;
+    const zNear = zOf(y), zFar = zOf(y + 1);
+    const xl = centre - side / 2, xr = centre + side / 2;
+    const u0 = r.min / w, u1 = (r.max + 1) / w, v0 = y / h, v1 = (y + 1) / h;
+    const base = panel.positions.length / 3;
+    for (const [px, pz, pu, pv] of [
+      [xl, zNear, u0, v0], [xr, zNear, u1, v0], [xr, zFar, u1, v1], [xl, zFar, u0, v1],
+    ]) {
+      panel.positions.push(px, nearY, pz);
+      panel.colors.push(1, 1, 1);
+      panel.uvs.push(pu, pv);
     }
+    panel.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
   if (panel.indices.length === 0) return null;
 
-  // The surrounding frame, pillars and legs are extruded the full depth of
-  // the square, so the hatch is a box as deep as it is wide rather than a
-  // thin slab with a deep hole behind it.
+  // --- the frame around it: beams and legs, thin, standing at the front
+  // edge of the square (extruding them the full depth would just wall the
+  // square in) ---
   const frameGeom = buildExtrudedSpriteGeometry(
-    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, depth);
+    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h,
+    PORTAL_FRAME_DEPTH);
   let framePart = null;
   if (frameGeom) {
     const positions = Array.from(frameGeom.attributes.position.array);
-    // the extruder builds from z=0 back to z=depth toward the viewer; shift it
-    // so the box's face is at the sprite plane and its body recedes, matching
-    // the opening
-    for (let i = 2; i < positions.length; i += 3) positions[i] -= depth / 2;
+    // the extruder builds toward the viewer from z=0; sit the beams' faces on
+    // the square's near edge
+    const shift = side / 2 - PORTAL_FRAME_DEPTH;
+    for (let i = 2; i < positions.length; i += 3) positions[i] += shift;
     framePart = {
       positions,
       colors: Array.from(frameGeom.attributes.color.array),
@@ -381,18 +353,19 @@ function buildCeilingGeometry(frame, depth) {
     };
     frameGeom.dispose();
   }
+
   return {
     geometry: toBufferGeometry(mergePortalGeometry(framePart, panel)),
     openingMask: inPanel,
     hatch: {
-      // hinge lines along the square's left and right edges, at the near row
-      leftX: nearCentre - nearW / 2,
-      rightX: nearCentre + nearW / 2,
+      leftX: centre - side / 2,
+      rightX: centre + side / 2,
       y: nearY,
-      halfWidth: nearW / 2,
-      depth,
+      halfWidth: side / 2,
+      depth: side,
+      // the doors carry the artwork drawn inside the square
       uv: {
-        u0: (nearCentre - nearW / 2) / w, u1: nearCentre / w,
+        u0: rows[nearY].min / w, u1: (rows[nearY].min + rows[nearY].width / 2) / w,
         v0: nearY / h, v1: (farY + 1) / h,
       },
     },
@@ -496,7 +469,7 @@ function buildPortals(level, profile, depthMap) {
     if (!frame) continue;
     let geometry = null, hatch = null, openness = null;
     if (config.shape === "ceiling") {
-      const built = buildCeilingGeometry(frame, config.depth);
+      const built = buildCeilingGeometry(frame);
       if (!built) continue;
       geometry = built.geometry;
       hatch = built.hatch;
