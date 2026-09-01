@@ -27,6 +27,13 @@ const GUI_ICON_DEPTH = 1;    // panel pixels of relief on the artwork
 // spent, so it must stay flat); 10..12 have no digits and their art runs
 // the full tile height.
 const guiIconTop = (index) => (index <= 9 ? 26 : 17);
+// The counts themselves (white digits on their black box) are raised too,
+// but they change as skills are spent, so their geometry is rebuilt whenever
+// the digit strip's pixels change.
+const GUI_DIGIT_TOP = 17;
+const GUI_DIGIT_BOTTOM = 26;
+const GUI_DIGIT_BUTTONS = 10; // 0..9 carry counts; 10..12 do not
+const GUI_DIGIT_COLOR = "255,255,255";
 
 class GuiPanel {
   constructor(scene, game, resources) {
@@ -91,7 +98,58 @@ class GuiPanel {
     this.hoverRelief.visible = false;
     this.hoverRelief.renderOrder = 6;
     this.scene.add(this.hoverRelief);
+
+    // the counts get the same relief, on geometry rebuilt as they change
+    this._emptyGeom = this.resources.track(new THREE.BufferGeometry());
+    this.digitMesh = new THREE.Mesh(this._emptyGeom, material);
+    this.scene.add(this.digitMesh);
+    this._refreshDigits();
     this._layoutRelief();
+  }
+
+  /** White digit pixels of the skill/release-rate counts. */
+  _buildDigitMask() {
+    const W = this.canvas.width, H = this.canvas.height;
+    const data = this.ctx.getImageData(0, 0, W, H).data;
+    const mask = new Uint8Array(W * H);
+    for (let x = 0; x < GUI_DIGIT_BUTTONS * GUI_TILE_W && x < W; x++) {
+      const col = x % GUI_TILE_W;
+      if (col === 0 || col === GUI_TILE_W - 1) continue;
+      for (let y = GUI_DIGIT_TOP; y < GUI_DIGIT_BOTTOM; y++) {
+        const i = (y * W + x) * 4;
+        const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
+        if (key === GUI_DIGIT_COLOR) mask[y * W + x] = 1;
+      }
+    }
+    return mask;
+  }
+
+  /** Cheap fingerprint of the digit strip, to rebuild only on real change. */
+  _digitChecksum() {
+    const data = this.ctx.getImageData(
+      0, GUI_DIGIT_TOP,
+      Math.min(GUI_DIGIT_BUTTONS * GUI_TILE_W, this.canvas.width),
+      GUI_DIGIT_BOTTOM - GUI_DIGIT_TOP).data;
+    let h = 0;
+    for (let i = 0; i < data.length; i += 4) h = (h * 31 + data[i]) | 0;
+    return h;
+  }
+
+  /** Rebuild the digits' relief when a count changes. */
+  _refreshDigits() {
+    const sum = this._digitChecksum();
+    if (sum === this._digitSum) return;
+    this._digitSum = sum;
+    this.digitMask = this._buildDigitMask();
+    const W = this.canvas.width, H = this.canvas.height;
+    const geom = buildExtrudedSpriteGeometry(
+      (x, y) => this.digitMask[y * W + x] !== 0, W, H, GUI_ICON_DEPTH);
+    if (this.digitMesh.geometry && this.digitMesh.geometry !== this._emptyGeom) {
+      this.digitMesh.geometry.dispose();
+    }
+    this.digitMesh.geometry = geom || this._emptyGeom;
+    this.digitMesh.visible = !!geom;
+    this._tileGeoms.length = 0; // hovered-tile geometry includes the digits
   }
 
   /** Per-tile relief geometry (cached), for the raised hovered button. */
@@ -100,7 +158,9 @@ class GuiPanel {
     const W = this.canvas.width, H = this.canvas.height;
     const x0 = index * GUI_TILE_W, x1 = x0 + GUI_TILE_W;
     const geom = buildExtrudedSpriteGeometry(
-      (x, y) => x >= x0 && x < x1 && this.iconMask[y * W + x] !== 0,
+      (x, y) => x >= x0 && x < x1 &&
+        (this.iconMask[y * W + x] !== 0 ||
+         (this.digitMask && this.digitMask[y * W + x] !== 0)),
       W, H, GUI_ICON_DEPTH);
     if (geom) this.resources.track(geom);
     this._tileGeoms[index] = geom;
@@ -117,6 +177,10 @@ class GuiPanel {
       this.mesh.position.x - this.mesh.scale.x / 2,
       this.mesh.position.y + this.mesh.scale.y / 2,
       this.mesh.position.z + 0.2);
+    if (this.digitMesh) {
+      this.digitMesh.scale.copy(this.reliefMesh.scale);
+      this.digitMesh.position.copy(this.reliefMesh.position);
+    }
     if (this.hoverIndex != null) this._layoutHoverRelief(this.hoverIndex);
   }
 
@@ -248,6 +312,7 @@ class GuiPanel {
     if (this.hoverTexture) this.hoverTexture.needsUpdate = true; // shares the canvas
     if (this.reliefTexture) this.reliefTexture.needsUpdate = true;
     if (!this.reliefMesh) this._buildRelief(); // needs painted pixels
+    else this._refreshDigits();
   }
 
   /** Convert a ray hit UV on the panel into pixel coords for GameGui. */
@@ -267,5 +332,6 @@ class GuiPanel {
     if (this.hoverTile) this.scene.remove(this.hoverTile);
     if (this.reliefMesh) this.scene.remove(this.reliefMesh);
     if (this.hoverRelief) this.scene.remove(this.hoverRelief);
+    if (this.digitMesh) this.scene.remove(this.digitMesh);
   }
 }
