@@ -22,8 +22,7 @@ const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
 const PORTAL_PANEL_THICK = 1;      // the ceiling square is a game pixel thick
-const PORTAL_FLAP_GAP = 0.5;       // doors hang this far below its underside
-const PORTAL_FLAP_THICK = 1;       // and are a game pixel thick themselves
+const PORTAL_FLAP_THICK = 1;       // and so are the doors hinged under it
 
 /** Stash the object list and their metadata as the level is built. */
 (function installObjectDataHook() {
@@ -204,10 +203,11 @@ function buildFlapGeometry(frame, doorRows, halfWidth, depth, sign) {
   const span = doorRows.length;
   const positions = [], colors = [], uvs = [], indices = [];
   const xFar = sign * halfWidth;
-  // hung under the ceiling's underside: shut flush in its own plane the doors
-  // would z-fight the square, and the landscape would flicker through them
-  const yTop = PORTAL_PANEL_THICK + PORTAL_FLAP_GAP;
-  const yBot = yTop + PORTAL_FLAP_THICK;
+  // The hinge is the origin, so the door has to be built off it: its top face
+  // lies in the plane it turns about. Set the body away from that plane and
+  // the swing carries the offset round with it, standing the open door that
+  // far clear of the opening it is supposed to be hinged on.
+  const yTop = 0, yBot = PORTAL_FLAP_THICK;
   const zAt = (k) => depth / 2 - (k / span) * depth;
   const quad = (verts, shade) => {
     const base = positions.length / 3;
@@ -381,7 +381,9 @@ function buildCeilingGeometry(frame) {
     hatch: {
       leftX: centre - side / 2,
       rightX: centre + side / 2,
-      y: nearY,
+      // the hinge line runs along the ceiling's underside, so a shut door
+      // meets it and an open one swings flush against the opening's edge
+      y: nearY + PORTAL_PANEL_THICK,
       halfWidth: side / 2,
       depth: side,
       // the shut hatch's doors, row by row, so the flaps can be painted
