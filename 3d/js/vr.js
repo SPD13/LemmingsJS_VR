@@ -106,6 +106,7 @@ class VRManager {
     const dotMat = new THREE.MeshBasicMaterial({
       color: 0xb9ffcb, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false,
+      depthTest: false, // impact dot stays visible on top of everything
     });
     const tipGeom = new THREE.SphereGeometry(0.014, 12, 8);
     const tipMat = new THREE.MeshBasicMaterial({ color: 0x6fce7e });
@@ -123,6 +124,7 @@ class VRManager {
       }
       c.add(new THREE.Mesh(tipGeom, tipMat)); // hand marker, always visible
       c.userData.dot = new THREE.Mesh(dotGeom, dotMat);
+      c.userData.dot.renderOrder = 20;
       c.userData.dot.visible = false;
       scene.add(c.userData.dot);
       // grip-space marker: a second visibility path in case the runtime

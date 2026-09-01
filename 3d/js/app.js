@@ -153,8 +153,10 @@
       resources.track(new THREE.RingGeometry(7, 9, 24)),
       resources.track(new THREE.MeshBasicMaterial({
         color: 0xffd866, side: THREE.DoubleSide,
+        depthTest: false, // highlight reads on top of the embedded slab
       }))
     );
+    ring.renderOrder = 19;
     ring.visible = false;
     ring.position.z = LEMMING_Z + 2;
     worldGroup.add(ring);
@@ -323,8 +325,10 @@
     new THREE.MeshBasicMaterial({
       color: 0xffd866, transparent: true, opacity: 0.95,
       blending: THREE.AdditiveBlending, depthWrite: false,
+      depthTest: false, // pointer stays visible on top of everything
     })
   );
+  mouseCursor.renderOrder = 20;
   mouseCursor.visible = false;
   scene.add(mouseCursor);
 
