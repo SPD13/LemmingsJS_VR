@@ -488,28 +488,41 @@ function buildPortalGeometry(frame, depth, sky) {
   const isFrame = (x, y) => x >= 0 && x < w && y >= 0 && y < h &&
     mask[y * w + x] !== 0 && !sky[y * w + x];
 
-  // How many rings of frame each pixel sits from the opening, up to the point
-  // where the funnel runs out. Grown a ring at a time from the sky itself.
+  // How far each pixel of frame lies from the opening. Counting whole rings
+  // would terrace the funnel - every pixel in a ring at one height, and the
+  // corner averaging only softening the join - so this is a chamfer distance
+  // transform, diagonals costing their real length. The height field it feeds
+  // varies pixel to pixel, the way the terrain's relief does, which is what
+  // the corner averaging needs to have something smooth to average.
   const rings = depth > 0 ? PORTAL_FUNNEL_RINGS : 0;
-  const ring = new Uint8Array(w * h).fill(255);
-  let edge = [];
-  for (let i = 0; i < w * h; i++) if (mask[i] && sky[i]) { ring[i] = 0; edge.push(i); }
-  for (let step = 1; step <= rings && edge.length; step++) {
-    const next = [];
-    for (const i of edge) {
-      const x = i % w, y = (i / w) | 0;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx, ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-          const j = ny * w + nx;
-          if (ring[j] !== 255 || !mask[j]) continue;
-          ring[j] = step;
-          next.push(j);
-        }
-      }
+  const DIAG = Math.SQRT2, FAR = 1e6;
+  const dist = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    dist[i] = mask[i] && sky[i] ? 0 : FAR;
+  }
+  const relax = (i, j, cost) => {
+    const d = dist[j] + cost;
+    if (d < dist[i]) dist[i] = d;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!mask[i] || dist[i] === 0) continue;
+      if (x > 0) relax(i, i - 1, 1);
+      if (y > 0) relax(i, i - w, 1);
+      if (x > 0 && y > 0) relax(i, i - w - 1, DIAG);
+      if (x < w - 1 && y > 0) relax(i, i - w + 1, DIAG);
     }
-    edge = next;
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      if (!mask[i] || dist[i] === 0) continue;
+      if (x < w - 1) relax(i, i + 1, 1);
+      if (y < h - 1) relax(i, i + w, 1);
+      if (x < w - 1 && y < h - 1) relax(i, i + w + 1, DIAG);
+      if (x > 0 && y < h - 1) relax(i, i + w - 1, DIAG);
+    }
   }
 
   // How far back the face lies: at the plane out in the open, the full
@@ -523,9 +536,8 @@ function buildPortalGeometry(frame, depth, sky) {
     const i = y * w + x;
     if (!mask[i]) return 0;
     if (sky[i]) return thick;
-    const r = ring[i];
-    if (r === 255 || r > rings) return 0;
-    const t = r / (rings + 1);
+    const t = dist[i] / (rings + 1);
+    if (t >= 1) return 0;
     return thick * (1 - t * t * (3 - 2 * t));
   };
   const cornerZ = (x, y) => {
