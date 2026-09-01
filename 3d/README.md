@@ -121,14 +121,15 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   behind the doors. Each door is a slab one pixel thick, laid down as one
   strip per sprite row so the perspective is undone and the artist's own
   door artwork lands square on a panel that stays flat.
-  An exit is built the same way in miniature: its frame is a slab one pixel deep
-  sitting on the background — a face at the plane, a back a pixel behind it,
-  that pixel of edge showing all round — and the tunnel carries on 2px past
-  that back, so the opening is a hole through the frame rather than a patch
-  painted on it. The tunnel's floor takes each corner's height from the four
-  pixels meeting there, so the way in is a ramp and not a shaft, and the
-  walls run from the face down to those same corner heights, meeting exactly
-  with no crack at the mouth. The opening is the blue (or blue and green) of the
+  An exit is built the same way in miniature: a slab deep enough to hold its
+  own tunnel — a face on the background and a back `PORTAL_FRAME_THICK + depth`
+  behind it — so the opening is sunk into the door's thickness rather than
+  pushed out behind it as a lump, and the tunnel's floor is simply that back.
+  The pixels of frame around the opening step down into it, one pixel per
+  ring, so the way in is a short funnel and not a shaft; corner heights
+  averaged from the four pixels meeting at each round those steps off, and
+  the walls run from the face down to those same corner heights, meeting
+  exactly with no crack at the mouth. The opening is the blue (or blue and green) of the
   sky: properly saturated rather than merely bluest-of-three (stone is shaded
   in cool-tinted near-neutrals), not red-led, and standing clear of red so a
   pale yellow does not read as green. Colour alone still is not enough —
