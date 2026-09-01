@@ -18,8 +18,10 @@
 const PORTAL_ENTRANCE_ID = 1;      // level-object id of an entrance
 const PORTAL_DEFAULT_DEPTH = 12;   // game pixels of recession
 const PORTAL_EXIT_DEPTH = 2;       // an exit pushes its opening back this far
-const PORTAL_SKY_MIN = 40;         // a channel this strong...
-const PORTAL_SKY_RATIO = 1.3;      // ...and this far above the others is sky
+const PORTAL_SKY_MIN = 40;         // sky is at least this bright,
+const PORTAL_SKY_SAT = 0.35;       // this saturated (not a tinted grey),
+const PORTAL_SKY_WARM = 0.2;       // and this far off red (not a yellow)
+const PORTAL_SKY_PATCH_MIN = 6;    // a doorway is a patch, not a stray pixel
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
@@ -439,16 +441,73 @@ function buildCeilingGeometry(frame, shutFrame) {
 
 /**
  * Is this pixel sky seen through the opening rather than the wall around it?
- * The exits are drawn as a mouth of blue, sometimes blue and green, set in
- * the tileset's own stone. Stone is painted in near-neutrals, so a channel
- * standing well clear of the other two is what separates the two - a plain
- * "bluest channel wins" also takes the cool-tinted greys the stone is shaded
- * with, which in the dirt set is more pixels than the opening itself.
+ * Exits are drawn as a mouth of blue, sometimes blue and green, set in the
+ * tileset's own stone. Three things separate the two, and all three are
+ * needed: stone is shaded in cool-tinted near-neutrals, so sky has to be
+ * properly saturated rather than merely bluest-of-three; stone is often warm,
+ * so red may not lead; and a pale yellow is saturated with green leading, so
+ * the lead has to stand clear of red as well.
  */
 function isSkyColour(v) {
   const r = v & 255, g = (v >> 8) & 255, b = (v >> 16) & 255;
-  if (b >= PORTAL_SKY_MIN && b >= PORTAL_SKY_RATIO * Math.max(r, g)) return true;
-  return g >= PORTAL_SKY_MIN && g >= PORTAL_SKY_RATIO * Math.max(r, b);
+  const max = Math.max(r, g, b);
+  if (max < PORTAL_SKY_MIN) return false;
+  if (max - Math.min(r, g, b) < PORTAL_SKY_SAT * max) return false;
+  if (max === r) return false;
+  return max - r >= PORTAL_SKY_WARM * max;
+}
+
+/**
+ * The opening's pixels: sky, but only the patch of it that is the doorway.
+ *
+ * Colour alone is not enough. Some tilesets are built of blue stone - the
+ * crystal set most of all - and pick up stray saturated pixels all over the
+ * sprite, which would dent it at random. But the level data says where the
+ * doorway is: an exit carries the trigger box a lemming has to reach to get
+ * out. So the region is the connected patch of sky nearest that box, and
+ * scattered pixels elsewhere in the artwork are left alone.
+ */
+function spriteSkyMask(frame, triggerX, triggerY) {
+  const w = frame.width, h = frame.height;
+  const mask = frame.getMask(), buf = frame.getBuffer();
+  const candidate = new Uint8Array(w * h);
+  let any = false;
+  for (let i = 0; i < w * h; i++) {
+    if (mask[i] && isSkyColour(buf[i])) { candidate[i] = 1; any = true; }
+  }
+  if (!any) return null;
+
+  // the patch whose nearest pixel to the trigger is nearest of all
+  const seen = new Uint8Array(w * h);
+  let best = null, bestD = Infinity;
+  for (let start = 0; start < w * h; start++) {
+    if (!candidate[start] || seen[start]) continue;
+    const blob = [], stack = [start];
+    seen[start] = 1;
+    let d2 = Infinity;
+    while (stack.length) {
+      const i = stack.pop(), x = i % w, y = (i / w) | 0;
+      blob.push(i);
+      const dx = x - triggerX, dy = y - triggerY;
+      d2 = Math.min(d2, dx * dx + dy * dy);
+      for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + ox, ny = y + oy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (seen[j] || !candidate[j]) continue;
+        seen[j] = 1;
+        stack.push(j);
+      }
+    }
+    // a lone saturated pixel can easily sit closer to the trigger than the
+    // doorway does, and denting one pixel is not worth doing
+    if (blob.length < PORTAL_SKY_PATCH_MIN) continue;
+    if (d2 < bestD) { bestD = d2; best = blob; }
+  }
+  if (!best) return null;
+  const out = new Uint8Array(w * h);
+  for (const i of best) out[i] = 1;
+  return out;
 }
 
 /**
@@ -458,19 +517,17 @@ function isSkyColour(v) {
  * is a short ramp rather than a cliff, and the recess darkens a little: a
  * shallow tunnel rather than a hole cut in a picture.
  */
-function buildPortalGeometry(frame, depth) {
+function buildPortalGeometry(frame, depth, triggerX, triggerY) {
   const w = frame.width, h = frame.height;
-  const mask = frame.getMask(), buf = frame.getBuffer();
+  const mask = frame.getMask();
 
-  let sky = 0;
-  for (let i = 0; i < w * h; i++) if (mask[i] && isSkyColour(buf[i])) sky++;
-  if (sky === 0) return null; // no opening to push back
+  const sky = spriteSkyMask(frame, triggerX, triggerY);
+  if (!sky) return null; // no opening to push back
 
   // outside the sprite counts as the plane, so the rim stays flush
   const recessAt = (x, y) => {
     if (x < 0 || x >= w || y < 0 || y >= h) return 0;
-    const i = y * w + x;
-    return mask[i] && isSkyColour(buf[i]) ? depth : 0;
+    return sky[y * w + x] ? depth : 0;
   };
   const cornerZ = (x, y) => {
     let sum = 0;
@@ -554,7 +611,12 @@ function buildPortals(level, profile, depthMap) {
       openness = hatchOpenness(mapObject.animation.frames, built.openingMask,
         frame.width);
     } else {
-      geometry = buildPortalGeometry(frame, config.depth);
+      // the trigger box is in object space; the frame may be inset from it
+      const tx = (info ? info.trigger_left + info.trigger_width / 2 : frame.width / 2)
+        - frame.offsetX;
+      const ty = (info ? info.trigger_top + info.trigger_height / 2 : frame.height / 2)
+        - frame.offsetY;
+      geometry = buildPortalGeometry(frame, config.depth, tx, ty);
     }
     if (!geometry) continue;
 
