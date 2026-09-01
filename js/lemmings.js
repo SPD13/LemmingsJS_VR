@@ -3409,13 +3409,20 @@ var Lemmings;
                 xhr.send();
             });
         }
-        /** load string data from URL */
-        loadString(url) {
+        /** load string data from URL: rootPath + filename */
+        loadString(filename) {
+            let url = this.rootPath + filename;
             this.log.log("Load file as string: " + url);
             return new Promise((resolve, reject) => {
                 let xhr = new XMLHttpRequest();
                 xhr.onload = (oEvent) => {
-                    resolve(xhr.response);
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(xhr.response);
+                    }
+                    else {
+                        this.log.log("error load file:" + url);
+                        reject({ status: xhr.status, statusText: xhr.statusText });
+                    }
                 };
                 xhr.onerror = () => {
                     this.log.log("error load file:" + url);
