@@ -40,12 +40,16 @@ function portalConfigFor(objectId, info, profile) {
   const byId = ((profile && profile.objects) || {}).byId || {};
   const entry = byId[objectId];
   if (entry && entry.shape) {
-    return entry.shape === "portal"
-      ? { depth: entry.depth || PORTAL_DEFAULT_DEPTH } : null;
+    if (entry.shape === "flat") return null;
+    return { shape: entry.shape, depth: entry.depth ||
+      (entry.shape === "ceiling" ? PORTAL_DEFAULT_DEPTH : PORTAL_EXIT_DEPTH) };
   }
-  if (objectId === PORTAL_ENTRANCE_ID) return { depth: PORTAL_DEFAULT_DEPTH };
+  // the entrance hatch lies flat overhead; an exit tunnels into the scenery
+  if (objectId === PORTAL_ENTRANCE_ID) {
+    return { shape: "ceiling", depth: PORTAL_DEFAULT_DEPTH };
+  }
   if (info && info.trigger_effect_id === Lemmings.TriggerTypes.EXIT_LEVEL) {
-    return { depth: PORTAL_EXIT_DEPTH };
+    return { shape: "portal", depth: PORTAL_EXIT_DEPTH };
   }
   return null;
 }
@@ -95,6 +99,127 @@ function spriteInteriorDistance(frame) {
     if (mask[r]) dist[r] = Math.min(dist[r], 1);
   }
   return dist;
+}
+
+/** Concatenate two geometries built by the helpers below. */
+function mergePortalGeometry(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const out = {
+    positions: a.positions.concat(b.positions),
+    colors: a.colors.concat(b.colors),
+    uvs: a.uvs.concat(b.uvs),
+    indices: a.indices.slice(),
+  };
+  const offset = a.positions.length / 3;
+  for (const i of b.indices) out.indices.push(i + offset);
+  return out;
+}
+
+function toBufferGeometry(parts) {
+  if (!parts || parts.indices.length === 0) return null;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(parts.positions, 3));
+  geom.setAttribute("color", new THREE.Float32BufferAttribute(parts.colors, 3));
+  geom.setAttribute("uv", new THREE.Float32BufferAttribute(parts.uvs, 2));
+  geom.setIndex(parts.indices);
+  return geom;
+}
+
+/**
+ * The entrance's blue/green/white trapezoid is not a tunnel: it is a hatch
+ * lying flat above the player - a square parallel to the ground, drawn in
+ * perspective. A horizontal surface above eye level recedes *downward* in the
+ * image (toward the horizon) as it goes away, which is exactly what the
+ * artwork shows: the panel is widest at its top row and narrows going down.
+ *
+ * So the trapezoid is un-projected back into a rectangle: the widest row
+ * becomes the near edge, each row below is pushed further back in Z at a
+ * constant height, and its pixels are stretched out to the near edge's width.
+ * The rest of the sprite (frame, pillars, legs) keeps the usual flat
+ * extrusion.
+ */
+function buildCeilingGeometry(frame, depth) {
+  const w = frame.width, h = frame.height, mask = frame.getMask();
+  const dist = spriteInteriorDistance(frame);
+
+  const rows = [];
+  for (let y = 0; y < h; y++) {
+    let min = null, max = null;
+    for (let x = 0; x < w; x++) {
+      if (mask[y * w + x] && dist[y * w + x] >= PORTAL_CARVE_MIN) {
+        if (min === null) min = x;
+        max = x;
+      }
+    }
+    rows[y] = min === null ? null : { min, max, width: max - min + 1 };
+  }
+
+  let nearY = -1, nearW = 0;
+  for (let y = 0; y < h; y++) {
+    if (rows[y] && rows[y].width > nearW) { nearW = rows[y].width; nearY = y; }
+  }
+  if (nearY < 0) return null;
+  let farY = nearY;
+  for (let y = nearY + 1; y < h; y++) {
+    if (!rows[y] || rows[y].width > rows[y - 1].width) break;
+    farY = y;
+  }
+  if (farY - nearY < 2) return null; // no taper: not a panel in perspective
+
+  const span = farY - nearY;
+  const nearCentre = (rows[nearY].min + rows[nearY].max + 1) / 2;
+  const rowAt = (y) => rows[Math.max(nearY, Math.min(farY, y))];
+  // un-project a sprite x on row y onto the flat panel
+  const panelX = (x, y) => {
+    const r = rowAt(y);
+    const centre = (r.min + r.max + 1) / 2;
+    return nearCentre + (x - centre) * (nearW / r.width);
+  };
+  const panelZ = (y) =>
+    -((Math.max(nearY, Math.min(farY, y)) - nearY) / span) * depth;
+
+  const panel = { positions: [], colors: [], uvs: [], indices: [] };
+  const inPanel = new Uint8Array(w * h);
+  for (let y = nearY; y <= farY; y++) {
+    const r = rows[y];
+    for (let x = r.min; x <= r.max; x++) {
+      const i = y * w + x;
+      if (!mask[i]) continue;
+      inPanel[i] = 1;
+      const zTop = panelZ(y), zBottom = panelZ(y + 1);
+      const corners = [
+        [panelX(x, y), nearY, zTop, x / w, y / h],
+        [panelX(x + 1, y), nearY, zTop, (x + 1) / w, y / h],
+        [panelX(x + 1, y + 1), nearY, zBottom, (x + 1) / w, (y + 1) / h],
+        [panelX(x, y + 1), nearY, zBottom, x / w, (y + 1) / h],
+      ];
+      const base = panel.positions.length / 3;
+      for (const [cx, cy, cz, cu, cv] of corners) {
+        panel.positions.push(cx, cy, cz);
+        const shade = 1 - 0.45 * Math.min(1, -cz / depth); // dimmer further in
+        panel.colors.push(shade, shade, shade);
+        panel.uvs.push(cu, cv);
+      }
+      panel.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  }
+  if (panel.indices.length === 0) return null;
+
+  // the surrounding frame keeps a plain slab extrusion
+  const frameGeom = buildExtrudedSpriteGeometry(
+    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, SPRITE_DEPTH);
+  let framePart = null;
+  if (frameGeom) {
+    framePart = {
+      positions: Array.from(frameGeom.attributes.position.array),
+      colors: Array.from(frameGeom.attributes.color.array),
+      uvs: Array.from(frameGeom.attributes.uv.array),
+      indices: Array.from(frameGeom.index.array),
+    };
+    frameGeom.dispose();
+  }
+  return toBufferGeometry(mergePortalGeometry(framePart, panel));
 }
 
 /**
@@ -192,13 +317,15 @@ function buildPortals(level, profile, depthMap) {
     const mapObject = level.objects[i];
     const frame = mapObject.animation.frames[0];
     if (!frame) continue;
-    const geometry = buildPortalGeometry(frame, config.depth);
+    const geometry = config.shape === "ceiling"
+      ? buildCeilingGeometry(frame, config.depth)
+      : buildPortalGeometry(frame, config.depth);
     if (!geometry) continue;
 
     const originX = mapObject.x + frame.offsetX;
     const originY = mapObject.y + frame.offsetY;
     portals.push({
-      index: i, objectId, geometry, originX, originY,
+      index: i, objectId, geometry, originX, originY, shape: config.shape,
       animation: mapObject.animation,
       carved: carveTerrainForPortal(depthMap, level, originX, originY, frame),
     });
