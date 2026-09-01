@@ -421,12 +421,19 @@
    * valid pose, so it runs on the first rendered XR frame, not sessionstart;
    * returns false to request a retry when the level isn't loaded yet.
    */
-  function placeDioramaForXR() {
+  function placeDioramaForXR(viewerPose) {
     if (!session) return false;
     const s = VR_PIXEL_SCALE;
     const headPos = new THREE.Vector3();
     const headQuat = new THREE.Quaternion();
-    camera.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
+    if (viewerPose) {
+      const t = viewerPose.transform;
+      headPos.set(t.position.x, t.position.y, t.position.z);
+      headQuat.set(t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w);
+    } else {
+      // mid-session callers without a frame pose: the camera is valid by then
+      camera.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
+    }
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
     fwd.y = 0;
     if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);

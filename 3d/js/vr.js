@@ -176,7 +176,7 @@ class VRManager {
     }
     if (pressed && !this._recenterHeld) {
       this._grab = null;
-      this.hooks.placeDiorama();
+      this.hooks.placeDiorama(this._lastViewerPose);
     }
     this._recenterHeld = pressed;
   }
@@ -286,9 +286,19 @@ class VRManager {
       return;
     }
     this._updateDiagBoard();
-    if (this._needsPlacement) {
+    // the authoritative head pose comes from the XR frame; the camera object
+    // only receives it during render (AFTER this update), so placing from the
+    // camera on the first frame would use the desktop pose - kilometers away
+    let viewerPose = null;
+    try {
+      const frame = this.renderer.xr.getFrame && this.renderer.xr.getFrame();
+      const refSpace = this.renderer.xr.getReferenceSpace();
+      viewerPose = frame && refSpace ? frame.getViewerPose(refSpace) : null;
+    } catch (e) { /* pose not available yet */ }
+    this._lastViewerPose = viewerPose;
+    if (this._needsPlacement && viewerPose) {
       try {
-        if (this.hooks.placeDiorama()) this._needsPlacement = false;
+        if (this.hooks.placeDiorama(viewerPose)) this._needsPlacement = false;
       } catch (e) {
         console.error("[vr] placement failed:", e);
         this._needsPlacement = false;
