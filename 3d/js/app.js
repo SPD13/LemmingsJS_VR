@@ -451,11 +451,11 @@
     dioramaRoot.position.copy(target)
       .sub(focusLocal.multiplyScalar(s).applyEuler(dioramaRoot.rotation));
 
-    // park the no-controller warning to the left of the visible play area
+    // park the no-controller warning above the play area, outside the level
     const signW = 230, signH = signW * 224 / 512;
     vrWarningSign.scale.set(signW, signH, 1);
     vrWarningSign.position.set(
-      startX - 200 - signW / 2 - 24, session.level.height * 0.6, 60);
+      startX, session.level.height + signH / 2 + 30, 40);
     return true;
   }
 
