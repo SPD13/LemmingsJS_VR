@@ -14,6 +14,7 @@
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
 
+  console.log("[3d] build 2026-08-31.2 (vr diagnostics)");
   window.addEventListener("unhandledrejection", (e) => {
     console.warn("[3d] unhandled rejection:", e.reason,
       e.reason && e.reason.stack ? e.reason.stack : "(no stack)");
@@ -340,6 +341,20 @@
       .sub(focus.multiplyScalar(VR_PIXEL_SCALE));
   }
 
+  // desktop clip planes are in pixel units; in VR they are METERS, and the
+  // diorama sits 0.9m away — near=1 would clip it entirely (black screen)
+  const desktopClip = { near: camera.near, far: camera.far };
+  renderer.xr.addEventListener("sessionstart", () => {
+    camera.near = 0.05;
+    camera.far = 300;
+    camera.updateProjectionMatrix();
+  });
+  renderer.xr.addEventListener("sessionend", () => {
+    camera.near = desktopClip.near;
+    camera.far = desktopClip.far;
+    camera.updateProjectionMatrix();
+  });
+
   const vr = new VRManager(renderer, scene, dioramaRoot, {
     pickWithRaycaster,
     onSelectPick: (p) => {
@@ -400,8 +415,23 @@
   // at display rate and interpolate lemming positions between ticks.
   let lastFrameTime = performance.now();
   let tickDebt = 0;
+  let loopErrorLogged = false;
 
   function animate() {
+    try {
+      animateBody();
+    } catch (err) {
+      // never let one bad frame kill the loop (in VR that means a black void)
+      if (!loopErrorLogged) {
+        loopErrorLogged = true;
+        console.error("[3d] render loop error:", err);
+        hud.state.textContent = "RENDER ERROR — see console";
+        hud.state.className = "lost";
+      }
+    }
+  }
+
+  function animateBody() {
     const now = performance.now();
     const dt = now - lastFrameTime;
     lastFrameTime = now;
