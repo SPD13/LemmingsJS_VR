@@ -60,6 +60,58 @@ class GameAudio {
     window.addEventListener("keydown", arm);
   }
 
+  /**
+   * Enable positional SFX: `isActive()` gates it (VR only — desktop scene
+   * units are pixels, not meters) and `getListenerMatrix()` supplies the
+   * headset pose. The engine has no sound positions; emitters are derived
+   * from the sim events that trigger each effect.
+   */
+  configureSpatial(spatial) {
+    this._spatial = spatial;
+  }
+
+  _spatialize(player, worldPos) {
+    if (!worldPos || !this._spatial || !this._spatial.isActive()) return;
+    if (!player.processor || !player.audioCtx) return;
+    try {
+      const ctx = player.audioCtx;
+      player.processor.disconnect();
+      const panner = ctx.createPanner();
+      panner.panningModel = "HRTF";
+      panner.distanceModel = "inverse";
+      panner.refDistance = 0.5; // full volume within arm's reach of the diorama
+      panner.maxDistance = 25;
+      panner.rolloffFactor = 1;
+      if (panner.positionX) {
+        panner.positionX.value = worldPos.x;
+        panner.positionY.value = worldPos.y;
+        panner.positionZ.value = worldPos.z;
+      } else {
+        panner.setPosition(worldPos.x, worldPos.y, worldPos.z);
+      }
+      player.processor.connect(panner);
+      panner.connect(ctx.destination);
+      player.__panner = panner; // introspection/debug
+      // listener = headset pose at play time (SFX are short; no per-frame track)
+      const pos = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      this._spatial.getListenerMatrix().decompose(pos, quat, new THREE.Vector3());
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quat);
+      const L = ctx.listener;
+      if (L.positionX) {
+        L.positionX.value = pos.x; L.positionY.value = pos.y; L.positionZ.value = pos.z;
+        L.forwardX.value = fwd.x; L.forwardY.value = fwd.y; L.forwardZ.value = fwd.z;
+        L.upX.value = up.x; L.upY.value = up.y; L.upZ.value = up.z;
+      } else {
+        L.setPosition(pos.x, pos.y, pos.z);
+        L.setOrientation(fwd.x, fwd.y, fwd.z, up.x, up.y, up.z);
+      }
+    } catch (e) {
+      console.warn("[audio] spatialize failed:", e);
+    }
+  }
+
   /** One GameResources per game type owns the ADLIB data + active players. */
   setResources(gameResources, config) {
     if (this.resources && this.resources !== gameResources) {
@@ -78,10 +130,11 @@ class GameAudio {
       .catch((e) => console.warn("[audio] music failed:", e));
   }
 
-  playSfx(index) {
+  playSfx(index, worldPos = null) {
     if (!this.enabled || !this.resources || !this._gestured || index == null) return;
     this.resources.getSoundPlayer(index)
       .then((player) => {
+        this._spatialize(player, worldPos);
         // OPL sounds have no end event; stop the player once it must be done
         clearTimeout(this._sfxTimer);
         this._sfxTimer = setTimeout(() => {
