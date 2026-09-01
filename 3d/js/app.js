@@ -425,7 +425,7 @@
   // Some runtime/headset combos report a viewer pose whose forward axis is
   // rotated on Y (observed: 90° off on PSVR2 + SteamVR + Chrome). Applied to
   // the placement basis; tune live with the [ and ] keys, re-place with V.
-  let vrYawCorrection = -Math.PI / 2;
+  let vrYawCorrection = -Math.PI / 4;
 
   function placeDioramaForXR(headPose) {
     if (!session) return false;
