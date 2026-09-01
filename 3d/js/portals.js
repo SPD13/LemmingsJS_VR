@@ -24,6 +24,7 @@ const PORTAL_SKY_WARM = 0.2;       // and this far off red (not a yellow)
 const PORTAL_SKY_PATCH_MIN = 6;    // a doorway is a patch, not a stray pixel
 const PORTAL_FRAME_THICK = 1;      // frame left over the door's own tunnel
 const PORTAL_TUNNEL_SHADE = 0.3;   // how much the tunnel darkens with depth
+const PORTAL_FUNNEL_RINGS = 3;     // rings of frame the funnel eases across
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
@@ -488,11 +489,12 @@ function buildPortalGeometry(frame, depth, sky) {
     mask[y * w + x] !== 0 && !sky[y * w + x];
 
   // How many rings of frame each pixel sits from the opening, up to the point
-  // where the steps run out. Grown a ring at a time from the sky itself.
+  // where the funnel runs out. Grown a ring at a time from the sky itself.
+  const rings = depth > 0 ? PORTAL_FUNNEL_RINGS : 0;
   const ring = new Uint8Array(w * h).fill(255);
   let edge = [];
   for (let i = 0; i < w * h; i++) if (mask[i] && sky[i]) { ring[i] = 0; edge.push(i); }
-  for (let step = 1; step <= depth && edge.length; step++) {
+  for (let step = 1; step <= rings && edge.length; step++) {
     const next = [];
     for (const i of edge) {
       const x = i % w, y = (i / w) | 0;
@@ -510,15 +512,21 @@ function buildPortalGeometry(frame, depth, sky) {
     edge = next;
   }
 
-  // How far back the face lies: at the plane out in the open, a pixel deeper
-  // for every ring closer to the opening, and the full thickness in it.
+  // How far back the face lies: at the plane out in the open, the full
+  // thickness in the opening, and in between an S-curve across the rings
+  // rather than a pixel drop per ring. Easing it in at both ends is what
+  // takes the edge off where the funnel starts - a straight ramp still
+  // leaves a crease against the flat of the frame.
   // Beyond the sprite counts as the plane, so the slab keeps a square edge.
   const faceAt = (x, y) => {
     if (x < 0 || x >= w || y < 0 || y >= h) return 0;
     const i = y * w + x;
     if (!mask[i]) return 0;
     if (sky[i]) return thick;
-    return ring[i] === 255 ? 0 : Math.max(0, thick - ring[i]);
+    const r = ring[i];
+    if (r === 255 || r > rings) return 0;
+    const t = r / (rings + 1);
+    return thick * (1 - t * t * (3 - 2 * t));
   };
   const cornerZ = (x, y) => {
     let sum = 0;
