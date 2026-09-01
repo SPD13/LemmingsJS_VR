@@ -13,7 +13,7 @@
     border: 1px solid #2a3446; border-radius: 6px; padding: 10px 14px;
     font-size: 12px; line-height: 1.6; user-select: none;
   }
-  #hud-top { top: 12px; left: 12px; max-width: 340px; }
+  #hud-top { top: 12px; left: 12px; max-width: 480px; }
   #hud-top h1 { font-size: 13px; margin: 0 0 4px; color: #6fce7e; letter-spacing: 0.06em; }
   #level-name { color: #f0f3f8; font-size: 13px; }
   #game-state { color: #8fa1bb; }
@@ -22,7 +22,8 @@
   #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
   #hud-keys { top: 12px; right: 12px; color: #8fa1bb; text-align: right; }
   #hud-keys b { color: #cdd6e4; font-weight: 600; }
-  .btnrow { margin-top: 8px; display: flex; gap: 6px; }
+  .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .btnrow button { white-space: nowrap; }
   button {
     font: inherit; font-size: 11px; color: #cdd6e4; background: #1c2432;
     border: 1px solid #33405a; border-radius: 4px; padding: 3px 10px; cursor: pointer;
