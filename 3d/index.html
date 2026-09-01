@@ -46,19 +46,27 @@
     margin: 18px 0 8px; border-bottom: 1px solid #2a3446; padding-bottom: 4px;
   }
   #lib-grid { display: flex; flex-direction: column; }
-  .lib-card {
-    display: inline-block; background: #161c28; border: 1px solid #2a3446;
-    border-radius: 6px; padding: 10px 12px; margin: 6px 0; cursor: pointer;
-    max-width: 440px;
+  .lib-world {
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 12px; color: #cdd6e4; letter-spacing: 0.04em;
+    margin: 14px 0 6px;
   }
-  .lib-card:hover { border-color: #6fce7e; background: #1a2231; }
-  .lib-card canvas {
-    display: block; width: 400px; max-width: 100%; image-rendering: pixelated;
+  .lib-tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lib-tile {
+    background: #161c28; border: 1px solid #2a3446; border-radius: 6px;
+    padding: 8px 10px; cursor: pointer; width: 250px;
+  }
+  .lib-tile:hover { border-color: #6fce7e; background: #1a2231; }
+  .lib-tile canvas {
+    display: block; width: 100%; image-rendering: pixelated;
     background: #05070c; border-radius: 3px;
   }
-  .lib-label { font-size: 13px; color: #f0f3f8; margin-top: 7px; }
-  .lib-sub { font-size: 11px; color: #8fa1bb; }
-  .lib-mark { font-size: 11px; color: #5a6a7c; margin-top: 4px; }
+  .lib-label { font-size: 12px; color: #f0f3f8; margin-top: 6px; }
+  .lib-sub {
+    font-size: 11px; color: #8fa1bb;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lib-mark { font-size: 11px; color: #5a6a7c; }
   .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
   #vr-button {
     position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
