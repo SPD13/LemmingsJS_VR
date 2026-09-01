@@ -476,12 +476,10 @@ function spriteSkyMask(frame, triggerX, triggerY) {
  * down to those same corner heights - the two meet exactly, leaving no crack
  * to see through at the mouth.
  */
-function buildPortalGeometry(frame, depth, triggerX, triggerY) {
+function buildPortalGeometry(frame, depth, sky) {
   const w = frame.width, h = frame.height;
   const mask = frame.getMask();
-
-  const sky = spriteSkyMask(frame, triggerX, triggerY);
-  if (!sky) return null; // no opening to push back
+  if (!sky) sky = new Uint8Array(w * h); // all frame: a slab with no opening
 
   const isFrame = (x, y) => x >= 0 && x < w && y >= 0 && y < h &&
     mask[y * w + x] !== 0 && !sky[y * w + x];
@@ -523,7 +521,8 @@ function buildPortalGeometry(frame, depth, triggerX, triggerY) {
       const uc = (x + 0.5) / w, vc = (y + 0.5) / h;
 
       // the back of the slab, which in the opening is the tunnel's floor
-      const deep = Math.min(1, (-(z00 + z10 + z11 + z01) / 4 - PORTAL_FRAME_THICK) / depth);
+      const deep = depth <= 0 ? 0 :
+        Math.min(1, (-(z00 + z10 + z11 + z01) / 4 - PORTAL_FRAME_THICK) / depth);
       quad([[x, y, z00, u0, v0], [x + 1, y, z10, u1, v0],
             [x + 1, y + 1, z11, u1, v1], [x, y + 1, z01, u0, v1]], 1 - 0.3 * deep);
 
@@ -582,16 +581,63 @@ function carveTerrainForPortal(depthMap, level, originX, originY, frame) {
   return carved;
 }
 
+/** The rectangle an object's sprite covers, in level pixels. */
+function portalObjectRect(mapObject) {
+  const frame = mapObject.animation.frames[0];
+  if (!frame) return null;
+  const x = mapObject.x + frame.offsetX, y = mapObject.y + frame.offsetY;
+  return { x0: x, y0: y, x1: x + frame.width, y1: y + frame.height };
+}
+
 /** Every object that should be rendered as an opening, with its geometry. */
 function buildPortals(level, profile, depthMap) {
   const data = window.__lem3dObjectData;
   const portals = [];
   if (!data || !Array.isArray(data.objects)) return portals;
 
-  for (let i = 0; i < level.objects.length && i < data.objects.length; i++) {
+  const count = Math.min(level.objects.length, data.objects.length);
+  const configs = [];
+  for (let i = 0; i < count; i++) {
+    configs[i] = portalConfigFor(data.objects[i].id,
+      data.objectImg ? data.objectImg[data.objects[i].id] : null, profile);
+  }
+
+  // A door is not always one object. The tilesets build them in pieces - an
+  // exit with its own cap stacked on top, sharing a width and meeting exactly
+  // at an edge - and only the piece carrying the trigger reads as an opening.
+  // Left alone, the rest stays an ordinary sprite at the depth objects sit
+  // at, and the door renders as two halves on two different planes. So a
+  // piece touching an opening is built as the same slab, at the same depth,
+  // with no opening of its own: one door again.
+  for (let i = 0; i < count; i++) {
+    if (configs[i]) continue;
+    const rect = portalObjectRect(level.objects[i]);
+    if (!rect) continue;
+    for (let j = 0; j < count; j++) {
+      // only an exit: a hatch draws no frame of its own, so nothing beside it
+      // has a face to line up with
+      if (j === i || !configs[j] || configs[j].shape !== "portal") continue;
+      const other = portalObjectRect(level.objects[j]);
+      if (!other) continue;
+      // touching counts, not just overlapping - the pieces abut edge to edge -
+      // but they have to meet along most of a side. Otherwise anything that
+      // happens to brush a corner of the exit, a trap set beside it say,
+      // would be pulled into the door.
+      const across = Math.min(rect.x1, other.x1) - Math.max(rect.x0, other.x0);
+      const down = Math.min(rect.y1, other.y1) - Math.max(rect.y0, other.y0);
+      if (across < 0 || down < 0) continue;
+      const sideways = Math.min(rect.x1 - rect.x0, other.x1 - other.x0);
+      const upright = Math.min(rect.y1 - rect.y0, other.y1 - other.y0);
+      if (across < sideways * 0.5 && down < upright * 0.5) continue;
+      configs[i] = { shape: "slab", depth: 0 };
+      break;
+    }
+  }
+
+  for (let i = 0; i < count; i++) {
     const objectId = data.objects[i].id;
     const info = data.objectImg ? data.objectImg[objectId] : null;
-    const config = portalConfigFor(objectId, info, profile);
+    const config = configs[i];
     if (!config) continue;
 
     const mapObject = level.objects[i];
@@ -605,13 +651,16 @@ function buildPortals(level, profile, depthMap) {
       hatch = built.hatch;
       openness = hatchOpenness(mapObject.animation.frames, built.openingMask,
         frame.width);
+    } else if (config.shape === "slab") {
+      geometry = buildPortalGeometry(frame, 0, null);
     } else {
       // the trigger box is in object space; the frame may be inset from it
       const tx = (info ? info.trigger_left + info.trigger_width / 2 : frame.width / 2)
         - frame.offsetX;
       const ty = (info ? info.trigger_top + info.trigger_height / 2 : frame.height / 2)
         - frame.offsetY;
-      geometry = buildPortalGeometry(frame, config.depth, tx, ty);
+      geometry = buildPortalGeometry(frame, config.depth,
+        spriteSkyMask(frame, tx, ty));
     }
     if (!geometry) continue;
 
