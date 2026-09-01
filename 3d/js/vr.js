@@ -295,8 +295,18 @@ class VRManager {
       this.dioramaRoot.position.copy(mid)
         .sub(g.mid0.clone().sub(g.pStart).multiplyScalar(k));
     }
-    // stretch each beam to its hit on the board/panel; park the dot there
+    // with no input sources the mouse fallback owns the pointer: hide the
+    // untracked controllers (their beams would sit at the origin) and do NOT
+    // drive hover from controller 0 - it would stomp the mouse hover with
+    // null every frame, hiding the highlight ring
+    const hasControllers = this.inputSourceCount > 0;
     for (const c of this.controllers) {
+      c.visible = hasControllers;
+      if (!hasControllers) {
+        c.userData.dot.visible = false;
+        continue;
+      }
+      // stretch each beam to its hit on the board/panel; park the dot there
       const hit = this.hooks.raycastHit
         ? this.hooks.raycastHit(this._rayFrom(c))
         : null;
@@ -306,6 +316,8 @@ class VRManager {
       if (hit) c.userData.dot.position.copy(hit.point);
     }
 
-    this.hooks.onHoverPick(this.hooks.pickWithRaycaster(this._rayFrom(this.controllers[0])));
+    if (hasControllers) {
+      this.hooks.onHoverPick(this.hooks.pickWithRaycaster(this._rayFrom(this.controllers[0])));
+    }
   }
 }
