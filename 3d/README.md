@@ -134,7 +134,8 @@ camera, renderer, controls}` for console debugging and automated checks.
   (`js/audio.js`; "sound" button toggles, persisted). SFX indexes into
   ADLIB.DAT are a best-effort mapping — audition with
   `__lem3d.audio.playSfx(n)` in the console and adjust the `SFX` table.
-  No VR spatialization yet.
+  In VR, SFX are spatialized (HRTF panner at the emitting lemming/entrance's
+  diorama position, listener from the headset pose); music stays ambient.
 - Replay-based 2D-vs-3D end-state comparison is manual for now (`r` dump +
   `?replay=`); an automated harness is Phase 0 debt.
 - The VR mode is logic-verified (placement math, controller pick path,

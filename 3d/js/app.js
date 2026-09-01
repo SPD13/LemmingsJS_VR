@@ -84,6 +84,18 @@
     if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
   });
   renderSoundBtn();
+  audio.configureSpatial({
+    isActive: () => renderer.xr.isPresenting,
+    getListenerMatrix: () => camera.matrixWorld,
+  });
+
+  /** World-space emitter position for a sim coordinate (VR spatial SFX). */
+  function sfxPos(simX, simY) {
+    if (!session) return null;
+    session.worldGroup.updateWorldMatrix(true, false);
+    return session.worldGroup.localToWorld(
+      new THREE.Vector3(simX, simY, LEMMING_Z));
+  }
 
   // per-level session state, rebuilt on every level load
   let session = null;
@@ -138,7 +150,6 @@
     audio.setResources(audioResources[state.gameType], config);
     const musicTrack = state.group * 30 + state.level;
     audio.playMusic(musicTrack);
-    audio.playSfx(SFX.LETSGO);
 
     const resources = new SessionResources();
 
@@ -218,13 +229,15 @@
         const action = lem.removed || !lem.action ? null : lem.action.getActionName();
         if (action !== prevActions.get(lem.id)) {
           prevActions.set(lem.id, action);
-          if (action && SFX_BY_ACTION[action] != null) tickSfx = SFX_BY_ACTION[action];
+          if (action && SFX_BY_ACTION[action] != null) {
+            tickSfx = { sfx: SFX_BY_ACTION[action], x: lem.x, y: lem.y };
+          }
         }
         if (lem.removed) continue;
         lemCapture.tag = lem.id;
         lem.render(lemCapture);
       }
-      if (tickSfx != null) audio.playSfx(tickSfx);
+      if (tickSfx != null) audio.playSfx(tickSfx.sfx, sfxPos(tickSfx.x, tickSfx.y));
       lemmingPool.sync(lemCapture.items, () => LEMMING_Z, true);
       particles.sync(lemCapture.particles);
 
@@ -272,6 +285,10 @@
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
     if (renderer.xr.isPresenting) placeDioramaForXR();
+
+    const entrance = level.entrances[0];
+    audio.playSfx(SFX.LETSGO,
+      entrance ? sfxPos(entrance.x + 24, entrance.y + 14) : null);
   }
 
   /** Default desktop framing: the level's intended start area, slightly above. */
@@ -404,7 +421,7 @@
     const lem = session.game.getLemmingManager().getLemmingAt(simX, simY);
     if (lem) {
       session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
-      audio.playSfx(SFX.ASSIGN);
+      audio.playSfx(SFX.ASSIGN, sfxPos(lem.x, lem.y));
     }
   }
 
