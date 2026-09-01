@@ -232,10 +232,20 @@ class PieceEditor {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile, null, 2),
       });
-      if (!res.ok) throw new Error("HTTP " + res.status);
+      // a pre-endpoint server answers POST like a GET (200 + file contents),
+      // which used to read as a false "saved"; require the write receipt
+      const receipt = res.ok ? await res.json().catch(() => null) : null;
+      if (!receipt || receipt.ok !== true) {
+        throw new Error("no write receipt");
+      }
+      // belt and braces: read the file back and confirm our tags are in it
+      const check = await fetch(this.profileUrl, { cache: "no-store" }).then((r) => r.json());
+      const want = JSON.stringify((profile.terrain && profile.terrain.byId) || {});
+      const got = JSON.stringify((check.terrain && check.terrain.byId) || {});
+      if (want !== got) throw new Error("read-back mismatch");
       this._msg("saved — " + this.profileUrl + " loads automatically now", true);
     } catch (e) {
-      this._msg("save failed (needs the launcher server) — use export JSON", false);
+      this._msg("NOT saved — restart the launcher server (or use export JSON)", false);
     }
   }
 
