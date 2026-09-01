@@ -15,7 +15,7 @@
  */
 
 /** How far sprites extrude (in game pixels). */
-const SPRITE_DEPTH = 1;
+const SPRITE_DEPTH = 2;
 
 const SPRITE_SHADE_FRONT = 1.0;
 const SPRITE_SHADE_BACK = 0.45;
