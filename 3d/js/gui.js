@@ -17,11 +17,18 @@ const GUI_TILE_GROW = 1.08;
 // GameGui draws the selection frame on the tile's shared right/bottom border
 // lines (x = 16i+16, y = 39), so a raised copy must crop one pixel wider and
 // taller or those two edges are left behind.
-const GUI_CROP_W = GUI_TILE_W + 1;
 const GUI_CROP_H = GUI_TILE_H + 1;
-const GUI_CROP_CX = (index) => index * GUI_TILE_W + GUI_CROP_W / 2;
-const GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
 const GUI_BUTTONS = 13;
+// ...but the last button has no next tile - the status box sits there - so it
+// crops to its own width and is not grown, or the raised copy would bite into
+// the box beside it.
+const GUI_LAST_BUTTON = GUI_BUTTONS - 1;
+const GUI_CROP_W = (index) =>
+  index >= GUI_LAST_BUTTON ? GUI_TILE_W : GUI_TILE_W + 1;
+const GUI_GROW_FOR = (index) =>
+  index >= GUI_LAST_BUTTON ? 1 : GUI_TILE_GROW;
+const GUI_CROP_CX = (index) => index * GUI_TILE_W + GUI_CROP_W(index) / 2;
+const GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
 // The toolbar is an overlay: drawn without depth testing, after the world,
 // so it is always visible and clickable no matter what it sits in front of.
 // (Aiming marks - cursor, controller dots - are transparent and so still
@@ -319,7 +326,7 @@ class GuiPanel {
     if (!this.socket || !this.mesh) return;
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
-    this.socket.scale.set((GUI_CROP_W / cw) * pw, (GUI_CROP_H / ch) * ph, 1);
+    this.socket.scale.set((GUI_CROP_W(index) / cw) * pw, (GUI_CROP_H / ch) * ph, 1);
     this.socket.position.set(
       this.mesh.position.x + (GUI_CROP_CX(index) / cw - 0.5) * pw,
       this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * ph,
@@ -331,7 +338,7 @@ class GuiPanel {
     if (!this.hoverRelief || !this.mesh) return;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
     const sx = pw / this.canvas.width, sy = ph / this.canvas.height;
-    const g = GUI_TILE_GROW;
+    const g = GUI_GROW_FOR(index);
     const cx = GUI_CROP_CX(index); // same pivot as the raised copy
     const cy = GUI_CROP_CY;
     this.hoverRelief.scale.set(sx * g, -sy * g, sx * g);
@@ -371,7 +378,7 @@ class GuiPanel {
     this.hoverTexture.magFilter = THREE.NearestFilter;
     this.hoverTexture.minFilter = THREE.NearestFilter;
     this.hoverTexture.repeat.set(
-      GUI_CROP_W / this.canvas.width, GUI_CROP_H / this.canvas.height);
+      GUI_CROP_W(0) / this.canvas.width, GUI_CROP_H / this.canvas.height);
     this.hoverTile = new THREE.Mesh(
       this.resources.track(new THREE.PlaneGeometry(1, 1)),
       this.resources.track(new THREE.MeshBasicMaterial({
@@ -428,13 +435,14 @@ class GuiPanel {
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, phh = this.mesh.scale.y;
     // crop the texture to this button, including its frame edges
+    this.hoverTexture.repeat.set(GUI_CROP_W(index) / cw, GUI_CROP_H / ch);
     this.hoverTexture.offset.set(
       (index * GUI_TILE_W) / cw, 1 - (GUI_TILE_TOP + GUI_CROP_H) / ch);
     this.hoverTexture.needsUpdate = true;
     // match the button's footprint on the panel, grown a touch
-    const grow = GUI_TILE_GROW;
+    const grow = GUI_GROW_FOR(index);
     this.hoverTile.scale.set(
-      (GUI_CROP_W / cw) * pw * grow, (GUI_CROP_H / ch) * phh * grow, 1);
+      (GUI_CROP_W(index) / cw) * pw * grow, (GUI_CROP_H / ch) * phh * grow, 1);
     this.hoverTile.position.set(
       this.mesh.position.x + (GUI_CROP_CX(index) / cw - 0.5) * pw,
       this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * phh,
