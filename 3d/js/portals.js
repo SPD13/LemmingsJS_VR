@@ -19,8 +19,6 @@ const PORTAL_ENTRANCE_ID = 1;      // level-object id of an entrance
 const PORTAL_DEFAULT_DEPTH = 12;   // game pixels of recession
 const PORTAL_EXIT_DEPTH = 14;
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
-const PORTAL_FLAP_THICKNESS = 1;   // the doors are thin flat panels
-const PORTAL_FRAME_DEPTH = 4;      // the beams and legs around the opening
 const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
 
@@ -131,19 +129,6 @@ function toBufferGeometry(parts) {
 }
 
 /**
- * The entrance's blue/green/white trapezoid is not a tunnel: it is a hatch
- * lying flat above the player - a square parallel to the ground, drawn in
- * perspective. A horizontal surface above eye level recedes *downward* in the
- * image (toward the horizon) as it goes away, which is exactly what the
- * artwork shows: the panel is widest at its top row and narrows going down.
- *
- * So the trapezoid is un-projected back into a rectangle: the widest row
- * becomes the near edge, each row below is pushed further back in Z at a
- * constant height, and its pixels are stretched out to the near edge's width.
- * The rest of the sprite (frame, pillars, legs) keeps the usual flat
- * extrusion.
- */
-/**
  * The two flaps of an entrance hatch. They are flat panels that fill the
  * square when shut and swing down on hinges along its left and right edges,
  * so each is half the opening wide and as long as the opening is deep.
@@ -209,47 +194,29 @@ function hatchOpenness(frames, openingMask, w) {
 }
 
 /**
- * A flap: half the opening wide and a pixel thick, hinged along one side and
- * textured from the closed frame so it carries the door's own artwork rather
- * than the void. Spans the opening's depth, centred like the opening is.
+ * A flap: one flat panel, half the opening wide and as long as it is deep,
+ * hinged along one side of the square and textured from the closed frame so
+ * it carries the door's own artwork rather than the void behind it.
  */
 function buildFlapGeometry(uv, halfWidth, depth, sign) {
-  const positions = [], colors = [], uvs = [], indices = [];
   const zNear = depth / 2, zFar = -depth / 2;
   const uOuter = sign > 0 ? uv.u1 : uv.u0;
   const uInner = sign > 0 ? uv.u0 : uv.u1;
-  const push = (x, y, z, u, v, shade) => {
-    positions.push(x, y, z);
-    colors.push(shade, shade, shade);
-    uvs.push(u, v);
-  };
-  const quad = (pts, shade) => {
-    const base = positions.length / 3;
-    for (const [x, y, z, u, v] of pts) push(x, y, z, u, v, shade);
-    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  };
-  const w = sign * halfWidth;
-  // the two broad faces, a pixel apart
-  quad([[0, 0, zNear, uInner, uv.v0], [w, 0, zNear, uOuter, uv.v0],
-        [w, 0, zFar, uOuter, uv.v1], [0, 0, zFar, uInner, uv.v1]], 1);
-  quad([[0, PORTAL_FLAP_THICKNESS, zNear, uInner, uv.v0],
-        [w, PORTAL_FLAP_THICKNESS, zNear, uOuter, uv.v0],
-        [w, PORTAL_FLAP_THICKNESS, zFar, uOuter, uv.v1],
-        [0, PORTAL_FLAP_THICKNESS, zFar, uInner, uv.v1]], 0.55);
-  // the thin edges
-  const t = PORTAL_FLAP_THICKNESS;
-  quad([[w, 0, zNear, uOuter, uv.v0], [w, t, zNear, uOuter, uv.v0],
-        [w, t, zFar, uOuter, uv.v1], [w, 0, zFar, uOuter, uv.v1]], 0.75);
-  quad([[0, 0, zNear, uInner, uv.v0], [w, 0, zNear, uOuter, uv.v0],
-        [w, t, zNear, uOuter, uv.v0], [0, t, zNear, uInner, uv.v0]], 0.85);
-  quad([[0, 0, zFar, uInner, uv.v1], [w, 0, zFar, uOuter, uv.v1],
-        [w, t, zFar, uOuter, uv.v1], [0, t, zFar, uInner, uv.v1]], 0.65);
-
+  const x = sign * halfWidth;
+  const positions = [], colors = [], uvs = [];
+  for (const [px, pz, pu, pv] of [
+    [0, zNear, uInner, uv.v0], [x, zNear, uOuter, uv.v0],
+    [x, zFar, uOuter, uv.v1], [0, zFar, uInner, uv.v1],
+  ]) {
+    positions.push(px, 0, pz);
+    colors.push(1, 1, 1);
+    uvs.push(pu, pv);
+  }
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-  geom.setIndex(indices);
+  geom.setIndex([0, 1, 2, 0, 2, 3]);
   return geom;
 }
 
