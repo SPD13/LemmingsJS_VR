@@ -75,12 +75,6 @@ class VRManager {
     renderer.xr.enabled = true;
     createVRButton(renderer);
 
-    // head-locked diagnostic board (children of the camera render head-locked;
-    // the camera must be in the scene graph for that)
-    scene.add(camera);
-    this._diag = this._makeDiagBoard();
-    camera.add(this._diag.mesh);
-    this._diagFrame = 0;
     this._sessionStartedAt = 0;
 
     // a dim floor grid, shown only in-session: proves rendering works and
@@ -198,58 +192,6 @@ class VRManager {
       e[1] === 0 && e[2] === 0 && e[4] === 0 && e[6] === 0 && e[8] === 0 && e[9] === 0;
   }
 
-  _makeDiagBoard() {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 160;
-    const texture = new THREE.CanvasTexture(canvas);
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.4, 0.125),
-      new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.85 })
-    );
-    mesh.position.set(0, -0.22, -0.55); // just below the view center
-    mesh.visible = false;
-    return { canvas, texture, mesh, ctx: canvas.getContext("2d") };
-  }
-
-  /** Show what WebXR is actually reporting, inside the headset. */
-  _updateDiagBoard() {
-    const session = this.renderer.xr.getSession();
-    const sources = session ? Array.from(session.inputSources) : [];
-    // stays up while placement is pending (something is wrong then); the
-    // persistent no-controller warning lives on the sign beside the play area
-    const show = this.presenting &&
-      (this._needsPlacement ||
-        performance.now() - this._sessionStartedAt < 8000);
-    this._diag.mesh.visible = show;
-    if (!show || this._diagFrame++ % 30 !== 0) return;
-
-    const { ctx, canvas, texture } = this._diag;
-    ctx.fillStyle = "rgba(10, 14, 22, 0.9)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.font = "22px monospace";
-    ctx.fillStyle = "#6fce7e";
-    const d = this.dioramaRoot;
-    const lines = [
-      "build " + (window.__LEM3D_BUILD || "?") + " · sources: " + sources.length,
-      "pose: " + (this._lastHeadPose ? "ok" : "none") +
-        " · placed: " + (this._needsPlacement ? "NO" : "yes"),
-      "diorama s=" + d.scale.x.toFixed(4) + " @ " +
-        d.position.toArray().map((v) => v.toFixed(1)).join(","),
-    ];
-    for (const src of sources) {
-      lines.push(
-        "· " + (src.handedness || "?") + " / " + src.targetRayMode +
-        (src.gamepad ? " / pad " + src.gamepad.buttons.length + " btn" : " / no gamepad"));
-    }
-    if (sources.length === 0) {
-      lines.push("no controllers — mouse fallback on");
-      ctx.fillStyle = "#ffd866";
-    }
-    lines.forEach((l, i) => ctx.fillText(l, 14, 34 + i * 30));
-    texture.needsUpdate = true;
-  }
-
   resetDiorama() {
     this.dioramaRoot.position.set(0, 0, 0);
     this.dioramaRoot.rotation.set(0, 0, 0);
@@ -295,10 +237,7 @@ class VRManager {
 
   /** Per-frame: apply grabs, recenter button, hover from controller 0. */
   update() {
-    if (!this.presenting) {
-      this._diag.mesh.visible = false;
-      return;
-    }
+    if (!this.presenting) return;
     // the authoritative head pose comes from the XR frame (the user camera
     // only receives it during render, AFTER this update - placing from it on
     // the first frame would use the desktop pose, kilometers away). Fallback:
@@ -326,7 +265,6 @@ class VRManager {
       }
     }
     this._lastHeadPose = headPose;
-    this._updateDiagBoard();
     if (this._needsPlacement && headPose) {
       try {
         if (this.hooks.placeDiorama(headPose)) this._needsPlacement = false;
