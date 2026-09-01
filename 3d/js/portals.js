@@ -298,13 +298,20 @@ function buildCeilingGeometry(frame, depth) {
   }
   if (panel.indices.length === 0) return null;
 
-  // the surrounding frame keeps a plain slab extrusion
+  // The surrounding frame, pillars and legs are extruded the full depth of
+  // the square, so the hatch is a box as deep as it is wide rather than a
+  // thin slab with a deep hole behind it.
   const frameGeom = buildExtrudedSpriteGeometry(
-    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, SPRITE_DEPTH);
+    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, depth);
   let framePart = null;
   if (frameGeom) {
+    const positions = Array.from(frameGeom.attributes.position.array);
+    // the extruder builds from z=0 back to z=depth toward the viewer; shift it
+    // so the box's face is at the sprite plane and its body recedes, matching
+    // the opening
+    for (let i = 2; i < positions.length; i += 3) positions[i] -= depth;
     framePart = {
-      positions: Array.from(frameGeom.attributes.position.array),
+      positions,
       colors: Array.from(frameGeom.attributes.color.array),
       uvs: Array.from(frameGeom.attributes.uv.array),
       indices: Array.from(frameGeom.index.array),
