@@ -22,6 +22,7 @@ const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
 const PORTAL_FLAP_DROP = 0.5;      // doors hang this far below the ceiling
+const PORTAL_FLAP_THICK = 1;       // and are a game pixel thick
 
 /** Stash the object list and their metadata as the level is built. */
 (function installObjectDataHook() {
@@ -202,27 +203,52 @@ function buildFlapGeometry(frame, doorRows, halfWidth, depth, sign) {
   const span = doorRows.length;
   const positions = [], colors = [], uvs = [], indices = [];
   const xFar = sign * halfWidth;
-  doorRows.forEach((row, k) => {
-    const zNear = depth / 2 - (k / span) * depth;
-    const zFar = depth / 2 - ((k + 1) / span) * depth;
-    // each door owns its half of the drawn opening, hinge side outermost
-    const mid = (row.min + row.max + 1) / 2;
-    const uHinge = (sign > 0 ? row.min : row.max + 1) / w;
-    const uMid = mid / w;
-    const v0 = row.y / h, v1 = (row.y + 1) / h;
+  // hung just under the ceiling: shut flush in its own plane the doors would
+  // z-fight the square, and the landscape would flicker through them
+  const yTop = PORTAL_FLAP_DROP, yBot = PORTAL_FLAP_DROP + PORTAL_FLAP_THICK;
+  const zAt = (k) => depth / 2 - (k / span) * depth;
+  const quad = (verts, shade) => {
     const base = positions.length / 3;
-    for (const [px, pz, pu, pv] of [
-      [0, zNear, uHinge, v0], [xFar, zNear, uMid, v0],
-      [xFar, zFar, uMid, v1], [0, zFar, uHinge, v1],
-    ]) {
-      // hung just under the ceiling: shut flush in its own plane they would
-      // z-fight the square, and the landscape would flicker through the doors
-      positions.push(px, PORTAL_FLAP_DROP, pz);
-      colors.push(1, 1, 1);
+    for (const [px, py, pz, pu, pv] of verts) {
+      positions.push(px, py, pz);
+      colors.push(shade, shade, shade);
       uvs.push(pu, pv);
     }
     indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  // each door owns its half of the drawn opening, hinge side outermost
+  const uHingeOf = (row) => (sign > 0 ? row.min : row.max + 1) / w;
+  const uMidOf = (row) => ((row.min + row.max + 1) / 2) / w;
+
+  doorRows.forEach((row, k) => {
+    const zNear = zAt(k), zFar = zAt(k + 1);
+    const uh = uHingeOf(row), um = uMidOf(row);
+    const v0 = row.y / h, v1 = (row.y + 1) / h;
+    // a door is painted on the side you see whichever way it is swung, so
+    // both faces stay at full brightness; only the pixel of rim is shaded
+    quad([[0, yTop, zNear, uh, v0], [xFar, yTop, zNear, um, v0],
+          [xFar, yTop, zFar, um, v1], [0, yTop, zFar, uh, v1]], SPRITE_SHADE_FRONT);
+    quad([[0, yBot, zFar, uh, v1], [xFar, yBot, zFar, um, v1],
+          [xFar, yBot, zNear, um, v0], [0, yBot, zNear, uh, v0]], SPRITE_SHADE_FRONT);
+    // the long edges: along the hinge and along the door's meeting edge
+    quad([[0, yTop, zNear, uh, v0], [0, yTop, zFar, uh, v1],
+          [0, yBot, zFar, uh, v1], [0, yBot, zNear, uh, v0]], SPRITE_SHADE_LEFT);
+    quad([[xFar, yTop, zFar, um, v1], [xFar, yTop, zNear, um, v0],
+          [xFar, yBot, zNear, um, v0], [xFar, yBot, zFar, um, v1]], SPRITE_SHADE_RIGHT);
   });
+
+  // and the two short ends, closing the slab
+  const first = doorRows[0], last = doorRows[span - 1];
+  const zFront = zAt(0), zBack = zAt(span);
+  quad([[0, yTop, zFront, uHingeOf(first), first.y / h],
+        [xFar, yTop, zFront, uMidOf(first), first.y / h],
+        [xFar, yBot, zFront, uMidOf(first), first.y / h],
+        [0, yBot, zFront, uHingeOf(first), first.y / h]], SPRITE_SHADE_TOP);
+  quad([[xFar, yTop, zBack, uMidOf(last), (last.y + 1) / h],
+        [0, yTop, zBack, uHingeOf(last), (last.y + 1) / h],
+        [0, yBot, zBack, uHingeOf(last), (last.y + 1) / h],
+        [xFar, yBot, zBack, uMidOf(last), (last.y + 1) / h]], SPRITE_SHADE_BOTTOM);
+
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
