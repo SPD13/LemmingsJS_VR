@@ -39,9 +39,16 @@ function createStaticServer(root, port, tls = null) {
 
         // profile save endpoint: the piece editor POSTs its depth profile
         // here so it lands in 3d/profiles/ and auto-loads on the next game
-        // load. The strict filename pattern is the only writable location.
+        // load. The strict path suffix (any nesting depth, so serving a
+        // parent folder still works) is the only writable location.
         if ((req.method === "POST" || req.method === "PUT") &&
-            /^\/3d\/profiles\/[a-z0-9]+-g\d+\.json$/.test(urlPath)) {
+            /\/3d\/profiles\/[a-z0-9]+-g\d+\.json$/.test(urlPath)) {
+          const savePath = path.normalize(path.join(absRoot, urlPath));
+          if (!savePath.startsWith(absRoot + path.sep)) {
+            res.writeHead(403);
+            res.end("forbidden");
+            return;
+          }
           let body = "";
           req.on("data", (chunk) => {
             body += chunk;
@@ -50,7 +57,7 @@ function createStaticServer(root, port, tls = null) {
           req.on("end", () => {
             try {
               const json = JSON.stringify(JSON.parse(body), null, 2) + "\n";
-              fs.writeFileSync(path.join(absRoot, urlPath), json);
+              fs.writeFileSync(savePath, json);
               res.writeHead(200, { "Content-Type": "application/json" });
               res.end('{"ok":true}');
             } catch (e) {
