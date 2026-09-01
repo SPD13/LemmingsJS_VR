@@ -37,6 +37,28 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   re-meshes live. "export JSON" downloads the profile for `profiles/`; a tag
   applies to the piece id, so it covers every level of the same tileset.
 
+## VR (Phase 4)
+
+The same page is the VR build: an ENTER VR button appears bottom-center when
+WebXR is available. In the headset the diorama is scaled to 2.5&nbsp;mm per
+game pixel (a 1600&nbsp;px level is a 4&nbsp;m tabletop strip) and placed at
+chest height, focused on the level's intended start area.
+
+- **trigger** — the desktop click: aim the controller ray at a lemming to
+  assign the selected skill, or at the skill panel to use it as in the game
+  (controller&nbsp;0's ray also drives the highlight ring)
+- **grip** — grab and drag the diorama; **both grips** — scale it about your
+  hands (0.15×–8×)
+- the world never moves on its own, so there is no comfort concern
+
+WebXR needs a secure context. Ways to run it:
+- desktop, no headset: the Immersive Web Emulator extension in Chrome
+- Quest via USB: `adb reverse tcp:8123 tcp:8123`, then open
+  `http://localhost:8123/3d/` in the Quest browser (localhost is secure)
+- Quest via Wi-Fi: serve HTTPS (`http-server -S`) and accept the cert warning
+
+Exiting VR restores the desktop camera and scale exactly as they were.
+
 ## Architecture (mirrors the VR plan)
 
 - `js/bridge.js` — the sim/scene boundary. `SpriteCapture` is a fake "display"
@@ -67,6 +89,9 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
 - `js/gui.js` — the original skill panel recycled: `GameGui` renders its pixel
   buffer as usual; we upload it as a texture on an in-scene plane and forward
   ray-hit UVs as the mouse events it already listens for.
+- `js/vr.js` — WebXR layer: ENTER VR button, session handling, meter-scale
+  diorama placement, controller rays feeding the same pick path as the mouse,
+  grip drag and two-grip scale on the diorama root.
 - `js/app.js` — boot, scene, camera, input, level switching. The sim keeps its
   fixed 60 ms step but is driven from the rAF loop via an accumulator
   (browsers throttle `setInterval` in unfocused windows; the VR build needs a
@@ -89,3 +114,7 @@ camera, renderer, controls}` for console debugging and automated checks.
   behavior inherited as-is from LemmingsJS.
 - Replay-based 2D-vs-3D end-state comparison is manual for now (`r` dump +
   `?replay=`); an automated harness is Phase 0 debt.
+- The VR mode is logic-verified (placement math, controller pick path,
+  desktop regression) but has not yet been run on real headset hardware; the
+  DOM HUD (level name, buttons, editor) is invisible in-headset — in-scene
+  equivalents are pending.
