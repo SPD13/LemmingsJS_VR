@@ -260,11 +260,11 @@
         const h = portal.hatch;
         const material = materialCache.forFrame(portal.closedFrame).material;
         portal.flaps = [
-          { sign: 1, x: h.leftX, uv: flapTexel(portal.closedFrame, h.doorRect, -1) },
-          { sign: -1, x: h.rightX, uv: flapTexel(portal.closedFrame, h.doorRect, 1) },
+          { sign: 1, x: h.leftX },
+          { sign: -1, x: h.rightX },
         ].map((side) => {
-          const geom = resources.track(
-            buildFlapGeometry(side.uv, h.halfWidth, h.depth, side.sign));
+          const geom = resources.track(buildFlapGeometry(
+            portal.closedFrame, h.doorRows, h.halfWidth, h.depth, side.sign));
           const mesh = new THREE.Mesh(geom, material);
           mesh.position.set(portal.originX + side.x, portal.originY + h.y, OBJECT_Z);
           worldGroup.add(mesh);

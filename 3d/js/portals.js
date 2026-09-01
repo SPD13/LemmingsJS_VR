@@ -186,50 +186,48 @@ function hatchOpenness(frames, openingMask, w) {
  * to fake depth on a flat sprite; sampling a single texel keeps the door the
  * flat panel it is instead of carrying that painted relief into 3D.
  */
-function flapTexel(frame, rect, half) {
-  const w = frame.width, h = frame.height;
-  const mask = frame.getMask(), buf = frame.getBuffer();
-  const mid = (rect.x0 + rect.x1 + 1) / 2;
-  const x0 = half < 0 ? rect.x0 : Math.ceil(mid);
-  const x1 = half < 0 ? Math.floor(mid) : rect.x1;
-  const counts = new Map(), where = new Map();
-  for (let y = rect.y0; y <= rect.y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const i = y * w + x;
-      if (!mask[i]) continue;
-      counts.set(buf[i], (counts.get(buf[i]) || 0) + 1);
-      if (!where.has(buf[i])) where.set(buf[i], [x, y]);
-    }
-  }
-  let best = null, bestN = 0;
-  for (const [colour, n] of counts) if (n > bestN) { bestN = n; best = colour; }
-  const [px, py] = best === null ? [rect.x0, rect.y0] : where.get(best);
-  return { u: (px + 0.5) / w, v: (py + 0.5) / h };
-}
-
 /**
  * A flap: one flat panel, half the opening wide and as long as it is deep,
- * hinged along one side of the square, painted in the door's own colour.
+ * hinged along one side of the square and wearing the artwork the artist
+ * painted on that door.
+ *
+ * The shut hatch is drawn in perspective, so the door narrows row by row
+ * exactly as the opening does. Laying the panel down as one strip per sprite
+ * row - each stretched to the flap's full width, the way the ceiling square
+ * is built - undoes that perspective, so the door's own texture lands square
+ * on a panel that is flat.
  */
-function buildFlapGeometry(uv, halfWidth, depth, sign) {
-  const zNear = depth / 2, zFar = -depth / 2;
-  const x = sign * halfWidth;
-  const positions = [], colors = [], uvs = [];
-  for (const [px, pz, pu, pv] of [
-    [0, zNear, uv.u, uv.v], [x, zNear, uv.u, uv.v],
-    [x, zFar, uv.u, uv.v], [0, zFar, uv.u, uv.v],
-  ]) {
-    // hung just under the ceiling: shut flush in its own plane they would
-    // z-fight the square, and the landscape would flicker through the doors
-    positions.push(px, PORTAL_FLAP_DROP, pz);
-    colors.push(1, 1, 1);
-    uvs.push(pu, pv);
-  }
+function buildFlapGeometry(frame, doorRows, halfWidth, depth, sign) {
+  const w = frame.width, h = frame.height;
+  const span = doorRows.length;
+  const positions = [], colors = [], uvs = [], indices = [];
+  const xFar = sign * halfWidth;
+  doorRows.forEach((row, k) => {
+    const zNear = depth / 2 - (k / span) * depth;
+    const zFar = depth / 2 - ((k + 1) / span) * depth;
+    // each door owns its half of the drawn opening, hinge side outermost
+    const mid = (row.min + row.max + 1) / 2;
+    const uHinge = (sign > 0 ? row.min : row.max + 1) / w;
+    const uMid = mid / w;
+    const v0 = row.y / h, v1 = (row.y + 1) / h;
+    const base = positions.length / 3;
+    for (const [px, pz, pu, pv] of [
+      [0, zNear, uHinge, v0], [xFar, zNear, uMid, v0],
+      [xFar, zFar, uMid, v1], [0, zFar, uHinge, v1],
+    ]) {
+      // hung just under the ceiling: shut flush in its own plane they would
+      // z-fight the square, and the landscape would flicker through the doors
+      positions.push(px, PORTAL_FLAP_DROP, pz);
+      colors.push(1, 1, 1);
+      uvs.push(pu, pv);
+    }
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  });
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-  geom.setIndex([0, 1, 2, 0, 2, 3]);
+  geom.setIndex(indices);
   return geom;
 }
 
@@ -279,7 +277,14 @@ function buildCeilingGeometry(frame) {
   }
   if (farY - nearY < 2) return null; // no taper: not drawn in perspective
 
-  const doorExtent = { min: rows[nearY].min, max: rows[nearY].max };
+  // The doors' own extents, row by row and before the rim is folded in: this
+  // is the shut hatch as the artist drew it, and it is what the flaps are
+  // painted from. Taken after the rim expansion below they would pick up the
+  // grey frame beside the doors instead of the doors.
+  const doorRows = [];
+  for (let y = nearY; y <= farY; y++) {
+    doorRows.push({ y, min: rows[y].min, max: rows[y].max });
+  }
 
   // the grey border beside the opening is its rim and belongs to the square
   for (let y = nearY; y <= farY; y++) {
@@ -288,11 +293,7 @@ function buildCeilingGeometry(frame) {
     for (let n = 0; n < PORTAL_RIM_MAX && r.max < w - 1 && mask[y * w + r.max + 1]; n++) r.max++;
     r.width = r.max - r.min + 1;
   }
-  // the door's own extents, before the rim was folded in: the flaps must be
-  // textured from the doors themselves, not the frame beside them
-  const doorMin = doorExtent.min, doorMax = doorExtent.max;
-
-  const side = rows[nearY].width;                       // a square: side x side
+  const side = rows[nearY].width;                     // a square: side x side
   const centre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const span = farY - nearY + 1;
   const zOf = (y) => side / 2 - ((y - nearY) / span) * side; // centred on z=0
@@ -332,8 +333,9 @@ function buildCeilingGeometry(frame) {
       y: nearY,
       halfWidth: side / 2,
       depth: side,
-      // where each door sits on the shut hatch, so its colour can be read
-      doorRect: { x0: doorMin, x1: doorMax, y0: nearY, y1: farY },
+      // the shut hatch's doors, row by row, so the flaps can be painted
+      // from the artwork the artist drew on them
+      doorRows,
     },
   };
 }
