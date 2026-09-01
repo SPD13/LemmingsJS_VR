@@ -35,12 +35,22 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   (lemmings, objects, countdown numbers, explosion particles) instead of
   software-blitted pixels. `HeadlessStage` satisfies the Stage contract for
   `DisplayImage` without a canvas.
+- `js/depth.js` — depth compositing (plan §5.1). A per-pixel depth-class
+  buffer (backdrop / terrain / relief / overlay) is built by replaying the
+  compositor's terrain piece list with the original draw-flag semantics:
+  `noOverwrite` pieces default to a recessed backdrop, `onlyOverwrite` to
+  decals, everything else to the main slab. Per-tileset JSON profiles in
+  `profiles/` (e.g. `lemmings-g0.json`) override classes per piece id. A
+  reconcile pass enforces depth>0 ⇔ pixel-solid, so classification can never
+  disagree with collision.
 - `js/terrain.js` — destructible extruded terrain. The level's solidity mask
-  (which IS the collision data) is greedy-meshed per 32×32-pixel chunk and
-  UV-mapped onto one level texture built from `groundImage`.
+  (which IS the collision data) plus the depth buffer are greedy-meshed per
+  32×32-pixel chunk — front/back faces per class at its own Z band, step
+  walls where classes of different heights meet — and UV-mapped onto one
+  level texture built from `groundImage`.
   `Level.setGroundAt`/`clearGroundAt` are wrapped (every dig/bash/mine/
-  explode/build funnels through them) to mark dirty chunks, re-meshed with a
-  per-tick budget.
+  explode/build funnels through them) to keep depth + texture in sync and
+  mark dirty chunks, re-meshed with a per-tick budget.
 - `js/gui.js` — the original skill panel recycled: `GameGui` renders its pixel
   buffer as usual; we upload it as a texture on an in-scene plane and forward
   ray-hit UVs as the mouse events it already listens for.
@@ -56,8 +66,9 @@ camera, renderer, controls}` for console debugging and automated checks.
 
 ## Known gaps / next steps
 
-- Depth is uniform (single terrain slab); the per-piece depth-class profiles
-  from the plan (§5.1/§6) come next.
+- Profiles are flag-defaults only so far: no hand-tagged piece ids yet, and
+  no `relief` assignments — the in-browser piece-tagging editor (plan §6)
+  comes next.
 - Objects are flat billboards at fixed depths (background objects behind the
   slab, others in front); no extruded/animated object meshes yet.
 - `VGASPEC` special levels untested; no audio; steel areas and multi-entrance

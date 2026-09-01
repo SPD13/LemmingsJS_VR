@@ -1,0 +1,7 @@
+{
+  "tileset": "Lemmings ground set 0 (dirt)",
+  "terrain": {
+    "default": "terrain",
+    "byId": {}
+  }
+}
