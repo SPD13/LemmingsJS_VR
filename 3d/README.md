@@ -90,12 +90,12 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   `DisplayImage` without a canvas.
 - `js/depth.js` — depth compositing (plan §5.1). A per-pixel depth-class
   buffer (backdrop / terrain / relief / overlay) is built by replaying the
-  compositor's terrain piece list with the original draw-flag semantics:
-  `noOverwrite` pieces default to a recessed backdrop, `onlyOverwrite` to
-  decals, everything else to the main slab. Per-tileset JSON profiles in
-  `profiles/` (e.g. `lemmings-g0.json`) override classes per piece id. A
-  reconcile pass enforces depth>0 ⇔ pixel-solid, so classification can never
-  disagree with collision.
+  compositor's terrain piece list with the original draw-flag semantics.
+  Everything drawn defaults to the terrain slab — in Lemmings nearly every
+  drawn pixel is standable ground — and the other classes come only from
+  per-tileset JSON profiles in `profiles/` (e.g. `lemmings-g0.json`), tagged
+  per piece id in the editor. A reconcile pass enforces depth>0 ⇔
+  pixel-solid, so classification can never disagree with collision.
 - `js/terrain.js` — destructible extruded terrain. The level's solidity mask
   (which IS the collision data) plus the depth buffer are greedy-meshed per
   32×32-pixel chunk — front/back faces per class at its own Z band, step

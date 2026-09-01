@@ -52,17 +52,18 @@ const DepthProfiles = {
 };
 
 /**
- * Depth class for one placed terrain piece: per-id profile override first,
- * then the piece's own draw flags (noOverwrite pieces sit behind existing
- * terrain, onlyOverwrite pieces are decals on it), then the default.
+ * Depth class for one placed terrain piece. Default: everything drawn is
+ * TERRAIN — in Lemmings nearly every drawn pixel is standable ground, so
+ * draw flags (noOverwrite/onlyOverwrite) are compositing hints, not reliable
+ * depth intent. backdrop/relief/overlay come only from explicit profile
+ * tags (the piece editor). Entrances/exits are objects, not terrain pieces,
+ * and never enter the depth buffer.
  */
 function depthClassForPiece(piece, profile) {
   const terrainCfg = (profile && profile.terrain) || {};
   const byId = terrainCfg.byId || {};
   const override = DepthClassByName[byId[piece.id]];
   if (override) return override;
-  if (piece.drawProperties.noOverwrite) return DepthClass.BACKDROP;
-  if (piece.drawProperties.onlyOverwrite) return DepthClass.OVERLAY;
   return DepthClassByName[terrainCfg.default] || DepthClass.TERRAIN;
 }
 
