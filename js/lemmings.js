@@ -4224,6 +4224,11 @@ var Lemmings;
             this.log.debug('Audio sample rate ' + this.audioCtx.sampleRate);
             this.samplesPerTick = Math.round(this.audioCtx.sampleRate / (this.soundImagePlayer.getSamplingInterval()));
             this.source = this.audioCtx.createBufferSource();
+            /// a bufferless source ends immediately in modern browsers, firing
+            /// onended and tearing down the processor chain before any audio
+            /// is generated; give it a small silent looping buffer instead
+            this.source.buffer = this.audioCtx.createBuffer(1, 2, this.audioCtx.sampleRate);
+            this.source.loop = true;
             this.processor = this.audioCtx.createScriptProcessor(8192, 2, 2);
             // When the buffer source stops playing, disconnect everything
             this.source.onended = () => {
