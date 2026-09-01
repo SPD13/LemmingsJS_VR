@@ -330,15 +330,36 @@
   });
 
   // ------------------------------------------------------------------ WebXR
+  /**
+   * Place the diorama in front of the player's CURRENT head pose — position
+   * and horizontal facing — not the reference-space origin (whose -Z axis
+   * follows room calibration on PC VR and can point anywhere). Requires a
+   * valid pose, so it runs on the first rendered XR frame, not sessionstart;
+   * returns false to request a retry when the level isn't loaded yet.
+   */
   function placeDioramaForXR() {
-    if (!session) return;
-    dioramaRoot.scale.setScalar(VR_PIXEL_SCALE);
-    // bring the level's intended start area to the diorama focus point
+    if (!session) return false;
+    const s = VR_PIXEL_SCALE;
+    const headPos = new THREE.Vector3();
+    const headQuat = new THREE.Quaternion();
+    camera.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+    else fwd.normalize();
+
+    // level face (+Z local) turns back toward the player
+    dioramaRoot.rotation.set(0, Math.atan2(-fwd.x, -fwd.z), 0);
+    dioramaRoot.scale.setScalar(s);
+
     const startX = session.level.screenPositionX + 200;
-    const focus = new THREE.Vector3(
+    const focusLocal = new THREE.Vector3(
       startX, session.level.height / 2, TERRAIN_DEPTH / 2);
-    dioramaRoot.position.copy(VR_VIEW_POSITION)
-      .sub(focus.multiplyScalar(VR_PIXEL_SCALE));
+    const target = headPos.clone().addScaledVector(fwd, 0.9);
+    target.y = Math.max(0.6, headPos.y - 0.35); // just below eye level
+    dioramaRoot.position.copy(target)
+      .sub(focusLocal.multiplyScalar(s).applyEuler(dioramaRoot.rotation));
+    return true;
   }
 
   // desktop clip planes are in pixel units; in VR they are METERS, and the
