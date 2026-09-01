@@ -50,6 +50,12 @@ const GUI_DIGIT_TOP = 17;
 const GUI_DIGIT_BOTTOM = 26;
 const GUI_DIGIT_BUTTONS = 10; // 0..9 carry counts; 10..12 do not
 const GUI_DIGIT_COLOR = "255,255,255";
+// The counters strip along the top ("Out 5  In 0%  Time 4-57") is drawn as
+// green letters with light highlights; those highlights get raised 1px on a
+// smoothed surface, so the lettering reads as embossed rather than printed.
+const GUI_TEXT_BOTTOM = GUI_TILE_TOP; // the strip above the buttons
+const GUI_TEXT_DEPTH = 1;
+const GUI_TEXT_COLORS = new Set(["240,208,208", "255,255,255"]);
 
 class GuiPanel {
   constructor(scene, game, resources) {
@@ -134,6 +140,11 @@ class GuiPanel {
     this.socket.renderOrder = GUI_ORDER_SOCKET;
     this.scene.add(this.socket);
 
+    this.textMesh = new THREE.Mesh(this._emptyGeom, this.reliefMaterial);
+    this.textMesh.renderOrder = GUI_ORDER_RELIEF;
+    this.scene.add(this.textMesh);
+    this._refreshText();
+
     this._layoutRelief();
   }
 
@@ -185,6 +196,90 @@ class GuiPanel {
     }
   }
 
+  /** Light highlight pixels of the counters text. */
+  _buildTextMask() {
+    const W = this.canvas.width;
+    const data = this.ctx.getImageData(0, 0, W, GUI_TEXT_BOTTOM).data;
+    const mask = new Uint8Array(W * this.canvas.height);
+    for (let y = 0; y < GUI_TEXT_BOTTOM; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
+        if (GUI_TEXT_COLORS.has(key)) mask[y * W + x] = 1;
+      }
+    }
+    return mask;
+  }
+
+  _textChecksum() {
+    const data = this.ctx.getImageData(0, 0, this.canvas.width, GUI_TEXT_BOTTOM).data;
+    let h = 0;
+    for (let i = 0; i < data.length; i += 4) h = (h * 31 + data[i]) | 0;
+    return h;
+  }
+
+  /**
+   * Smoothed 1px relief for the text: each quad corner rises with the number
+   * of highlight pixels meeting there, so strokes are beveled into the panel
+   * instead of standing on hard little walls (no walls are needed - the
+   * surface slopes back down to the panel at the edge of a stroke).
+   */
+  _buildTextGeometry() {
+    const W = this.canvas.width, H = this.canvas.height;
+    const mask = this.textMask;
+    const solid = (x, y) =>
+      (x >= 0 && x < W && y >= 0 && y < H && mask[y * W + x]) ? 1 : 0;
+    const cornerZ = (x, y) =>
+      ((solid(x - 1, y - 1) + solid(x, y - 1) + solid(x - 1, y) + solid(x, y)) / 4) *
+      GUI_TEXT_DEPTH;
+
+    const positions = [], colors = [], uvs = [], indices = [];
+    const push = (px, py, pz, u, v) => {
+      positions.push(px, py, pz);
+      // shade with height so the bevel reads even head-on
+      const shade = 0.72 + 0.28 * (pz / GUI_TEXT_DEPTH);
+      colors.push(shade, shade, shade);
+      uvs.push(u, v);
+    };
+    for (let y = 0; y < GUI_TEXT_BOTTOM; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!mask[y * W + x]) continue;
+        // a centre vertex at full depth fanned out to the averaged corners:
+        // strokes reach the full 1px even where they are a single pixel wide,
+        // while the corners bevel down to the panel around them
+        const base = positions.length / 3;
+        push(x + 0.5, y + 0.5, GUI_TEXT_DEPTH, (x + 0.5) / W, (y + 0.5) / H);
+        push(x, y, cornerZ(x, y), x / W, y / H);
+        push(x + 1, y, cornerZ(x + 1, y), (x + 1) / W, y / H);
+        push(x + 1, y + 1, cornerZ(x + 1, y + 1), (x + 1) / W, (y + 1) / H);
+        push(x, y + 1, cornerZ(x, y + 1), x / W, (y + 1) / H);
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3,
+                     base, base + 3, base + 4, base, base + 4, base + 1);
+      }
+    }
+    if (indices.length === 0) return null;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    return geom;
+  }
+
+  /** Rebuild the text relief when the counters change (time ticks, etc.). */
+  _refreshText() {
+    const sum = this._textChecksum();
+    if (sum === this._textSum) return;
+    this._textSum = sum;
+    this.textMask = this._buildTextMask();
+    const geom = this._buildTextGeometry();
+    if (this.textMesh.geometry && this.textMesh.geometry !== this._emptyGeom) {
+      this.textMesh.geometry.dispose();
+    }
+    this.textMesh.geometry = geom || this._emptyGeom;
+    this.textMesh.visible = !!geom;
+  }
+
   /** Per-tile relief geometry (cached), for the raised hovered button. */
   _tileGeometry(index) {
     if (this._tileGeoms[index]) return this._tileGeoms[index];
@@ -205,7 +300,9 @@ class GuiPanel {
     const sx = this.mesh.scale.x / this.canvas.width;
     const sy = this.mesh.scale.y / this.canvas.height;
     // geometry is in canvas pixels, y down: flip Y and pin to the top-left
-    for (const mesh of this.tileReliefs) {
+    const meshes = this.textMesh
+      ? this.tileReliefs.concat([this.textMesh]) : this.tileReliefs;
+    for (const mesh of meshes) {
       mesh.scale.set(sx, -sy, sx);
       mesh.position.set(
         this.mesh.position.x - this.mesh.scale.x / 2,
@@ -393,8 +490,12 @@ class GuiPanel {
     this.texture.needsUpdate = true;
     if (this.hoverTexture) this.hoverTexture.needsUpdate = true; // shares the canvas
     if (this.reliefTexture) this.reliefTexture.needsUpdate = true;
-    if (!this.tileReliefs) this._buildRelief(); // needs painted pixels
-    else this._refreshDigits();
+    if (!this.tileReliefs) {
+      this._buildRelief(); // needs painted pixels
+    } else {
+      this._refreshDigits();
+      this._refreshText();
+    }
   }
 
   /** Convert a ray hit UV on the panel into pixel coords for GameGui. */
@@ -415,5 +516,6 @@ class GuiPanel {
     if (this.tileReliefs) this.tileReliefs.forEach((m) => this.scene.remove(m));
     if (this.hoverRelief) this.scene.remove(this.hoverRelief);
     if (this.socket) this.scene.remove(this.socket);
+    if (this.textMesh) this.scene.remove(this.textMesh);
   }
 }
