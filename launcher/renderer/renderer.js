@@ -38,6 +38,7 @@ function renderStatus(s) {
   $("error").textContent = s.error || "";
 
   if (!$("port").matches(":focus")) $("port").value = s.port;
+  $("https-toggle").checked = !!s.https;
 }
 
 $("toggle").addEventListener("click", async () => {
@@ -65,6 +66,19 @@ $("save-port").addEventListener("click", async () => {
     msg.className = "err";
   } else {
     msg.textContent = "saved — port " + s.port + (s.running ? " (server restarted)" : "");
+    msg.className = "ok";
+  }
+});
+
+$("https-toggle").addEventListener("change", async () => {
+  const msg = $("setup-msg");
+  const s = await window.launcher.setHttps($("https-toggle").checked);
+  renderStatus(s);
+  if (s.error) {
+    msg.textContent = s.error;
+    msg.className = "err";
+  } else {
+    msg.textContent = (s.https ? "HTTPS on" : "HTTPS off") + (s.running ? " (server restarted)" : "");
     msg.className = "ok";
   }
 });
