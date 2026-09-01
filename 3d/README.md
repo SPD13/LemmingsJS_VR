@@ -121,10 +121,14 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   behind the doors. Each door is a slab one pixel thick, laid down as one
   strip per sprite row so the perspective is undone and the artist's own
   door artwork lands square on a panel that stays flat.
-  An exit is treated far more lightly: it keeps its own plane and only its
-  opening is pushed back, 2px, with corner heights averaged from the four
-  pixels meeting at each so the step in is a ramp and not a cliff, plus a
-  little darkening. The opening there is the blue (or blue and green) of the
+  An exit is built the same way in miniature: its frame is a slab one pixel deep
+  sitting on the background — a face at the plane, a back a pixel behind it,
+  that pixel of edge showing all round — and the tunnel carries on 2px past
+  that back, so the opening is a hole through the frame rather than a patch
+  painted on it. The tunnel's floor takes each corner's height from the four
+  pixels meeting there, so the way in is a ramp and not a shaft, and the
+  walls run from the face down to those same corner heights, meeting exactly
+  with no crack at the mouth. The opening is the blue (or blue and green) of the
   sky: properly saturated rather than merely bluest-of-three (stone is shaded
   in cool-tinted near-neutrals), not red-led, and standing clear of red so a
   pale yellow does not read as green. Colour alone still is not enough —
@@ -132,8 +136,8 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   the dent is the connected patch of sky nearest the exit's own trigger box,
   the spot a lemming has to reach to get out. Stray saturated pixels
   elsewhere in the artwork are left alone, and a patch under a few pixels is
-  ignored so a lone pixel nearer the trigger cannot win. Only a hatch carves
-  the terrain behind it from
+  ignored so a lone pixel nearer the trigger cannot win. Both carve
+  the terrain behind them from
   the render-only depth map, being a hole a lemming really falls through; an
   exit's dent stays well clear of the slab, so carving there would hollow out
   the wall for nothing. Collision is never touched. Which objects are
