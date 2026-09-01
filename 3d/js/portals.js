@@ -22,6 +22,7 @@ const PORTAL_SKY_MIN = 40;         // sky is at least this bright,
 const PORTAL_SKY_SAT = 0.35;       // this saturated (not a tinted grey),
 const PORTAL_SKY_WARM = 0.2;       // and this far off red (not a yellow)
 const PORTAL_SKY_PATCH_MIN = 6;    // a doorway is a patch, not a stray pixel
+const PORTAL_FRAME_THICK = 1;      // an exit's frame is a slab this deep
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
@@ -511,11 +512,17 @@ function spriteSkyMask(frame, triggerX, triggerY) {
 }
 
 /**
- * Geometry for one exit, in sprite pixel space (y down). The sprite stays in
- * its own plane and only the opening is pushed back, by `depth`. Corner
- * heights are averaged from the four pixels that meet there, so the step in
- * is a short ramp rather than a cliff, and the recess darkens a little: a
- * shallow tunnel rather than a hole cut in a picture.
+ * Geometry for one exit, in sprite pixel space (y down).
+ *
+ * The frame is a slab a game pixel deep sitting on the background: a face at
+ * the plane, a back a pixel behind it, and that pixel of edge showing all the
+ * way round. The tunnel carries on past that back, `depth` further in, so the
+ * opening is a hole through the frame rather than a patch painted on it.
+ *
+ * Its floor takes each corner's height from the four pixels meeting there, so
+ * the way in is a ramp rather than a shaft, and the walls run from the face
+ * down to those same corner heights - the two meet exactly, leaving no crack
+ * to see through at the mouth.
  */
 function buildPortalGeometry(frame, depth, triggerX, triggerY) {
   const w = frame.width, h = frame.height;
@@ -524,35 +531,66 @@ function buildPortalGeometry(frame, depth, triggerX, triggerY) {
   const sky = spriteSkyMask(frame, triggerX, triggerY);
   if (!sky) return null; // no opening to push back
 
-  // outside the sprite counts as the plane, so the rim stays flush
-  const recessAt = (x, y) => {
-    if (x < 0 || x >= w || y < 0 || y >= h) return 0;
-    return sky[y * w + x] ? depth : 0;
+  const isFrame = (x, y) => x >= 0 && x < w && y >= 0 && y < h &&
+    mask[y * w + x] !== 0 && !sky[y * w + x];
+  // How far back the surface lies. Beyond the sprite counts as the frame's
+  // own back, so the slab keeps a square edge instead of tapering away.
+  const depthAt = (x, y) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return PORTAL_FRAME_THICK;
+    const i = y * w + x;
+    if (!mask[i] || !sky[i]) return PORTAL_FRAME_THICK;
+    return PORTAL_FRAME_THICK + depth;
   };
   const cornerZ = (x, y) => {
     let sum = 0;
     for (const [px, py] of [[x - 1, y - 1], [x, y - 1], [x - 1, y], [x, y]]) {
-      sum += recessAt(px, py);
+      sum += depthAt(px, py);
     }
     return -sum / 4;
   };
 
   const positions = [], colors = [], uvs = [], indices = [];
+  const quad = (verts, shade) => {
+    const base = positions.length / 3;
+    for (const [px, py, pz, pu, pv] of verts) {
+      positions.push(px, py, pz);
+      colors.push(shade, shade, shade);
+      uvs.push(pu, pv);
+    }
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!mask[y * w + x]) continue;
-      const corners = [
-        [x, y, cornerZ(x, y)], [x + 1, y, cornerZ(x + 1, y)],
-        [x + 1, y + 1, cornerZ(x + 1, y + 1)], [x, y + 1, cornerZ(x, y + 1)],
+      const z00 = cornerZ(x, y), z10 = cornerZ(x + 1, y);
+      const z11 = cornerZ(x + 1, y + 1), z01 = cornerZ(x, y + 1);
+      const u0 = x / w, u1 = (x + 1) / w, v0 = y / h, v1 = (y + 1) / h;
+      // pixel-centre UV for the walls: a wall on a texel boundary samples the
+      // empty neighbour and comes out black
+      const uc = (x + 0.5) / w, vc = (y + 0.5) / h;
+
+      // the back of the slab, which in the opening is the tunnel's floor
+      const deep = Math.min(1, (-(z00 + z10 + z11 + z01) / 4 - PORTAL_FRAME_THICK) / depth);
+      quad([[x, y, z00, u0, v0], [x + 1, y, z10, u1, v0],
+            [x + 1, y + 1, z11, u1, v1], [x, y + 1, z01, u0, v1]], 1 - 0.3 * deep);
+
+      if (!isFrame(x, y)) continue;
+      // the face on the background, and a pixel of edge wherever this pixel
+      // of frame meets the opening or the outside world
+      quad([[x, y, 0, u0, v0], [x + 1, y, 0, u1, v0],
+            [x + 1, y + 1, 0, u1, v1], [x, y + 1, 0, u0, v1]], SPRITE_SHADE_FRONT);
+      const edges = [
+        [-1, 0, [x, y, z00], [x, y + 1, z01], SPRITE_SHADE_LEFT],
+        [1, 0, [x + 1, y + 1, z11], [x + 1, y, z10], SPRITE_SHADE_RIGHT],
+        [0, -1, [x + 1, y, z10], [x, y, z00], SPRITE_SHADE_TOP],
+        [0, 1, [x, y + 1, z01], [x + 1, y + 1, z11], SPRITE_SHADE_BOTTOM],
       ];
-      const base = positions.length / 3;
-      for (const [cx, cy, cz] of corners) {
-        positions.push(cx, cy, cz);
-        const shade = 1 - 0.3 * Math.min(1, -cz / depth); // deeper = darker
-        colors.push(shade, shade, shade);
-        uvs.push(cx / w, cy / h);
+      for (const [dx, dy, a, b, shade] of edges) {
+        if (isFrame(x + dx, y + dy)) continue;
+        quad([[a[0], a[1], 0, uc, vc], [b[0], b[1], 0, uc, vc],
+              [b[0], b[1], b[2], uc, vc], [a[0], a[1], a[2], uc, vc]], shade);
       }
-      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
   }
   if (indices.length === 0) return null;
@@ -632,12 +670,10 @@ function buildPortals(level, profile, depthMap) {
       index: i, objectId, geometry, originX, originY, shape: config.shape,
       hatch, openness, closedFrame: mapObject.animation.frames[1] || frame,
       animation: mapObject.animation,
-      // Only a hatch needs the slab cleared from behind it: it is a hole a
-      // lemming really falls through. An exit only dents its opening a
-      // couple of pixels, well clear of the terrain behind, so carving
-      // there would hollow out the wall for nothing.
-      carved: hatch
-        ? carveTerrainForPortal(depthMap, level, originX, originY, frame) : 0,
+      // Both need the slab cleared from behind them. An object sits inside
+      // the terrain's depth, not in front of it, so an uncarved slab closes
+      // over the opening and hides whatever is recessed into it.
+      carved: carveTerrainForPortal(depthMap, level, originX, originY, frame),
     });
   }
   return portals;
