@@ -121,7 +121,9 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   ray-hit UVs as the mouse events it already listens for. The panel is one
   composited bitmap, so the lemming pictures on the buttons are color-keyed
   off the yellow/gray tile dither and extruded 1px for relief; the hovered
-  button (and its figure) rises toward the player.
+  button (and its figure) rises toward the player. The counters text along
+  the top gets the same 1px treatment on its light highlights, smoothed into
+  a bevel, and is rebuilt whenever the counters change.
 - `js/vr.js` — WebXR layer: ENTER VR button, session handling, meter-scale
   diorama placement, controller rays feeding the same pick path as the mouse,
   grip drag and two-grip scale on the diorama root.
