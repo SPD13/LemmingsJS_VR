@@ -17,7 +17,9 @@
 
 const PORTAL_ENTRANCE_ID = 1;      // level-object id of an entrance
 const PORTAL_DEFAULT_DEPTH = 12;   // game pixels of recession
-const PORTAL_EXIT_DEPTH = 14;
+const PORTAL_EXIT_DEPTH = 2;       // an exit pushes its opening back this far
+const PORTAL_SKY_MIN = 40;         // a channel this strong...
+const PORTAL_SKY_RATIO = 1.3;      // ...and this far above the others is sky
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
@@ -436,33 +438,46 @@ function buildCeilingGeometry(frame, shutFrame) {
 }
 
 /**
- * Geometry for one opening, in sprite pixel space (y down). The surface sits
- * at z=0 on the rim and recedes to -depth at the deepest interior, smoothed
- * by averaging the corner heights, and darkens with depth so the tunnel
- * reads as a tunnel rather than a flat picture.
+ * Is this pixel sky seen through the opening rather than the wall around it?
+ * The exits are drawn as a mouth of blue, sometimes blue and green, set in
+ * the tileset's own stone. Stone is painted in near-neutrals, so a channel
+ * standing well clear of the other two is what separates the two - a plain
+ * "bluest channel wins" also takes the cool-tinted greys the stone is shaded
+ * with, which in the dirt set is more pixels than the opening itself.
+ */
+function isSkyColour(v) {
+  const r = v & 255, g = (v >> 8) & 255, b = (v >> 16) & 255;
+  if (b >= PORTAL_SKY_MIN && b >= PORTAL_SKY_RATIO * Math.max(r, g)) return true;
+  return g >= PORTAL_SKY_MIN && g >= PORTAL_SKY_RATIO * Math.max(r, b);
+}
+
+/**
+ * Geometry for one exit, in sprite pixel space (y down). The sprite stays in
+ * its own plane and only the opening is pushed back, by `depth`. Corner
+ * heights are averaged from the four pixels that meet there, so the step in
+ * is a short ramp rather than a cliff, and the recess darkens a little: a
+ * shallow tunnel rather than a hole cut in a picture.
  */
 function buildPortalGeometry(frame, depth) {
-  const w = frame.width, h = frame.height, mask = frame.getMask();
-  const dist = spriteInteriorDistance(frame);
-  let maxD = 0;
-  for (let i = 0; i < w * h; i++) if (dist[i] > maxD) maxD = dist[i];
-  if (maxD <= 1) return null; // nothing but rim: not an opening
-  const scale = depth / maxD;
+  const w = frame.width, h = frame.height;
+  const mask = frame.getMask(), buf = frame.getBuffer();
 
-  const zAt = (x, y) => {
-    if (x < 0 || x >= w || y < 0 || y >= h) return null;
-    if (!mask[y * w + x]) return null;
-    return -Math.min(dist[y * w + x] * scale, depth);
+  let sky = 0;
+  for (let i = 0; i < w * h; i++) if (mask[i] && isSkyColour(buf[i])) sky++;
+  if (sky === 0) return null; // no opening to push back
+
+  // outside the sprite counts as the plane, so the rim stays flush
+  const recessAt = (x, y) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return 0;
+    const i = y * w + x;
+    return mask[i] && isSkyColour(buf[i]) ? depth : 0;
   };
   const cornerZ = (x, y) => {
-    let sum = 0, n = 0;
+    let sum = 0;
     for (const [px, py] of [[x - 1, y - 1], [x, y - 1], [x - 1, y], [x, y]]) {
-      const z = zAt(px, py);
-      if (z === null) continue;
-      sum += z; n++;
+      sum += recessAt(px, py);
     }
-    // corners on the outline stay at the sprite plane, so the rim is flush
-    return n === 4 ? sum / n : (n ? (sum / n) * (n / 4) : 0);
+    return -sum / 4;
   };
 
   const positions = [], colors = [], uvs = [], indices = [];
@@ -476,7 +491,7 @@ function buildPortalGeometry(frame, depth) {
       const base = positions.length / 3;
       for (const [cx, cy, cz] of corners) {
         positions.push(cx, cy, cz);
-        const shade = 1 - 0.55 * Math.min(1, -cz / depth); // deeper = darker
+        const shade = 1 - 0.3 * Math.min(1, -cz / depth); // deeper = darker
         colors.push(shade, shade, shade);
         uvs.push(cx / w, cy / h);
       }
@@ -555,7 +570,12 @@ function buildPortals(level, profile, depthMap) {
       index: i, objectId, geometry, originX, originY, shape: config.shape,
       hatch, openness, closedFrame: mapObject.animation.frames[1] || frame,
       animation: mapObject.animation,
-      carved: carveTerrainForPortal(depthMap, level, originX, originY, frame),
+      // Only a hatch needs the slab cleared from behind it: it is a hole a
+      // lemming really falls through. An exit only dents its opening a
+      // couple of pixels, well clear of the terrain behind, so carving
+      // there would hollow out the wall for nothing.
+      carved: hatch
+        ? carveTerrainForPortal(depthMap, level, originX, originY, frame) : 0,
     });
   }
   return portals;

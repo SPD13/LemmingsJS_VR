@@ -120,13 +120,17 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   perspective, and rebuilding that as upright pixels only stands a wall
   behind the doors. Each door is a slab one pixel thick, laid down as one
   strip per sprite row so the perspective is undone and the artist's own
-  door artwork lands square on a panel that stays flat. Their
-  sprites are perspective drawings of a box, so instead of keying depth off
-  brightness the opening is rebuilt geometrically: a distance transform of the
-  sprite's silhouette says how far inside each pixel lies, and that becomes
-  recession (rim flush with the sprite plane, interior falling away and
-  darkening). The terrain behind is carved from the render-only depth map so
-  the tunnel isn't filled — collision is never touched. Which objects are
+  door artwork lands square on a panel that stays flat.
+  An exit is treated far more lightly: it keeps its own plane and only its
+  opening is pushed back, 2px, with corner heights averaged from the four
+  pixels meeting at each so the step in is a ramp and not a cliff, plus a
+  little darkening. The opening there is the blue (or blue and green) of the
+  sky, told from the tileset's stone by a channel standing well clear of the
+  other two — a plain "bluest channel wins" also takes the cool-tinted greys
+  the stone is shaded with. Only a hatch carves the terrain behind it from
+  the render-only depth map, being a hole a lemming really falls through; an
+  exit's dent stays well clear of the slab, so carving there would hollow out
+  the wall for nothing. Collision is never touched. Which objects are
   openings comes from the profile (`objects.byId[<id>] = {shape, depth}`),
   defaulting to entrances (object id 1) and anything carrying the EXIT_LEVEL
   trigger.
