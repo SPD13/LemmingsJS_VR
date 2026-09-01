@@ -14,6 +14,13 @@ const GUI_TILE_TOP = 16;
 const GUI_TILE_H = 23;
 const GUI_TILE_POP = 5;    // how far a hovered button rises toward the player
 const GUI_TILE_GROW = 1.08;
+// GameGui draws the selection frame on the tile's shared right/bottom border
+// lines (x = 16i+16, y = 39), so a raised copy must crop one pixel wider and
+// taller or those two edges are left behind.
+const GUI_CROP_W = GUI_TILE_W + 1;
+const GUI_CROP_H = GUI_TILE_H + 1;
+const GUI_CROP_CX = (index) => index * GUI_TILE_W + GUI_CROP_W / 2;
+const GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
 const GUI_BUTTONS = 13;
 // The toolbar is an overlay: drawn without depth testing, after the world,
 // so it is always visible and clickable no matter what it sits in front of.
@@ -215,10 +222,10 @@ class GuiPanel {
     if (!this.socket || !this.mesh) return;
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
-    this.socket.scale.set((GUI_TILE_W / cw) * pw, (GUI_TILE_H / ch) * ph, 1);
+    this.socket.scale.set((GUI_CROP_W / cw) * pw, (GUI_CROP_H / ch) * ph, 1);
     this.socket.position.set(
-      this.mesh.position.x + ((index + 0.5) * GUI_TILE_W / cw - 0.5) * pw,
-      this.mesh.position.y + (0.5 - (GUI_TILE_TOP + GUI_TILE_H / 2) / ch) * ph,
+      this.mesh.position.x + (GUI_CROP_CX(index) / cw - 0.5) * pw,
+      this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * ph,
       this.mesh.position.z + 0.1 * this._unit);
   }
 
@@ -228,8 +235,8 @@ class GuiPanel {
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
     const sx = pw / this.canvas.width, sy = ph / this.canvas.height;
     const g = GUI_TILE_GROW;
-    const cx = (index + 0.5) * GUI_TILE_W;
-    const cy = GUI_TILE_TOP + GUI_TILE_H / 2;
+    const cx = GUI_CROP_CX(index); // same pivot as the raised copy
+    const cy = GUI_CROP_CY;
     this.hoverRelief.scale.set(sx * g, -sy * g, sx * g);
     this.hoverRelief.position.set(
       this.mesh.position.x - pw / 2 + cx * sx * (1 - g),
@@ -267,7 +274,7 @@ class GuiPanel {
     this.hoverTexture.magFilter = THREE.NearestFilter;
     this.hoverTexture.minFilter = THREE.NearestFilter;
     this.hoverTexture.repeat.set(
-      GUI_TILE_W / this.canvas.width, GUI_TILE_H / this.canvas.height);
+      GUI_CROP_W / this.canvas.width, GUI_CROP_H / this.canvas.height);
     this.hoverTile = new THREE.Mesh(
       this.resources.track(new THREE.PlaneGeometry(1, 1)),
       this.resources.track(new THREE.MeshBasicMaterial({
@@ -323,17 +330,17 @@ class GuiPanel {
   _layoutHoverTile(index) {
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, phh = this.mesh.scale.y;
-    // crop the texture to this button
+    // crop the texture to this button, including its frame edges
     this.hoverTexture.offset.set(
-      (index * GUI_TILE_W) / cw, 1 - (GUI_TILE_TOP + GUI_TILE_H) / ch);
+      (index * GUI_TILE_W) / cw, 1 - (GUI_TILE_TOP + GUI_CROP_H) / ch);
     this.hoverTexture.needsUpdate = true;
     // match the button's footprint on the panel, grown a touch
-    const grow = 1.08;
+    const grow = GUI_TILE_GROW;
     this.hoverTile.scale.set(
-      (GUI_TILE_W / cw) * pw * grow, (GUI_TILE_H / ch) * phh * grow, 1);
+      (GUI_CROP_W / cw) * pw * grow, (GUI_CROP_H / ch) * phh * grow, 1);
     this.hoverTile.position.set(
-      this.mesh.position.x + ((index + 0.5) * GUI_TILE_W / cw - 0.5) * pw,
-      this.mesh.position.y + (0.5 - (GUI_TILE_TOP + GUI_TILE_H / 2) / ch) * phh,
+      this.mesh.position.x + (GUI_CROP_CX(index) / cw - 0.5) * pw,
+      this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * phh,
       this.mesh.position.z + GUI_TILE_POP * this._unit
     );
   }
@@ -366,8 +373,8 @@ class GuiPanel {
    *  as a fraction of panel height (used to keep it inside the viewport). */
   raisedTileBottomOffset() {
     const ch = this.canvas.height || 40;
-    const centre = (GUI_TILE_TOP + GUI_TILE_H / 2) / ch;
-    const bottom = (GUI_TILE_TOP + GUI_TILE_H) / ch;
+    const centre = GUI_CROP_CY / ch;
+    const bottom = (GUI_TILE_TOP + GUI_CROP_H) / ch;
     return (bottom - centre) * GUI_TILE_GROW + (centre - 0.5);
   }
 
