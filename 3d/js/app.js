@@ -387,6 +387,31 @@
     (!renderer.xr.isPresenting || vrMouseFallback());
 
   let downAt = null;
+  let mouseCursorOnBoard = false;
+
+  // wheel in VR mouse-fallback: zoom the diorama toward the cursor's point
+  // on the board (desktop wheel zoom stays with OrbitControls)
+  renderer.domElement.addEventListener("wheel", (e) => {
+    if (!vrMouseFallback() || !session) return;
+    e.preventDefault();
+    const cur = dioramaRoot.scale.x;
+    const next = THREE.MathUtils.clamp(
+      cur * Math.pow(0.998, e.deltaY),
+      VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
+    const k = next / cur;
+    let pivot;
+    if (mouseCursorOnBoard) {
+      pivot = mouseCursor.position.clone();
+    } else {
+      const startX = session.level.screenPositionX + 200;
+      pivot = dioramaRoot.localToWorld(new THREE.Vector3(
+        startX, session.level.height / 2, TERRAIN_DEPTH / 2));
+    }
+    dioramaRoot.scale.setScalar(next);
+    dioramaRoot.position.copy(pivot)
+      .add(dioramaRoot.position.sub(pivot).multiplyScalar(k));
+  }, { passive: false });
+
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
     downAt = { x: e.clientX, y: e.clientY };
@@ -414,6 +439,7 @@
       // always render the cursor so it can be steered back onto the board:
       // yellow at the hit point, dimmed mid-air along the ray when off it
       mouseCursor.visible = true;
+      mouseCursorOnBoard = !!hit;
       if (hit) {
         mouseCursor.position.copy(hit.point);
         mouseCursor.material.color.setHex(0xffd866);
@@ -487,6 +513,9 @@
     camera.near = 0.05;
     camera.far = 300;
     camera.updateProjectionMatrix();
+    // OrbitControls would silently accumulate wheel/drag input during the
+    // session and apply it as a jump on exit
+    controls.enabled = false;
   });
   renderer.xr.addEventListener("sessionend", () => {
     camera.near = desktopClip.near;
@@ -494,6 +523,7 @@
     camera.updateProjectionMatrix();
     // the session leaves the camera at the last headset pose (meter-scale,
     // near the scene origin); restore the page-load framing
+    controls.enabled = true;
     if (session) frameDesktopCamera(session.level);
   });
 
