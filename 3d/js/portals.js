@@ -332,19 +332,16 @@ function buildCeilingGeometry(frame) {
   }
   if (panel.indices.length === 0) return null;
 
-  // --- the frame around it: beams and legs, thin, standing at the front
-  // edge of the square (extruding them the full depth would just wall the
-  // square in) ---
+  // --- the frame around it: beams and legs running the same depth as the
+  // square, so the structure is a box rather than a plate pinned to the
+  // front of it ---
   const frameGeom = buildExtrudedSpriteGeometry(
-    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h,
-    PORTAL_FRAME_DEPTH);
+    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, side);
   let framePart = null;
   if (frameGeom) {
     const positions = Array.from(frameGeom.attributes.position.array);
-    // the extruder builds toward the viewer from z=0; sit the beams' faces on
-    // the square's near edge
-    const shift = side / 2 - PORTAL_FRAME_DEPTH;
-    for (let i = 2; i < positions.length; i += 3) positions[i] += shift;
+    // the extruder builds toward the viewer from z=0; centre it on the square
+    for (let i = 2; i < positions.length; i += 3) positions[i] -= side / 2;
     framePart = {
       positions,
       colors: Array.from(frameGeom.attributes.color.array),
