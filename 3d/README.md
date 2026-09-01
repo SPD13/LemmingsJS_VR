@@ -109,7 +109,13 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   entrance is a square hatch lying flat overhead with two doors hinged along
   its left and right edges: the trapezoid in the artwork is un-projected back
   into a horizontal square, and the doors swing on real hinges, their angle
-  read from how far each animation frame has the opening revealed. Nothing
+  read from how far each animation frame has the opening revealed. Where the
+  opening is comes from the animation too, not the palette: shut, the doors
+  cover the hole, so the colours that gain pixels as the hatch opens are the
+  landscape's, and the opening is the blob painted in them around the
+  commonest one. Reading colours directly does not survive every tileset —
+  an opening drawn touching the sprite's edge puts sky on the silhouette,
+  where a colour-based reading has to call it frame. Nothing
   else from the sprite is drawn — the rest of it is the same hatch in 2D
   perspective, and rebuilding that as upright pixels only stands a wall
   behind the doors. Each door is a slab one pixel thick, laid down as one
