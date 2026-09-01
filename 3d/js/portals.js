@@ -21,6 +21,7 @@ const PORTAL_EXIT_DEPTH = 14;
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
+const PORTAL_FLAP_DROP = 0.5;      // doors hang this far below the ceiling
 
 /** Stash the object list and their metadata as the level is built. */
 (function installObjectDataHook() {
@@ -104,20 +105,6 @@ function spriteInteriorDistance(frame) {
 }
 
 /** Concatenate two geometries built by the helpers below. */
-function mergePortalGeometry(a, b) {
-  if (!a) return b;
-  if (!b) return a;
-  const out = {
-    positions: a.positions.concat(b.positions),
-    colors: a.colors.concat(b.colors),
-    uvs: a.uvs.concat(b.uvs),
-    indices: a.indices.slice(),
-  };
-  const offset = a.positions.length / 3;
-  for (const i of b.indices) out.indices.push(i + offset);
-  return out;
-}
-
 function toBufferGeometry(parts) {
   if (!parts || parts.indices.length === 0) return null;
   const geom = new THREE.BufferGeometry();
@@ -232,7 +219,9 @@ function buildFlapGeometry(uv, halfWidth, depth, sign) {
     [0, zNear, uv.u, uv.v], [x, zNear, uv.u, uv.v],
     [x, zFar, uv.u, uv.v], [0, zFar, uv.u, uv.v],
   ]) {
-    positions.push(px, 0, pz);
+    // hung just under the ceiling: shut flush in its own plane they would
+    // z-fight the square, and the landscape would flicker through the doors
+    positions.push(px, PORTAL_FLAP_DROP, pz);
     colors.push(1, 1, 1);
     uvs.push(pu, pv);
   }
@@ -328,27 +317,14 @@ function buildCeilingGeometry(frame) {
   for (let y = nearY; y <= farY; y++) strip(rows[y], y, zOf(y), zOf(y + 1));
   if (panel.indices.length === 0) return null;
 
-  // --- the artwork around it: the painted surround, drawn upright in the
-  // sprite plane like any other object. Giving it the square's depth would
-  // sweep the whole drawing across the opening as a box and bury it. ---
-  const frameGeom = buildExtrudedSpriteGeometry(
-    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, SPRITE_DEPTH);
-  let framePart = null;
-  if (frameGeom) {
-    const positions = Array.from(frameGeom.attributes.position.array);
-    // the extruder builds toward the viewer from z=0; straddle the plane
-    for (let i = 2; i < positions.length; i += 3) positions[i] -= SPRITE_DEPTH / 2;
-    framePart = {
-      positions,
-      colors: Array.from(frameGeom.attributes.color.array),
-      uvs: Array.from(frameGeom.attributes.uv.array),
-      indices: Array.from(frameGeom.index.array),
-    };
-    frameGeom.dispose();
-  }
+  // Nothing else from the sprite is drawn. The rest of it is the same hatch
+  // in 2D perspective - the trapezoid's walls and the shading around them -
+  // and rebuilding that here as upright pixels only stands a wall behind the
+  // doors. The square and its two flaps say it in three dimensions instead,
+  // so the opening stays open.
 
   return {
-    geometry: toBufferGeometry(mergePortalGeometry(framePart, panel)),
+    geometry: toBufferGeometry(panel),
     openingMask: inPanel,
     hatch: {
       leftX: centre - side / 2,
