@@ -125,12 +125,15 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   own tunnel — a face on the background and a back `PORTAL_FRAME_THICK + depth`
   behind it — so the opening is sunk into the door's thickness rather than
   pushed out behind it as a lump, and the tunnel's floor is simply that back.
-  The pixels of frame around the opening step down into it across
-  `PORTAL_FUNNEL_RINGS` rings, so the way in is a short funnel and not a
-  shaft. The steps follow an S-curve rather than a pixel per ring, easing in
-  at both ends: a straight ramp leaves a crease where the funnel meets the
-  flat of the frame. Corner heights averaged from the four pixels meeting at
-  each round what is left of those steps off, and
+  The pixels of frame around the opening fall away into it over
+  `PORTAL_FUNNEL_RINGS` pixels, so the way in is a short funnel and not a
+  shaft. How far each one falls comes from a chamfer distance transform out
+  of the opening, shaped by an S-curve that eases in at both ends — a
+  straight ramp leaves a crease where the funnel meets the flat of the frame.
+  Corner heights are then averaged from the four pixels meeting at each,
+  exactly as the terrain's "smooth" does; that averaging needs a height that
+  varies pixel to pixel to have anything to smooth, which is why the distance
+  is measured properly rather than counted in whole rings. And
   the walls run from the face down to those same corner heights, meeting
   exactly with no crack at the mouth. The opening is the blue (or blue and green) of the
   sky: properly saturated rather than merely bluest-of-three (stone is shaded
