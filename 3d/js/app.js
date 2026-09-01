@@ -411,8 +411,17 @@
     if (vrMouseFallback()) {
       const rc = mouseRaycaster(e);
       const hit = raycastHit(rc);
-      mouseCursor.visible = !!hit;
-      if (hit) mouseCursor.position.copy(hit.point);
+      // always render the cursor so it can be steered back onto the board:
+      // yellow at the hit point, dimmed mid-air along the ray when off it
+      mouseCursor.visible = true;
+      if (hit) {
+        mouseCursor.position.copy(hit.point);
+        mouseCursor.material.color.setHex(0xffd866);
+      } else {
+        mouseCursor.position.copy(rc.ray.origin)
+          .addScaledVector(rc.ray.direction, 1.5);
+        mouseCursor.material.color.setHex(0x8fa1bb);
+      }
       applyHover(hit ? pickWithRaycaster(rc) : null);
       return;
     }
