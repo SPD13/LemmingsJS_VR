@@ -530,7 +530,7 @@
     const focusLocal = new THREE.Vector3(
       startX, session.level.height / 2, TERRAIN_DEPTH / 2);
     const target = headPos.clone().addScaledVector(fwd, 0.9);
-    target.y = Math.max(0.6, headPos.y - 0.35); // just below eye level
+    target.y = Math.max(0.7, headPos.y - 0.15); // just below eye level
     dioramaRoot.position.copy(target)
       .sub(focusLocal.multiplyScalar(s).applyEuler(dioramaRoot.rotation));
 
