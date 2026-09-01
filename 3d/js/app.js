@@ -9,8 +9,11 @@
  */
 
 (function () {
-  const LEMMING_Z = TERRAIN_DEPTH + 1.4;
-  const OBJECT_Z = TERRAIN_DEPTH + 0.6;
+  // lemmings live embedded mid-slab (sprite centered at TERRAIN_DEPTH/2), so
+  // they walk inside the carved space rather than floating in front of it;
+  // normal objects (hatch/exit/traps) sit just behind them at the same depth
+  const LEMMING_Z = TERRAIN_DEPTH / 2 - SPRITE_DEPTH / 2;
+  const OBJECT_Z = LEMMING_Z - 0.8;
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
 
