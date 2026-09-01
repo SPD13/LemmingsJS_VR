@@ -215,12 +215,8 @@
     game.start();
 
     // camera: frame the level's intended start position
-    const startX = level.screenPositionX + 200;
-    const targetY = level.height / 2;
-    controls.target.set(startX, targetY, TERRAIN_DEPTH / 2);
-    camera.position.set(startX, targetY + 120, 420);
-    controls.update();
-    gui.layout(startX);
+    frameDesktopCamera(level);
+    gui.layout(level.screenPositionX + 200);
 
     hud.name.textContent = level.name.trim() || "(unnamed level)";
     hud.meta.textContent =
@@ -237,6 +233,15 @@
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
     if (renderer.xr.isPresenting) placeDioramaForXR();
+  }
+
+  /** Default desktop framing: the level's intended start area, slightly above. */
+  function frameDesktopCamera(level) {
+    const startX = level.screenPositionX + 200;
+    const targetY = level.height / 2;
+    controls.target.set(startX, targetY, TERRAIN_DEPTH / 2);
+    camera.position.set(startX, targetY + 120, 420);
+    controls.update();
   }
 
   async function moveLevel(delta) {
@@ -478,6 +483,9 @@
     camera.near = desktopClip.near;
     camera.far = desktopClip.far;
     camera.updateProjectionMatrix();
+    // the session leaves the camera at the last headset pose (meter-scale,
+    // near the scene origin); restore the page-load framing
+    if (session) frameDesktopCamera(session.level);
   });
 
   const vr = new VRManager(renderer, scene, camera, dioramaRoot, {
