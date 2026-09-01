@@ -1,0 +1,66 @@
+# Lemmings 3D — validation mode
+
+Desktop 3D rendering of LemmingsJS (Phase 1–2 of the VR plan): the untouched
+2D simulation rendered as an extruded Three.js diorama in a normal browser
+tab, so the 3D port can be developed and tested without a headset. The same
+scene graph, bridge, and input paths will back the WebXR build; only the
+camera (orbit controls vs. headset pose) and pointer (mouse ray vs. controller
+ray) differ.
+
+## Run
+
+```sh
+# from the repo root (one level up from this folder)
+npx http-server -p 8123 -c-1
+# then open http://127.0.0.1:8123/3d/
+# (the original 2D game stays at http://127.0.0.1:8123/)
+```
+
+URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
+`?level=N`, `?speed=N`, `?replay=<string>` (from the `r` key dump).
+
+## Controls
+
+- drag = orbit, right-drag = pan, wheel = zoom
+- click a lemming = assign the selected skill; click the panel = exactly the
+  original panel (release rate, skills, pause, nuke, speed)
+- `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
+  level, `r` dump the replay string to the console
+
+## Architecture (mirrors the VR plan)
+
+- `js/bridge.js` — the sim/scene boundary. `SpriteCapture` is a fake "display"
+  handed to the game's own render methods: every `drawFrame`/`drawMask`/
+  `setPixel` call is captured and turned into textured billboards
+  (lemmings, objects, countdown numbers, explosion particles) instead of
+  software-blitted pixels. `HeadlessStage` satisfies the Stage contract for
+  `DisplayImage` without a canvas.
+- `js/terrain.js` — destructible extruded terrain. The level's solidity mask
+  (which IS the collision data) is greedy-meshed per 32×32-pixel chunk and
+  UV-mapped onto one level texture built from `groundImage`.
+  `Level.setGroundAt`/`clearGroundAt` are wrapped (every dig/bash/mine/
+  explode/build funnels through them) to mark dirty chunks, re-meshed with a
+  per-tick budget.
+- `js/gui.js` — the original skill panel recycled: `GameGui` renders its pixel
+  buffer as usual; we upload it as a texture on an in-scene plane and forward
+  ray-hit UVs as the mouse events it already listens for.
+- `js/app.js` — boot, scene, camera, input, level switching. The sim keeps its
+  fixed 60 ms step but is driven from the rAF loop via an accumulator
+  (browsers throttle `setInterval` in unfocused windows; the VR build needs a
+  rAF-driven fixed step anyway). Lemming positions are interpolated between
+  ticks for smooth rendering.
+
+`../js/lemmings.js` is loaded as-is and never modified — all hooks
+are instance-level wrappers. `window.__lem3d` exposes `{state, session,
+camera, renderer, controls}` for console debugging and automated checks.
+
+## Known gaps / next steps
+
+- Depth is uniform (single terrain slab); the per-piece depth-class profiles
+  from the plan (§5.1/§6) come next.
+- Objects are flat billboards at fixed depths (background objects behind the
+  slab, others in front); no extruded/animated object meshes yet.
+- `VGASPEC` special levels untested; no audio; steel areas and multi-entrance
+  behavior inherited as-is from LemmingsJS.
+- Replay-based 2D-vs-3D end-state comparison is manual for now (`r` dump +
+  `?replay=`); an automated harness is Phase 0 debt.
