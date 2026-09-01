@@ -125,9 +125,15 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   opening is pushed back, 2px, with corner heights averaged from the four
   pixels meeting at each so the step in is a ramp and not a cliff, plus a
   little darkening. The opening there is the blue (or blue and green) of the
-  sky, told from the tileset's stone by a channel standing well clear of the
-  other two — a plain "bluest channel wins" also takes the cool-tinted greys
-  the stone is shaded with. Only a hatch carves the terrain behind it from
+  sky: properly saturated rather than merely bluest-of-three (stone is shaded
+  in cool-tinted near-neutrals), not red-led, and standing clear of red so a
+  pale yellow does not read as green. Colour alone still is not enough —
+  whole tilesets are built of blue stone, the crystal set most of all — so
+  the dent is the connected patch of sky nearest the exit's own trigger box,
+  the spot a lemming has to reach to get out. Stray saturated pixels
+  elsewhere in the artwork are left alone, and a patch under a few pixels is
+  ignored so a lone pixel nearer the trigger cannot win. Only a hatch carves
+  the terrain behind it from
   the render-only depth map, being a hole a lemming really falls through; an
   exit's dent stays well clear of the slab, so carving there would hollow out
   the wall for nothing. Collision is never touched. Which objects are
