@@ -729,6 +729,31 @@
       case "e":
         if (session.editor) session.editor.toggle();
         break;
+      case "ArrowLeft":
+      case "ArrowRight":
+      case "ArrowUp":
+      case "ArrowDown": {
+        e.preventDefault();
+        const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        const dy = e.key === "ArrowUp" ? 1 : e.key === "ArrowDown" ? -1 : 0;
+        const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+        const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+        if (renderer.xr.isPresenting) {
+          // the camera is the headset; shift the diorama the opposite way
+          const step = 0.12; // meters per press
+          dioramaRoot.position
+            .sub(right.multiplyScalar(dx * step))
+            .sub(up.multiplyScalar(dy * step));
+        } else {
+          const step = camera.position.distanceTo(controls.target) * 0.08;
+          const offset = right.multiplyScalar(dx * step)
+            .add(up.multiplyScalar(dy * step));
+          camera.position.add(offset);
+          controls.target.add(offset);
+          controls.update();
+        }
+        break;
+      }
       case "v":
         if (renderer.xr.isPresenting) vr.recenterNow();
         break;
