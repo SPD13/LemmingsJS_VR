@@ -62,7 +62,7 @@ class VRManager {
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
    *  - placeDiorama()               -> position dioramaRoot for the headset
    */
-  constructor(renderer, scene, dioramaRoot, hooks) {
+  constructor(renderer, scene, camera, dioramaRoot, hooks) {
     this.renderer = renderer;
     this.dioramaRoot = dioramaRoot;
     this.hooks = hooks;
@@ -72,6 +72,14 @@ class VRManager {
 
     renderer.xr.enabled = true;
     createVRButton(renderer);
+
+    // head-locked diagnostic board (children of the camera render head-locked;
+    // the camera must be in the scene graph for that)
+    scene.add(camera);
+    this._diag = this._makeDiagBoard();
+    camera.add(this._diag.mesh);
+    this._diagFrame = 0;
+    this._sessionStartedAt = 0;
 
     // a dim floor grid, shown only in-session: proves rendering works and
     // gives scale/orientation even if the diorama is somewhere unexpected
@@ -121,6 +129,12 @@ class VRManager {
       c.userData.dot = new THREE.Mesh(dotGeom, dotMat);
       c.userData.dot.visible = false;
       scene.add(c.userData.dot);
+      // grip-space marker: a second visibility path in case the runtime
+      // tracks grips but not target rays
+      const grip = renderer.xr.getControllerGrip(i);
+      grip.add(new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.03, 0.06), tipMat));
+      scene.add(grip);
       c.addEventListener("connected", (e) =>
         console.log("[vr] controller connected:", e.data && e.data.handedness,
           e.data && e.data.targetRayMode));
@@ -136,6 +150,7 @@ class VRManager {
     renderer.xr.addEventListener("sessionstart", () => {
       console.log("[vr] session started");
       this.floor.visible = true;
+      this._sessionStartedAt = performance.now();
       // head pose is only valid once frames render; update() places then
       this._needsPlacement = true;
     });
@@ -166,6 +181,50 @@ class VRManager {
 
   get presenting() {
     return this.renderer.xr.isPresenting;
+  }
+
+  _makeDiagBoard() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 160;
+    const texture = new THREE.CanvasTexture(canvas);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.4, 0.125),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.85 })
+    );
+    mesh.position.set(0, -0.22, -0.55); // just below the view center
+    mesh.visible = false;
+    return { canvas, texture, mesh, ctx: canvas.getContext("2d") };
+  }
+
+  /** Show what WebXR is actually reporting, inside the headset. */
+  _updateDiagBoard() {
+    const session = this.renderer.xr.getSession();
+    const sources = session ? Array.from(session.inputSources) : [];
+    // visible while controllers are missing, and for the first 8s regardless
+    const show = this.presenting &&
+      (sources.length === 0 || performance.now() - this._sessionStartedAt < 8000);
+    this._diag.mesh.visible = show;
+    if (!show || this._diagFrame++ % 30 !== 0) return;
+
+    const { ctx, canvas, texture } = this._diag;
+    ctx.fillStyle = "rgba(10, 14, 22, 0.9)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = "22px monospace";
+    ctx.fillStyle = "#6fce7e";
+    const lines = ["XR session active · input sources: " + sources.length];
+    for (const src of sources) {
+      lines.push(
+        "· " + (src.handedness || "?") + " / " + src.targetRayMode +
+        (src.gamepad ? " / pad " + src.gamepad.buttons.length + " btn" : " / no gamepad"));
+    }
+    if (sources.length === 0) {
+      lines.push("no controllers detected —");
+      lines.push("wake them / press any button");
+      ctx.fillStyle = "#ffd866";
+    }
+    lines.forEach((l, i) => ctx.fillText(l, 14, 34 + i * 30));
+    texture.needsUpdate = true;
   }
 
   resetDiorama() {
@@ -213,7 +272,11 @@ class VRManager {
 
   /** Per-frame: apply grabs, recenter button, hover from controller 0. */
   update() {
-    if (!this.presenting) return;
+    if (!this.presenting) {
+      this._diag.mesh.visible = false;
+      return;
+    }
+    this._updateDiagBoard();
     if (this._needsPlacement) {
       try {
         if (this.hooks.placeDiorama()) this._needsPlacement = false;

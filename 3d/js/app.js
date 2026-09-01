@@ -381,7 +381,7 @@
     camera.updateProjectionMatrix();
   });
 
-  const vr = new VRManager(renderer, scene, dioramaRoot, {
+  const vr = new VRManager(renderer, scene, camera, dioramaRoot, {
     pickWithRaycaster,
     raycastHit,
     onSelectPick: (p) => {
