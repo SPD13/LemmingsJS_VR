@@ -261,14 +261,19 @@
     );
   }
 
-  /** Ray hit against panel + gameplay plane; returns {panelUv} or {simX, simY}. */
-  function pickWithRaycaster(rc) {
+  /** Raw nearest hit on the interactive surfaces (gameplay plane, panel). */
+  function raycastHit(rc) {
     if (!session) return null;
     const targets = [session.pickPlane];
     if (session.gui.mesh) targets.push(session.gui.mesh);
     const hits = rc.intersectObjects(targets, false);
-    if (hits.length === 0) return null;
-    const hit = hits[0];
+    return hits.length ? hits[0] : null;
+  }
+
+  /** Ray hit against panel + gameplay plane; returns {panelUv} or {simX, simY}. */
+  function pickWithRaycaster(rc) {
+    const hit = raycastHit(rc);
+    if (!hit) return null;
     if (hit.object.name === "gui-panel") return { panelUv: hit.uv };
     const local = session.worldGroup.worldToLocal(hit.point.clone());
     return { simX: Math.round(local.x), simY: Math.round(local.y) };
@@ -378,6 +383,7 @@
 
   const vr = new VRManager(renderer, scene, dioramaRoot, {
     pickWithRaycaster,
+    raycastHit,
     onSelectPick: (p) => {
       if (p.panelUv && session) {
         session.gui.onMouseDown(p.panelUv);

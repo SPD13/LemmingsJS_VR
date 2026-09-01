@@ -79,19 +79,48 @@ class VRManager {
     this.floor.visible = false;
     scene.add(this.floor);
 
-    const rayGeom = new THREE.BufferGeometry().setFromPoints(
-      [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
-    const rayMat = new THREE.LineBasicMaterial({ color: 0x6fce7e });
-    const tipGeom = new THREE.SphereGeometry(0.02, 12, 8);
+    // lightsaber-style beam: a bright core inside a soft additive halo,
+    // stretched each frame from the hand to the ray's hit on the board
+    const makeBeamGeom = (radius) => {
+      const g = new THREE.CylinderGeometry(radius, radius, 1, 10, 1, true);
+      g.rotateX(-Math.PI / 2);   // align along -Z (the pointing direction)
+      g.translate(0, 0, -0.5);   // spans z 0..-1, so scale.z = beam length
+      return g;
+    };
+    const coreGeom = makeBeamGeom(0.0025);
+    const glowGeom = makeBeamGeom(0.008);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xd8ffe2, transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0x36e06c, transparent: true, opacity: 0.28,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const dotGeom = new THREE.SphereGeometry(0.009, 12, 8);
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: 0xb9ffcb, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const tipGeom = new THREE.SphereGeometry(0.014, 12, 8);
     const tipMat = new THREE.MeshBasicMaterial({ color: 0x6fce7e });
     this.controllers = [];
     for (let i = 0; i < 2; i++) {
       const c = renderer.xr.getController(i);
       c.userData.gripping = false;
-      const line = new THREE.Line(rayGeom, rayMat);
-      line.scale.z = 3;
-      c.add(line);
-      c.add(new THREE.Mesh(tipGeom, tipMat)); // visible even when rays point away
+      c.userData.beams = [
+        new THREE.Mesh(coreGeom, coreMat),
+        new THREE.Mesh(glowGeom, glowMat),
+      ];
+      for (const b of c.userData.beams) {
+        b.scale.z = 4;
+        c.add(b);
+      }
+      c.add(new THREE.Mesh(tipGeom, tipMat)); // hand marker, always visible
+      c.userData.dot = new THREE.Mesh(dotGeom, dotMat);
+      c.userData.dot.visible = false;
+      scene.add(c.userData.dot);
       c.addEventListener("connected", (e) =>
         console.log("[vr] controller connected:", e.data && e.data.handedness,
           e.data && e.data.targetRayMode));
@@ -208,6 +237,17 @@ class VRManager {
       this.dioramaRoot.position.copy(mid)
         .sub(g.mid0.clone().sub(g.pStart).multiplyScalar(k));
     }
+    // stretch each beam to its hit on the board/panel; park the dot there
+    for (const c of this.controllers) {
+      const hit = this.hooks.raycastHit
+        ? this.hooks.raycastHit(this._rayFrom(c))
+        : null;
+      const len = hit ? Math.max(hit.distance, 0.05) : 4;
+      for (const b of c.userData.beams) b.scale.z = len;
+      c.userData.dot.visible = !!hit;
+      if (hit) c.userData.dot.position.copy(hit.point);
+    }
+
     this.hooks.onHoverPick(this.hooks.pickWithRaycaster(this._rayFrom(this.controllers[0])));
   }
 }
