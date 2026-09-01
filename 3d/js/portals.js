@@ -22,7 +22,8 @@ const PORTAL_SKY_MIN = 40;         // sky is at least this bright,
 const PORTAL_SKY_SAT = 0.35;       // this saturated (not a tinted grey),
 const PORTAL_SKY_WARM = 0.2;       // and this far off red (not a yellow)
 const PORTAL_SKY_PATCH_MIN = 6;    // a doorway is a patch, not a stray pixel
-const PORTAL_FRAME_THICK = 1;      // an exit's frame is a slab this deep
+const PORTAL_FRAME_THICK = 1;      // frame left over the door's own tunnel
+const PORTAL_TUNNEL_SHADE = 0.3;   // how much the tunnel darkens with depth
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
@@ -466,35 +467,63 @@ function spriteSkyMask(frame, triggerX, triggerY) {
 /**
  * Geometry for one exit, in sprite pixel space (y down).
  *
- * The frame is a slab a game pixel deep sitting on the background: a face at
- * the plane, a back a pixel behind it, and that pixel of edge showing all the
- * way round. The tunnel carries on past that back, `depth` further in, so the
- * opening is a hole through the frame rather than a patch painted on it.
+ * The door is a slab deep enough to hold its own tunnel: a face on the
+ * background, and a back `PORTAL_FRAME_THICK + depth` behind it. The tunnel
+ * floor is that back, so the opening is sunk into the door's thickness rather
+ * than pushed out behind it as a lump.
  *
- * Its floor takes each corner's height from the four pixels meeting there, so
- * the way in is a ramp rather than a shaft, and the walls run from the face
- * down to those same corner heights - the two meet exactly, leaving no crack
- * to see through at the mouth.
+ * The pixels of frame around the opening step down into it, one pixel per
+ * ring, so the way in is a short funnel instead of a shaft. Corner heights
+ * are averaged from the four pixels meeting there, which rounds those steps
+ * off, and the walls run from the face down to those same corner heights, so
+ * the two meet exactly with no crack to see through at the mouth.
  */
 function buildPortalGeometry(frame, depth, sky) {
   const w = frame.width, h = frame.height;
   const mask = frame.getMask();
   if (!sky) sky = new Uint8Array(w * h); // all frame: a slab with no opening
+  const thick = PORTAL_FRAME_THICK + depth;
 
   const isFrame = (x, y) => x >= 0 && x < w && y >= 0 && y < h &&
     mask[y * w + x] !== 0 && !sky[y * w + x];
-  // How far back the surface lies. Beyond the sprite counts as the frame's
-  // own back, so the slab keeps a square edge instead of tapering away.
-  const depthAt = (x, y) => {
-    if (x < 0 || x >= w || y < 0 || y >= h) return PORTAL_FRAME_THICK;
+
+  // How many rings of frame each pixel sits from the opening, up to the point
+  // where the steps run out. Grown a ring at a time from the sky itself.
+  const ring = new Uint8Array(w * h).fill(255);
+  let edge = [];
+  for (let i = 0; i < w * h; i++) if (mask[i] && sky[i]) { ring[i] = 0; edge.push(i); }
+  for (let step = 1; step <= depth && edge.length; step++) {
+    const next = [];
+    for (const i of edge) {
+      const x = i % w, y = (i / w) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (ring[j] !== 255 || !mask[j]) continue;
+          ring[j] = step;
+          next.push(j);
+        }
+      }
+    }
+    edge = next;
+  }
+
+  // How far back the face lies: at the plane out in the open, a pixel deeper
+  // for every ring closer to the opening, and the full thickness in it.
+  // Beyond the sprite counts as the plane, so the slab keeps a square edge.
+  const faceAt = (x, y) => {
+    if (x < 0 || x >= w || y < 0 || y >= h) return 0;
     const i = y * w + x;
-    if (!mask[i] || !sky[i]) return PORTAL_FRAME_THICK;
-    return PORTAL_FRAME_THICK + depth;
+    if (!mask[i]) return 0;
+    if (sky[i]) return thick;
+    return ring[i] === 255 ? 0 : Math.max(0, thick - ring[i]);
   };
   const cornerZ = (x, y) => {
     let sum = 0;
     for (const [px, py] of [[x - 1, y - 1], [x, y - 1], [x - 1, y], [x, y]]) {
-      sum += depthAt(px, py);
+      sum += faceAt(px, py);
     }
     return -sum / 4;
   };
@@ -513,24 +542,27 @@ function buildPortalGeometry(frame, depth, sky) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!mask[y * w + x]) continue;
-      const z00 = cornerZ(x, y), z10 = cornerZ(x + 1, y);
-      const z11 = cornerZ(x + 1, y + 1), z01 = cornerZ(x, y + 1);
       const u0 = x / w, u1 = (x + 1) / w, v0 = y / h, v1 = (y + 1) / h;
       // pixel-centre UV for the walls: a wall on a texel boundary samples the
       // empty neighbour and comes out black
       const uc = (x + 0.5) / w, vc = (y + 0.5) / h;
 
-      // the back of the slab, which in the opening is the tunnel's floor
-      const deep = depth <= 0 ? 0 :
-        Math.min(1, (-(z00 + z10 + z11 + z01) / 4 - PORTAL_FRAME_THICK) / depth);
-      quad([[x, y, z00, u0, v0], [x + 1, y, z10, u1, v0],
-            [x + 1, y + 1, z11, u1, v1], [x, y + 1, z01, u0, v1]], 1 - 0.3 * deep);
+      // the back of the slab, which under the opening is the tunnel's floor
+      quad([[x, y, -thick, u0, v0], [x + 1, y, -thick, u1, v0],
+            [x + 1, y + 1, -thick, u1, v1], [x, y + 1, -thick, u0, v1]],
+           1 - PORTAL_TUNNEL_SHADE);
 
-      if (!isFrame(x, y)) continue;
-      // the face on the background, and a pixel of edge wherever this pixel
-      // of frame meets the opening or the outside world
-      quad([[x, y, 0, u0, v0], [x + 1, y, 0, u1, v0],
-            [x + 1, y + 1, 0, u1, v1], [x, y + 1, 0, u0, v1]], SPRITE_SHADE_FRONT);
+      if (sky[y * w + x]) continue; // the opening: nothing in front of the floor
+      const z00 = cornerZ(x, y), z10 = cornerZ(x + 1, y);
+      const z11 = cornerZ(x + 1, y + 1), z01 = cornerZ(x, y + 1);
+      // the face, darkening as it steps down toward the opening
+      const sunk = thick <= 0 ? 0 :
+        Math.min(1, (-(z00 + z10 + z11 + z01) / 4) / thick);
+      quad([[x, y, z00, u0, v0], [x + 1, y, z10, u1, v0],
+            [x + 1, y + 1, z11, u1, v1], [x, y + 1, z01, u0, v1]],
+           SPRITE_SHADE_FRONT - PORTAL_TUNNEL_SHADE * sunk);
+      // a wall down to the floor wherever the face meets the opening or the
+      // outside world
       const edges = [
         [-1, 0, [x, y, z00], [x, y + 1, z01], SPRITE_SHADE_LEFT],
         [1, 0, [x + 1, y + 1, z11], [x + 1, y, z10], SPRITE_SHADE_RIGHT],
@@ -539,8 +571,8 @@ function buildPortalGeometry(frame, depth, sky) {
       ];
       for (const [dx, dy, a, b, shade] of edges) {
         if (isFrame(x + dx, y + dy)) continue;
-        quad([[a[0], a[1], 0, uc, vc], [b[0], b[1], 0, uc, vc],
-              [b[0], b[1], b[2], uc, vc], [a[0], a[1], a[2], uc, vc]], shade);
+        quad([[a[0], a[1], a[2], uc, vc], [b[0], b[1], b[2], uc, vc],
+              [b[0], b[1], -thick, uc, vc], [a[0], a[1], -thick, uc, vc]], shade);
       }
     }
   }
@@ -629,7 +661,9 @@ function buildPortals(level, profile, depthMap) {
       const sideways = Math.min(rect.x1 - rect.x0, other.x1 - other.x0);
       const upright = Math.min(rect.y1 - rect.y0, other.y1 - other.y0);
       if (across < sideways * 0.5 && down < upright * 0.5) continue;
-      configs[i] = { shape: "slab", depth: 0 };
+      // the same thickness as the door it belongs to, so the two pieces
+      // share a back as well as a face
+      configs[i] = { shape: "slab", depth: configs[j].depth };
       break;
     }
   }
@@ -652,7 +686,7 @@ function buildPortals(level, profile, depthMap) {
       openness = hatchOpenness(mapObject.animation.frames, built.openingMask,
         frame.width);
     } else if (config.shape === "slab") {
-      geometry = buildPortalGeometry(frame, 0, null);
+      geometry = buildPortalGeometry(frame, config.depth, null);
     } else {
       // the trigger box is in object space; the frame may be inset from it
       const tx = (info ? info.trigger_left + info.trigger_width / 2 : frame.width / 2)
