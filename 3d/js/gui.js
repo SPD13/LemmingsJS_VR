@@ -12,7 +12,17 @@
 const GUI_TILE_W = 16;
 const GUI_TILE_TOP = 16;
 const GUI_TILE_H = 23;
-const GUI_TILE_POP = 5; // how far a hovered button rises toward the player
+const GUI_TILE_POP = 5;    // how far a hovered button rises toward the player
+const GUI_TILE_GROW = 1.08;
+const GUI_BUTTONS = 13;
+
+// The panel ships as one composited bitmap - the lemming pictures are baked
+// into their tiles - but the tile background is only the yellow/gray dither
+// plus black, so the figures can be color-keyed out and extruded.
+const GUI_BG_COLORS = new Set(["240,240,0", "128,128,128", "0,0,0"]);
+const GUI_ICON_TOP = 26;     // below the skill-count digits (they change)
+const GUI_ICON_BOTTOM = 39;
+const GUI_ICON_DEPTH = 1;    // panel pixels of relief on the figures
 
 class GuiPanel {
   constructor(scene, game, resources) {
@@ -29,6 +39,95 @@ class GuiPanel {
     this.resources = resources;
     this.hoverTile = null;     // the raised copy of the hovered button
     this.hoverIndex = null;
+    this.reliefMesh = null;    // extruded lemming figures across the row
+    this.hoverRelief = null;   // the hovered tile's figure, raised with it
+    this._tileGeoms = [];
+  }
+
+  /** 1 where a pixel belongs to a tile's lemming picture, 0 elsewhere. */
+  _buildIconMask() {
+    const W = this.canvas.width, H = this.canvas.height;
+    const data = this.ctx.getImageData(0, 0, W, H).data;
+    const mask = new Uint8Array(W * H);
+    for (let y = GUI_ICON_TOP; y < GUI_ICON_BOTTOM; y++) {
+      for (let x = 0; x < GUI_BUTTONS * GUI_TILE_W && x < W; x++) {
+        const col = x % GUI_TILE_W;
+        // skip tile edges: the selection frame is drawn there and moves
+        if (col === 0 || col === GUI_TILE_W - 1) continue;
+        const i = (y * W + x) * 4;
+        const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
+        if (!GUI_BG_COLORS.has(key)) mask[y * W + x] = 1;
+      }
+    }
+    return mask;
+  }
+
+  /** Build the figure relief once the panel canvas holds real pixels. */
+  _buildRelief() {
+    const W = this.canvas.width, H = this.canvas.height;
+    this.iconMask = this._buildIconMask();
+    const geom = buildExtrudedSpriteGeometry(
+      (x, y) => this.iconMask[y * W + x] !== 0, W, H, GUI_ICON_DEPTH);
+    if (!geom) return;
+    this.resources.track(geom);
+
+    // the panel texture again, unflipped: this geometry's UVs run y-down
+    this.reliefTexture = this.resources.track(new THREE.CanvasTexture(this.canvas));
+    this.reliefTexture.flipY = false;
+    this.reliefTexture.magFilter = THREE.NearestFilter;
+    this.reliefTexture.minFilter = THREE.NearestFilter;
+    const material = this.resources.track(new THREE.MeshBasicMaterial({
+      map: this.reliefTexture, vertexColors: true, side: THREE.DoubleSide,
+    }));
+
+    this.reliefMesh = new THREE.Mesh(geom, material);
+    this.scene.add(this.reliefMesh);
+    this.hoverRelief = new THREE.Mesh(geom, material);
+    this.hoverRelief.visible = false;
+    this.hoverRelief.renderOrder = 6;
+    this.scene.add(this.hoverRelief);
+    this._layoutRelief();
+  }
+
+  /** Per-tile relief geometry (cached), for the raised hovered button. */
+  _tileGeometry(index) {
+    if (this._tileGeoms[index]) return this._tileGeoms[index];
+    const W = this.canvas.width, H = this.canvas.height;
+    const x0 = index * GUI_TILE_W, x1 = x0 + GUI_TILE_W;
+    const geom = buildExtrudedSpriteGeometry(
+      (x, y) => x >= x0 && x < x1 && this.iconMask[y * W + x] !== 0,
+      W, H, GUI_ICON_DEPTH);
+    if (geom) this.resources.track(geom);
+    this._tileGeoms[index] = geom;
+    return geom;
+  }
+
+  _layoutRelief() {
+    if (!this.reliefMesh || !this.mesh) return;
+    const sx = this.mesh.scale.x / this.canvas.width;
+    const sy = this.mesh.scale.y / this.canvas.height;
+    // geometry is in canvas pixels, y down: flip Y and pin to the top-left
+    this.reliefMesh.scale.set(sx, -sy, sx);
+    this.reliefMesh.position.set(
+      this.mesh.position.x - this.mesh.scale.x / 2,
+      this.mesh.position.y + this.mesh.scale.y / 2,
+      this.mesh.position.z + 0.2);
+    if (this.hoverIndex != null) this._layoutHoverRelief(this.hoverIndex);
+  }
+
+  /** Same transform, grown about the tile centre and raised with the tile. */
+  _layoutHoverRelief(index) {
+    if (!this.hoverRelief || !this.mesh) return;
+    const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
+    const sx = pw / this.canvas.width, sy = ph / this.canvas.height;
+    const g = GUI_TILE_GROW;
+    const cx = (index + 0.5) * GUI_TILE_W;
+    const cy = GUI_TILE_TOP + GUI_TILE_H / 2;
+    this.hoverRelief.scale.set(sx * g, -sy * g, sx * g);
+    this.hoverRelief.position.set(
+      this.mesh.position.x - pw / 2 + cx * sx * (1 - g),
+      this.mesh.position.y + ph / 2 + cy * sy * (g - 1),
+      this.mesh.position.z + GUI_TILE_POP + 0.2);
   }
 
   /** Create the plane once the first GameGui.render sized the buffer. */
@@ -86,8 +185,14 @@ class GuiPanel {
     if (index === this.hoverIndex) return;
     this.hoverIndex = index;
     this.hoverTile.visible = index != null;
+    if (this.hoverRelief) {
+      const geom = index != null ? this._tileGeometry(index) : null;
+      this.hoverRelief.visible = !!geom;
+      if (geom) this.hoverRelief.geometry = geom;
+    }
     if (index == null) return;
     this._layoutHoverTile(index);
+    this._layoutHoverRelief(index);
   }
 
   _layoutHoverTile(index) {
@@ -125,6 +230,7 @@ class GuiPanel {
     this.mesh.position.set(centerX, -h / 2 - 14, TERRAIN_DEPTH);
     this._layoutRequest = null;
     if (this.hoverIndex != null) this._layoutHoverTile(this.hoverIndex);
+    this._layoutRelief();
   }
 
   update() {
@@ -135,6 +241,8 @@ class GuiPanel {
     this.ctx.putImageData(this.display.getImageData(), 0, 0);
     this.texture.needsUpdate = true;
     if (this.hoverTexture) this.hoverTexture.needsUpdate = true; // shares the canvas
+    if (this.reliefTexture) this.reliefTexture.needsUpdate = true;
+    if (!this.reliefMesh) this._buildRelief(); // needs painted pixels
   }
 
   /** Convert a ray hit UV on the panel into pixel coords for GameGui. */
@@ -152,5 +260,7 @@ class GuiPanel {
   dispose() {
     if (this.mesh) this.scene.remove(this.mesh);
     if (this.hoverTile) this.scene.remove(this.hoverTile);
+    if (this.reliefMesh) this.scene.remove(this.reliefMesh);
+    if (this.hoverRelief) this.scene.remove(this.hoverRelief);
   }
 }

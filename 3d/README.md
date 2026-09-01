@@ -107,7 +107,10 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   mark dirty chunks, re-meshed with a per-tick budget.
 - `js/gui.js` — the original skill panel recycled: `GameGui` renders its pixel
   buffer as usual; we upload it as a texture on an in-scene plane and forward
-  ray-hit UVs as the mouse events it already listens for.
+  ray-hit UVs as the mouse events it already listens for. The panel is one
+  composited bitmap, so the lemming pictures on the buttons are color-keyed
+  off the yellow/gray tile dither and extruded 1px for relief; the hovered
+  button (and its figure) rises toward the player.
 - `js/vr.js` — WebXR layer: ENTER VR button, session handling, meter-scale
   diorama placement, controller rays feeding the same pick path as the mouse,
   grip drag and two-grip scale on the diorama root.
