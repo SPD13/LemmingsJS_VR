@@ -133,6 +133,7 @@ class VRManager {
       grip.add(new THREE.Mesh(
         new THREE.BoxGeometry(0.03, 0.03, 0.06), tipMat));
       scene.add(grip);
+      c.userData.grip = grip;
       c.addEventListener("connected", (e) =>
         console.log("[vr] controller connected:", e.data && e.data.handedness,
           e.data && e.data.targetRayMode));
@@ -302,6 +303,7 @@ class VRManager {
     const hasControllers = this.inputSourceCount > 0;
     for (const c of this.controllers) {
       c.visible = hasControllers;
+      if (c.userData.grip) c.userData.grip.visible = hasControllers;
       if (!hasControllers) {
         c.userData.dot.visible = false;
         continue;
