@@ -74,9 +74,17 @@ class VRManager {
     renderer.xr.enabled = true;
     createVRButton(renderer);
 
+    // a dim floor grid, shown only in-session: proves rendering works and
+    // gives scale/orientation even if the diorama is somewhere unexpected
+    this.floor = new THREE.GridHelper(8, 16, 0x2e5f46, 0x1c2733);
+    this.floor.visible = false;
+    scene.add(this.floor);
+
     const rayGeom = new THREE.BufferGeometry().setFromPoints(
       [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)]);
     const rayMat = new THREE.LineBasicMaterial({ color: 0x6fce7e });
+    const tipGeom = new THREE.SphereGeometry(0.02, 12, 8);
+    const tipMat = new THREE.MeshBasicMaterial({ color: 0x6fce7e });
     this.controllers = [];
     for (let i = 0; i < 2; i++) {
       const c = renderer.xr.getController(i);
@@ -84,6 +92,12 @@ class VRManager {
       const line = new THREE.Line(rayGeom, rayMat);
       line.scale.z = 3;
       c.add(line);
+      c.add(new THREE.Mesh(tipGeom, tipMat)); // visible even when rays point away
+      c.addEventListener("connected", (e) =>
+        console.log("[vr] controller connected:", e.data && e.data.handedness,
+          e.data && e.data.targetRayMode));
+      c.addEventListener("disconnected", () =>
+        console.log("[vr] controller disconnected"));
       c.addEventListener("selectstart", () => this._onSelect(c));
       c.addEventListener("squeezestart", () => { c.userData.gripping = true; this._grabBaseline(); });
       c.addEventListener("squeezeend", () => { c.userData.gripping = false; this._grabBaseline(); });
@@ -91,8 +105,16 @@ class VRManager {
       this.controllers.push(c);
     }
 
-    renderer.xr.addEventListener("sessionstart", () => this.hooks.placeDiorama());
-    renderer.xr.addEventListener("sessionend", () => this.resetDiorama());
+    renderer.xr.addEventListener("sessionstart", () => {
+      console.log("[vr] session started");
+      this.floor.visible = true;
+      try { this.hooks.placeDiorama(); } catch (e) { console.error("[vr] placement failed:", e); }
+    });
+    renderer.xr.addEventListener("sessionend", () => {
+      console.log("[vr] session ended");
+      this.floor.visible = false;
+      this.resetDiorama();
+    });
     this._recenterHeld = false;
   }
 
