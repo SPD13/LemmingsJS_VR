@@ -16,9 +16,11 @@
  */
 
 const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
-// skill toolbar, head-fixed so it is always to hand (metres, camera space)
-const VR_GUI_WIDTH = 0.42;
-const VR_GUI_Y = -0.26;
+// Skill toolbar, head-fixed so it is always to hand (metres, camera space).
+// Sized so a button is ~46mm across at this distance: a comfortable target
+// for a controller ray, and enough for the 1px relief to read in stereo.
+const VR_GUI_WIDTH = 0.6;
+const VR_GUI_Y = -0.3;
 const VR_GUI_Z = -0.75;
 
 function createVRButton(renderer) {
