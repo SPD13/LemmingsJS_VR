@@ -307,11 +307,17 @@
       session.gui.place(VR_GUI_WIDTH, VR_GUI_Y, VR_GUI_Z); // metres
     } else {
       const dist = 600;
-      const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const viewH = 2 * dist * tanHalf;
       const width = viewH * camera.aspect * 0.55;
       const height = width * session.gui.canvas.height / session.gui.canvas.width;
-      // flush with the bottom edge of the viewport
-      session.gui.place(width, -viewH / 2 + height / 2, -dist);
+      // A hovered button is grown and moved toward the camera, so it reaches
+      // lower on screen than the panel does: sit the panel high enough that
+      // the raised button still clears the bottom edge.
+      const pop = GUI_TILE_POP * (width / session.gui.canvas.width);
+      const tileBottom = session.gui.raisedTileBottomOffset() * height;
+      const y = -(dist - pop) * tanHalf + tileBottom + height * 0.04; // + slack
+      session.gui.place(width, y, -dist);
     }
   }
 

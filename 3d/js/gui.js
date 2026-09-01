@@ -20,8 +20,8 @@ const GUI_BUTTONS = 13;
 // (Aiming marks - cursor, controller dots - are transparent and so still
 // draw on top of it.)
 const GUI_ORDER_PANEL = 50;
-const GUI_ORDER_RELIEF = 51;
-const GUI_ORDER_DIGITS = 52;
+const GUI_ORDER_SOCKET = 51;  // covers the slot a raised button left behind
+const GUI_ORDER_RELIEF = 52;
 const GUI_ORDER_HOVER = 53;
 const GUI_ORDER_HOVER_RELIEF = 54;
 
@@ -59,7 +59,7 @@ class GuiPanel {
     this.resources = resources;
     this.hoverTile = null;     // the raised copy of the hovered button
     this.hoverIndex = null;
-    this.reliefMesh = null;    // extruded lemming figures across the row
+    this.tileReliefs = null;   // extruded artwork, one mesh per button
     this.hoverRelief = null;   // the hovered tile's figure, raised with it
     this._tileGeoms = [];
   }
@@ -83,39 +83,50 @@ class GuiPanel {
     return mask;
   }
 
-  /** Build the figure relief once the panel canvas holds real pixels. */
+  /** Build the button relief once the panel canvas holds real pixels.
+   *  One mesh per button: raising a button then means hiding its own relief
+   *  and showing the raised copy, instead of leaving a ghost behind. */
   _buildRelief() {
-    const W = this.canvas.width, H = this.canvas.height;
     this.iconMask = this._buildIconMask();
-    const geom = buildExtrudedSpriteGeometry(
-      (x, y) => this.iconMask[y * W + x] !== 0, W, H, GUI_ICON_DEPTH);
-    if (!geom) return;
-    this.resources.track(geom);
+    this.digitMask = this._buildDigitMask();
+    this._digitSum = this._digitChecksum();
 
     // the panel texture again, unflipped: this geometry's UVs run y-down
     this.reliefTexture = this.resources.track(new THREE.CanvasTexture(this.canvas));
     this.reliefTexture.flipY = false;
     this.reliefTexture.magFilter = THREE.NearestFilter;
     this.reliefTexture.minFilter = THREE.NearestFilter;
-    const material = this.resources.track(new THREE.MeshBasicMaterial({
+    this.reliefMaterial = this.resources.track(new THREE.MeshBasicMaterial({
       map: this.reliefTexture, vertexColors: true, side: THREE.DoubleSide,
       depthTest: false, depthWrite: false,
     }));
+    this._emptyGeom = this.resources.track(new THREE.BufferGeometry());
 
-    this.reliefMesh = new THREE.Mesh(geom, material);
-    this.reliefMesh.renderOrder = GUI_ORDER_RELIEF;
-    this.scene.add(this.reliefMesh);
-    this.hoverRelief = new THREE.Mesh(geom, material);
+    this.tileReliefs = [];
+    for (let i = 0; i < GUI_BUTTONS; i++) {
+      const mesh = new THREE.Mesh(this._tileGeometry(i) || this._emptyGeom,
+        this.reliefMaterial);
+      mesh.renderOrder = GUI_ORDER_RELIEF;
+      this.scene.add(mesh);
+      this.tileReliefs.push(mesh);
+    }
+
+    this.hoverRelief = new THREE.Mesh(this._emptyGeom, this.reliefMaterial);
     this.hoverRelief.visible = false;
     this.hoverRelief.renderOrder = GUI_ORDER_HOVER_RELIEF;
     this.scene.add(this.hoverRelief);
 
-    // the counts get the same relief, on geometry rebuilt as they change
-    this._emptyGeom = this.resources.track(new THREE.BufferGeometry());
-    this.digitMesh = new THREE.Mesh(this._emptyGeom, material);
-    this.digitMesh.renderOrder = GUI_ORDER_DIGITS;
-    this.scene.add(this.digitMesh);
-    this._refreshDigits();
+    // the empty slot behind a raised button, so the panel art underneath it
+    // cannot show through beside the raised copy
+    this.socket = new THREE.Mesh(
+      this.resources.track(new THREE.PlaneGeometry(1, 1)),
+      this.resources.track(new THREE.MeshBasicMaterial({
+        color: 0x05070c, depthTest: false, depthWrite: false,
+      })));
+    this.socket.visible = false;
+    this.socket.renderOrder = GUI_ORDER_SOCKET;
+    this.scene.add(this.socket);
+
     this._layoutRelief();
   }
 
@@ -147,21 +158,24 @@ class GuiPanel {
     return h;
   }
 
-  /** Rebuild the digits' relief when a count changes. */
+  /** Rebuild the buttons' relief when a count changes (the digits are part
+   *  of each button's geometry). */
   _refreshDigits() {
     const sum = this._digitChecksum();
     if (sum === this._digitSum) return;
     this._digitSum = sum;
     this.digitMask = this._buildDigitMask();
-    const W = this.canvas.width, H = this.canvas.height;
-    const geom = buildExtrudedSpriteGeometry(
-      (x, y) => this.digitMask[y * W + x] !== 0, W, H, GUI_ICON_DEPTH);
-    if (this.digitMesh.geometry && this.digitMesh.geometry !== this._emptyGeom) {
-      this.digitMesh.geometry.dispose();
+    for (const geom of this._tileGeoms) {
+      if (geom) geom.dispose();
     }
-    this.digitMesh.geometry = geom || this._emptyGeom;
-    this.digitMesh.visible = !!geom;
-    this._tileGeoms.length = 0; // hovered-tile geometry includes the digits
+    this._tileGeoms.length = 0;
+    for (let i = 0; i < this.tileReliefs.length; i++) {
+      this.tileReliefs[i].geometry = this._tileGeometry(i) || this._emptyGeom;
+    }
+    if (this.hoverIndex != null) {
+      this.hoverRelief.geometry =
+        this._tileGeometry(this.hoverIndex) || this._emptyGeom;
+    }
   }
 
   /** Per-tile relief geometry (cached), for the raised hovered button. */
@@ -180,20 +194,32 @@ class GuiPanel {
   }
 
   _layoutRelief() {
-    if (!this.reliefMesh || !this.mesh) return;
+    if (!this.tileReliefs || !this.mesh) return;
     const sx = this.mesh.scale.x / this.canvas.width;
     const sy = this.mesh.scale.y / this.canvas.height;
     // geometry is in canvas pixels, y down: flip Y and pin to the top-left
-    this.reliefMesh.scale.set(sx, -sy, sx);
-    this.reliefMesh.position.set(
-      this.mesh.position.x - this.mesh.scale.x / 2,
-      this.mesh.position.y + this.mesh.scale.y / 2,
-      this.mesh.position.z + 0.2 * sx);
-    if (this.digitMesh) {
-      this.digitMesh.scale.copy(this.reliefMesh.scale);
-      this.digitMesh.position.copy(this.reliefMesh.position);
+    for (const mesh of this.tileReliefs) {
+      mesh.scale.set(sx, -sy, sx);
+      mesh.position.set(
+        this.mesh.position.x - this.mesh.scale.x / 2,
+        this.mesh.position.y + this.mesh.scale.y / 2,
+        this.mesh.position.z + 0.2 * sx);
     }
-    if (this.hoverIndex != null) this._layoutHoverRelief(this.hoverIndex);
+    if (this.hoverIndex != null) {
+      this._layoutSocket(this.hoverIndex);
+      this._layoutHoverRelief(this.hoverIndex);
+    }
+  }
+
+  _layoutSocket(index) {
+    if (!this.socket || !this.mesh) return;
+    const cw = this.canvas.width, ch = this.canvas.height;
+    const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
+    this.socket.scale.set((GUI_TILE_W / cw) * pw, (GUI_TILE_H / ch) * ph, 1);
+    this.socket.position.set(
+      this.mesh.position.x + ((index + 0.5) * GUI_TILE_W / cw - 0.5) * pw,
+      this.mesh.position.y + (0.5 - (GUI_TILE_TOP + GUI_TILE_H / 2) / ch) * ph,
+      this.mesh.position.z + 0.1 * this._unit);
   }
 
   /** Same transform, grown about the tile centre and raised with the tile. */
@@ -269,15 +295,28 @@ class GuiPanel {
     if (!this._ensureMesh()) return;
     const index = this._buttonIndexAt(uv);
     if (index === this.hoverIndex) return;
+    // put the previously raised button back in its slot
+    if (this.tileReliefs && this.hoverIndex != null && this.tileReliefs[this.hoverIndex]) {
+      this.tileReliefs[this.hoverIndex].visible = true;
+    }
     this.hoverIndex = index;
     this.hoverTile.visible = index != null;
+    if (this.socket) this.socket.visible = index != null;
+    if (index == null) {
+      if (this.hoverRelief) this.hoverRelief.visible = false;
+      return;
+    }
+    // the button leaves its slot: hide it there, show the raised copy
+    if (this.tileReliefs && this.tileReliefs[index]) {
+      this.tileReliefs[index].visible = false;
+    }
     if (this.hoverRelief) {
-      const geom = index != null ? this._tileGeometry(index) : null;
+      const geom = this._tileGeometry(index);
       this.hoverRelief.visible = !!geom;
       if (geom) this.hoverRelief.geometry = geom;
     }
-    if (index == null) return;
     this._layoutHoverTile(index);
+    this._layoutSocket(index);
     this._layoutHoverRelief(index);
   }
 
@@ -323,6 +362,15 @@ class GuiPanel {
     this._layoutRelief();
   }
 
+  /** How far a raised button's bottom edge sits below the panel's centre,
+   *  as a fraction of panel height (used to keep it inside the viewport). */
+  raisedTileBottomOffset() {
+    const ch = this.canvas.height || 40;
+    const centre = (GUI_TILE_TOP + GUI_TILE_H / 2) / ch;
+    const bottom = (GUI_TILE_TOP + GUI_TILE_H) / ch;
+    return (bottom - centre) * GUI_TILE_GROW + (centre - 0.5);
+  }
+
   /** Parent-space units per panel pixel: keeps depth offsets proportional
    *  whether the parent measures in game pixels or metres. */
   get _unit() {
@@ -338,7 +386,7 @@ class GuiPanel {
     this.texture.needsUpdate = true;
     if (this.hoverTexture) this.hoverTexture.needsUpdate = true; // shares the canvas
     if (this.reliefTexture) this.reliefTexture.needsUpdate = true;
-    if (!this.reliefMesh) this._buildRelief(); // needs painted pixels
+    if (!this.tileReliefs) this._buildRelief(); // needs painted pixels
     else this._refreshDigits();
   }
 
@@ -357,8 +405,8 @@ class GuiPanel {
   dispose() {
     if (this.mesh) this.scene.remove(this.mesh);
     if (this.hoverTile) this.scene.remove(this.hoverTile);
-    if (this.reliefMesh) this.scene.remove(this.reliefMesh);
+    if (this.tileReliefs) this.tileReliefs.forEach((m) => this.scene.remove(m));
     if (this.hoverRelief) this.scene.remove(this.hoverRelief);
-    if (this.digitMesh) this.scene.remove(this.digitMesh);
+    if (this.socket) this.scene.remove(this.socket);
   }
 }
