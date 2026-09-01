@@ -200,3 +200,11 @@ app.on("window-all-closed", async () => {
   await stopServer();
   app.quit();
 });
+
+// every quit path (Cmd+Q, Dock, shutdown) stops the server before exiting
+app.on("will-quit", (e) => {
+  if (server) {
+    e.preventDefault();
+    stopServer().then(() => app.quit());
+  }
+});
