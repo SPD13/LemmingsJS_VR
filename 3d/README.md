@@ -100,7 +100,11 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   relief with shaded edge walls (the plan's "characters get volume", §5.5)
   and cached. `HeadlessStage` satisfies the Stage contract for
   `DisplayImage` without a canvas.
-- `js/portals.js` — entrances and exits as real openings (plan §5.4). Their
+- `js/portals.js` — entrances and exits as real openings (plan §5.4). The
+  entrance is a square hatch lying flat overhead with two doors hinged along
+  its left and right edges: the trapezoid in the artwork is un-projected back
+  into a horizontal square, and the doors swing on real hinges, their angle
+  read from how far each animation frame has the opening revealed. Their
   sprites are perspective drawings of a box, so instead of keying depth off
   brightness the opening is rebuilt geometrically: a distance transform of the
   sprite's silhouette says how far inside each pixel lies, and that becomes
