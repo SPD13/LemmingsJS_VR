@@ -15,6 +15,15 @@ const GUI_TILE_H = 23;
 const GUI_TILE_POP = 5;    // how far a hovered button rises toward the player
 const GUI_TILE_GROW = 1.08;
 const GUI_BUTTONS = 13;
+// The toolbar is an overlay: drawn without depth testing, after the world,
+// so it is always visible and clickable no matter what it sits in front of.
+// (Aiming marks - cursor, controller dots - are transparent and so still
+// draw on top of it.)
+const GUI_ORDER_PANEL = 50;
+const GUI_ORDER_RELIEF = 51;
+const GUI_ORDER_DIGITS = 52;
+const GUI_ORDER_HOVER = 53;
+const GUI_ORDER_HOVER_RELIEF = 54;
 
 // The panel ships as one composited bitmap - the button pictures are baked
 // into their tiles - but every tile's background is just the yellow/gray
@@ -90,18 +99,21 @@ class GuiPanel {
     this.reliefTexture.minFilter = THREE.NearestFilter;
     const material = this.resources.track(new THREE.MeshBasicMaterial({
       map: this.reliefTexture, vertexColors: true, side: THREE.DoubleSide,
+      depthTest: false, depthWrite: false,
     }));
 
     this.reliefMesh = new THREE.Mesh(geom, material);
+    this.reliefMesh.renderOrder = GUI_ORDER_RELIEF;
     this.scene.add(this.reliefMesh);
     this.hoverRelief = new THREE.Mesh(geom, material);
     this.hoverRelief.visible = false;
-    this.hoverRelief.renderOrder = 6;
+    this.hoverRelief.renderOrder = GUI_ORDER_HOVER_RELIEF;
     this.scene.add(this.hoverRelief);
 
     // the counts get the same relief, on geometry rebuilt as they change
     this._emptyGeom = this.resources.track(new THREE.BufferGeometry());
     this.digitMesh = new THREE.Mesh(this._emptyGeom, material);
+    this.digitMesh.renderOrder = GUI_ORDER_DIGITS;
     this.scene.add(this.digitMesh);
     this._refreshDigits();
     this._layoutRelief();
@@ -213,11 +225,14 @@ class GuiPanel {
     this.texture.minFilter = THREE.NearestFilter;
 
     const material = this.resources.track(
-      new THREE.MeshBasicMaterial({ map: this.texture })
+      new THREE.MeshBasicMaterial({
+        map: this.texture, depthTest: false, depthWrite: false,
+      })
     );
     const geom = this.resources.track(new THREE.PlaneGeometry(1, 1));
     this.mesh = new THREE.Mesh(geom, material);
     this.mesh.name = "gui-panel";
+    this.mesh.renderOrder = GUI_ORDER_PANEL;
     this.scene.add(this.mesh);
 
     // hovered-button copy: same texture, UVs cropped to one button, drawn
@@ -229,10 +244,12 @@ class GuiPanel {
       GUI_TILE_W / this.canvas.width, GUI_TILE_H / this.canvas.height);
     this.hoverTile = new THREE.Mesh(
       this.resources.track(new THREE.PlaneGeometry(1, 1)),
-      this.resources.track(new THREE.MeshBasicMaterial({ map: this.hoverTexture }))
+      this.resources.track(new THREE.MeshBasicMaterial({
+        map: this.hoverTexture, depthTest: false, depthWrite: false,
+      }))
     );
     this.hoverTile.visible = false;
-    this.hoverTile.renderOrder = 5;
+    this.hoverTile.renderOrder = GUI_ORDER_HOVER;
     this.scene.add(this.hoverTile);
     return true;
   }
@@ -288,6 +305,8 @@ class GuiPanel {
    *  (GameGui sizes it on its first render), so the request is remembered and
    *  applied from update(). */
   place(width, y, z) {
+    const p = this._placement;
+    if (this._placed && p && p.width === width && p.y === y && p.z === z) return;
     this._placement = { width, y, z };
     this._placed = false;
     this._applyPlacement();

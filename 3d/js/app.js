@@ -310,7 +310,8 @@
       const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const width = viewH * camera.aspect * 0.55;
       const height = width * session.gui.canvas.height / session.gui.canvas.width;
-      session.gui.place(width, -viewH / 2 + height / 2 + viewH * 0.05, -dist);
+      // flush with the bottom edge of the viewport
+      session.gui.place(width, -viewH / 2 + height / 2, -dist);
     }
   }
 
@@ -929,6 +930,7 @@
       session.lemmingPool.applyInterpolation(alpha);
       updateHoverRing(); // ring keeps following the hovered lemming
       session.gui.update();
+      layoutGuiPanel(); // no-ops unless the viewport or mode changed
     }
     if (renderer.xr.isPresenting) {
       vr.update(); // controller grabs + hover; headset pose drives the camera
