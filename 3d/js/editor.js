@@ -40,6 +40,7 @@ class PieceEditor {
       classBtns: Array.from(document.querySelectorAll("#hud-editor [data-class]")),
       autoBtn: document.getElementById("ed-auto"),
       embossBtn: document.getElementById("ed-emboss"),
+      invertBtn: document.getElementById("ed-invert"),
       resetBtn: document.getElementById("ed-reset"),
       saveBtn: document.getElementById("ed-save"),
       exportBtn: document.getElementById("ed-export"),
@@ -48,12 +49,14 @@ class PieceEditor {
     this._onClassBtn = (e) => this.setClass(e.target.dataset.class);
     this._onAutoBtn = () => this.setClass(null);
     this._onEmbossBtn = () => this.toggleEmboss();
+    this._onInvertBtn = () => this.toggleEmbossInvert();
     this._onResetBtn = () => this.resetAll();
     this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
     this.dom.classBtns.forEach((b) => b.addEventListener("click", this._onClassBtn));
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
+    this.dom.invertBtn.addEventListener("click", this._onInvertBtn);
     this.dom.resetBtn.addEventListener("click", this._onResetBtn);
     this.dom.saveBtn.addEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.addEventListener("click", this._onExportBtn);
@@ -171,17 +174,31 @@ class PieceEditor {
     this._renderInfo();
   }
 
-  /** Turn colour-keyed 3D relief on/off for the selected piece. */
-  toggleEmboss() {
-    if (this.selectedId == null) return;
+  _setEmboss(value) {
     if (!this.s.profile) this.s.profile = {};
     const p = this.s.profile;
     if (!p.emboss) p.emboss = { byId: {} };
     if (!p.emboss.byId) p.emboss.byId = {};
-    p.emboss.byId[this.selectedId] = !embossEnabledFor(this.selectedId, p);
+    p.emboss.byId[this.selectedId] = value;
     DepthProfiles._cache.set(this.profileUrl, p);
     if (this.s.rebuildRelief) this.s.rebuildRelief();
     this._renderInfo();
+  }
+
+  /** Turn colour-keyed 3D relief on/off for the selected piece. */
+  toggleEmboss() {
+    if (this.selectedId == null) return;
+    const on = embossEnabledFor(this.selectedId, this.s.profile);
+    // turning it back on keeps whichever direction was in use
+    this._setEmboss(on ? false
+      : (embossInvertedFor(this.selectedId, this.s.profile) ? "invert" : true));
+  }
+
+  /** Swap which shades are raised: lighter (default) or darker (inverted). */
+  toggleEmbossInvert() {
+    if (this.selectedId == null) return;
+    const inverted = embossInvertedFor(this.selectedId, this.s.profile);
+    this._setEmboss(inverted ? true : "invert"); // also enables the effect
   }
 
   cycleClass() {
@@ -226,6 +243,9 @@ class PieceEditor {
     this.dom.embossBtn.disabled = !btnsOn;
     this.dom.embossBtn.classList.toggle("active",
       btnsOn && embossEnabledFor(this.selectedId, this.s.profile));
+    this.dom.invertBtn.disabled = !btnsOn;
+    this.dom.invertBtn.classList.toggle("active",
+      btnsOn && embossInvertedFor(this.selectedId, this.s.profile));
     if (!this._hasPieceData) {
       this.dom.info.textContent = "no piece data for this level (special level)";
       return;
@@ -240,8 +260,10 @@ class PieceEditor {
       "piece " + this.selectedId + " · " + n + " placement" + (n === 1 ? "" : "s") +
       " · " + (override ? "tagged: " + override
                         : "auto: " + this._autoClasses(this.selectedId).join("/")) +
-      " · 3D shade " +
-      (embossEnabledFor(this.selectedId, this.s.profile) ? "on" : "off");
+      " · 3D shade " + (embossEnabledFor(this.selectedId, this.s.profile)
+        ? (embossInvertedFor(this.selectedId, this.s.profile)
+            ? "on (dark raised)" : "on (light raised)")
+        : "off");
   }
 
   /** POST the profile to the launcher server, which writes 3d/profiles/. */
@@ -300,6 +322,7 @@ class PieceEditor {
     this.dom.classBtns.forEach((b) => b.removeEventListener("click", this._onClassBtn));
     this.dom.autoBtn.removeEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.removeEventListener("click", this._onEmbossBtn);
+    this.dom.invertBtn.removeEventListener("click", this._onInvertBtn);
     this.dom.resetBtn.removeEventListener("click", this._onResetBtn);
     this.dom.saveBtn.removeEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.removeEventListener("click", this._onExportBtn);

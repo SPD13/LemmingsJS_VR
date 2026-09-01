@@ -39,7 +39,9 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. Off by default (it multiplies the
   terrain's triangle count), persisted in localStorage; individual pieces can
-  opt out with "3D shade" in the piece editor.
+  opt out with "3D shade" in the piece editor, or flip which shades are
+  raised with "invert" (some pieces are drawn with dark highlights, so
+  darker pixels are the ones standing proud).
 - "smooth" slopes the relief between neighbouring heights instead of stepping
   them, by averaging the pixel heights that meet at each quad corner (crisp
   at depth-class boundaries and silhouettes). Also off by default and

@@ -108,12 +108,29 @@ function buildPieceMap(level, groundData) {
   return map;
 }
 
-/** Does this piece id get colour-keyed relief? Pieces opt out, not in. */
-function embossEnabledFor(pieceId, profile) {
+/**
+ * Colour-keyed relief setting for a piece id, from the profile's emboss map:
+ *   false     -> "off"     (no relief)
+ *   "invert"  -> "invert"  (darker pixels are the raised ones)
+ *   otherwise -> "normal"  (lighter pixels are raised; the default)
+ * Pieces opt out, not in.
+ */
+function embossModeFor(pieceId, profile) {
   const cfg = (profile && profile.emboss) || {};
   const byId = cfg.byId || {};
-  if (Object.prototype.hasOwnProperty.call(byId, pieceId)) return !!byId[pieceId];
-  return cfg.default !== false;
+  const value = Object.prototype.hasOwnProperty.call(byId, pieceId)
+    ? byId[pieceId] : cfg.default;
+  if (value === false) return "off";
+  if (value === "invert") return "invert";
+  return "normal";
+}
+
+function embossEnabledFor(pieceId, profile) {
+  return embossModeFor(pieceId, profile) !== "off";
+}
+
+function embossInvertedFor(pieceId, profile) {
+  return embossModeFor(pieceId, profile) === "invert";
 }
 
 /**
@@ -128,9 +145,11 @@ function buildReliefMap(level, pieceMap, profile, enabled) {
   const relief = new Uint8Array(W * H);
   if (!enabled) return relief;
 
+  // 0 = off, 1 = lighter is higher, 2 = darker is higher
   const embossById = new Uint8Array(256);
   for (let id = 0; id < 255; id++) {
-    embossById[id + 1] = embossEnabledFor(id, profile) ? 1 : 0;
+    const mode = embossModeFor(id, profile);
+    embossById[id + 1] = mode === "off" ? 0 : mode === "invert" ? 2 : 1;
   }
 
   const img = level.groundImage;
@@ -150,8 +169,10 @@ function buildReliefMap(level, pieceMap, profile, enabled) {
   if (hi <= lo) return relief;
 
   for (let i = 0; i < W * H; i++) {
-    if (!mask[i] || !embossById[pieceMap[i]]) continue;
-    relief[i] = Math.round(((luma(i) - lo) / (hi - lo)) * RELIEF_MAX);
+    const mode = embossById[pieceMap[i]];
+    if (!mask[i] || !mode) continue;
+    const t = (luma(i) - lo) / (hi - lo);
+    relief[i] = Math.round((mode === 2 ? 1 - t : t) * RELIEF_MAX);
   }
   return relief;
 }
