@@ -86,6 +86,8 @@
     dioramaRoot.remove(session.worldGroup);
     session.resources.disposeAll();
     session = null;
+    hoveredLemming = null;
+    cursorSim = null;
   }
 
   async function loadLevel() {
@@ -364,21 +366,48 @@
     if (lem) session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
   }
 
+  // Sticky hover: once a lemming is acquired, the yellow ring follows it as
+  // it walks, releasing only when the circle has moved off the pointer's
+  // position (or the lemming is gone). Shared by mouse, controller ray, and
+  // the VR mouse-fallback - they all feed applyHover.
+  const HOVER_RING_RADIUS = 9; // matches the ring geometry's outer radius
+  let hoveredLemming = null;
+  let cursorSim = null;
+
   /** Aiming feedback (mouse hover or VR controller ray). */
   function applyHover(p) {
     if (!session) return;
     if (p && p.simX !== undefined) {
+      cursorSim = { x: p.simX, y: p.simY };
       const lem = session.game.getLemmingManager().getLemmingAt(p.simX, p.simY);
-      if (lem && lem.action) {
-        session.ring.visible = true;
-        session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
-        hud.hover.textContent =
-          "lemming " + lem.id + " — " + lem.action.getActionName();
-        return;
-      }
+      if (lem && lem.action) hoveredLemming = lem;
+    } else {
+      cursorSim = null;
     }
-    session.ring.visible = false;
-    hud.hover.innerHTML = "&nbsp;";
+    updateHoverRing();
+  }
+
+  /** Per-frame: track the hovered lemming, release when it escapes the cursor. */
+  function updateHoverRing() {
+    if (!session) return;
+    let lem = hoveredLemming;
+    if (lem && (lem.removed || !lem.action)) lem = null;
+    if (lem && cursorSim) {
+      const dx = lem.x - cursorSim.x;
+      const dy = (lem.y - 5) - cursorSim.y;
+      if (dx * dx + dy * dy > HOVER_RING_RADIUS * HOVER_RING_RADIUS) lem = null;
+    }
+    if (!cursorSim) lem = null;
+    hoveredLemming = lem;
+    if (lem) {
+      session.ring.visible = true;
+      session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
+      hud.hover.textContent =
+        "lemming " + lem.id + " — " + lem.action.getActionName();
+    } else {
+      session.ring.visible = false;
+      hud.hover.innerHTML = "&nbsp;";
+    }
   }
 
   // while a session has controllers, they own the pointer and stray desktop
@@ -635,6 +664,7 @@
         tickDebt = 0;
       }
       session.lemmingPool.applyInterpolation(alpha);
+      updateHoverRing(); // ring keeps following the hovered lemming
       session.gui.update();
     }
     if (renderer.xr.isPresenting) {
