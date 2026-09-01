@@ -86,9 +86,21 @@
     hud.state.textContent = "";
     hud.state.className = "";
 
+    window.__lem3dGroundData = null; // cleared so a VGASPEC level can't reuse a stale piece list
     const game = await factory.getGame(state.gameType);
     await game.loadLevel(state.group, state.level);
     const level = game.level;
+
+    // depth compositing (plan §5.1): per-tileset profile + per-pixel classes
+    const config = await factory.getConfig(state.gameType);
+    const groundData = window.__lem3dGroundData;
+    let profile = null;
+    if (groundData && groundData.lr) {
+      const slug = (config.path || "game").replace(/[^a-z0-9]/gi, "").toLowerCase();
+      const setId = groundData.lr.graphicSet1 != null ? groundData.lr.graphicSet1 : 0;
+      profile = await DepthProfiles.load("profiles/" + slug + "-g" + setId + ".json");
+    }
+    const depthMap = buildDepthMap(level, groundData, profile);
 
     const resources = new SessionResources();
 
@@ -98,7 +110,7 @@
     worldGroup.position.y = level.height;
     scene.add(worldGroup);
 
-    const terrain = new TerrainMesh(worldGroup, level, resources);
+    const terrain = new TerrainMesh(worldGroup, level, depthMap, resources);
 
     // dark backdrop behind the terrain so holes read as depth, not void
     const backdrop = new THREE.Mesh(
@@ -209,7 +221,7 @@
 
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
-      lemmingPool, objectPool, particles, resources,
+      lemmingPool, objectPool, particles, resources, depthMap, profile,
       getLastTickTime: () => lastTickTime,
     };
   }
