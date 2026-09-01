@@ -19,6 +19,10 @@ const PORTAL_ENTRANCE_ID = 1;      // level-object id of an entrance
 const PORTAL_DEFAULT_DEPTH = 12;   // game pixels of recession
 const PORTAL_EXIT_DEPTH = 14;
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
+// The artist's viewing distance, in hatch widths: the trapezoid fixes the
+// ratio between the near and far edge distances but not the absolute scale,
+// so this sets how deep a given taper reads. Larger = deeper hatch.
+const PORTAL_VIEW_DISTANCE = 3;
 
 /** Stash the object list and their metadata as the level is built. */
 (function installObjectDataHook() {
@@ -231,13 +235,22 @@ function buildFlapGeometry(uv, halfWidth, depth, sign) {
 
 function buildCeilingGeometry(frame, depth) {
   const w = frame.width, h = frame.height, mask = frame.getMask();
+  const buf = frame.getBuffer();
   const dist = spriteInteriorDistance(frame);
 
+  // Separate the door from its frame without naming a single colour: the
+  // frame's colours are the ones drawn on the sprite's outline, so interior
+  // pixels painted in anything else are the door.
+  const outline = new Set();
+  for (let i = 0; i < w * h; i++) {
+    if (mask[i] && dist[i] <= 1) outline.add(buf[i]);
+  }
   const rows = [];
   for (let y = 0; y < h; y++) {
     let min = null, max = null;
     for (let x = 0; x < w; x++) {
-      if (mask[y * w + x] && dist[y * w + x] >= PORTAL_CARVE_MIN) {
+      const i = y * w + x;
+      if (mask[i] && dist[i] >= PORTAL_CARVE_MIN && !outline.has(buf[i])) {
         if (min === null) min = x;
         max = x;
       }
@@ -250,15 +263,25 @@ function buildCeilingGeometry(frame, depth) {
     if (rows[y] && rows[y].width > nearW) { nearW = rows[y].width; nearY = y; }
   }
   if (nearY < 0) return null;
+  // follow the taper down, ignoring stray single pixels below the door
   let farY = nearY;
   for (let y = nearY + 1; y < h; y++) {
     if (!rows[y] || rows[y].width > rows[y - 1].width) break;
+    if (rows[y].width < nearW * 0.4) break;
     farY = y;
   }
   if (farY - nearY < 2) return null; // no taper: not a panel in perspective
 
-  // the hatch is a square: it is as deep as it is wide
-  depth = nearW;
+  // How deep the hatch is comes from the trapezoid itself. Under perspective
+  // a constant width scales with 1/distance, so near/far width is exactly how
+  // much farther the back edge lies: d_far = d_near * (w_near / w_far). The
+  // depth is then d_near * (ratio - 1) - the one thing the drawing cannot
+  // tell us is d_near, the artist's viewing distance, so that is expressed in
+  // hatch widths and kept as a constant.
+  const farW = rows[farY].width;
+  depth = farW > 0 && farW < nearW
+    ? PORTAL_VIEW_DISTANCE * nearW * (nearW / farW - 1)
+    : nearW;
   const span = farY - nearY;
   const nearCentre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const rowAt = (y) => rows[Math.max(nearY, Math.min(farY, y))];
