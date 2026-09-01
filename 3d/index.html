@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lemmings 3D — validation mode</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c; }
+  body { font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; }
+  #view { position: absolute; inset: 0; }
+  .hud {
+    position: absolute; z-index: 10; background: rgba(10, 14, 22, 0.82);
+    border: 1px solid #2a3446; border-radius: 6px; padding: 10px 14px;
+    font-size: 12px; line-height: 1.6; user-select: none;
+  }
+  #hud-top { top: 12px; left: 12px; max-width: 340px; }
+  #hud-top h1 { font-size: 13px; margin: 0 0 4px; color: #6fce7e; letter-spacing: 0.06em; }
+  #level-name { color: #f0f3f8; font-size: 13px; }
+  #game-state { color: #8fa1bb; }
+  #game-state.won { color: #6fce7e; }
+  #game-state.lost { color: #e07a6a; }
+  #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
+  #hud-keys { top: 12px; right: 12px; color: #8fa1bb; text-align: right; }
+  #hud-keys b { color: #cdd6e4; font-weight: 600; }
+  .btnrow { margin-top: 8px; display: flex; gap: 6px; }
+  button {
+    font: inherit; font-size: 11px; color: #cdd6e4; background: #1c2432;
+    border: 1px solid #33405a; border-radius: 4px; padding: 3px 10px; cursor: pointer;
+  }
+  button:hover { background: #263043; }
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    z-index: 20; background: #10141c; color: #6fce7e; font-size: 14px; letter-spacing: 0.1em;
+  }
+  #loading.hidden { display: none; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="loading">LOADING&hellip;</div>
+
+<div id="hud-top" class="hud">
+  <h1>LEMMINGS 3D &middot; VALIDATION MODE</h1>
+  <div id="level-name">&nbsp;</div>
+  <div id="level-meta">&nbsp;</div>
+  <div id="game-state">&nbsp;</div>
+  <div class="btnrow">
+    <button id="btn-prev">&larr; prev</button>
+    <button id="btn-restart">restart</button>
+    <button id="btn-next">next &rarr;</button>
+    <button id="btn-pause">pause</button>
+  </div>
+</div>
+
+<div id="hud-keys" class="hud">
+  <b>drag</b> orbit &middot; <b>right-drag</b> pan &middot; <b>wheel</b> zoom<br>
+  <b>click</b> lemming: assign skill &middot; panel: as in game<br>
+  <b>space</b> pause &middot; <b>n</b> step &middot; <b>+/-</b> speed &middot; <b>,/.</b> level<br>
+  <b>r</b> dump replay to console
+</div>
+
+<div id="hud-hover" class="hud">&nbsp;</div>
+
+<script src="../js/lemmings.js"></script>
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script src="js/bridge.js"></script>
+<script src="js/terrain.js"></script>
+<script src="js/gui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
