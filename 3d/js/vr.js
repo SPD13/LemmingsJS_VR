@@ -16,7 +16,6 @@
  */
 
 const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
-const VR_VIEW_POSITION = new THREE.Vector3(0, 1.2, -0.9); // diorama focus point
 
 function createVRButton(renderer) {
   const button = document.createElement("button");
@@ -108,7 +107,8 @@ class VRManager {
     renderer.xr.addEventListener("sessionstart", () => {
       console.log("[vr] session started");
       this.floor.visible = true;
-      try { this.hooks.placeDiorama(); } catch (e) { console.error("[vr] placement failed:", e); }
+      // head pose is only valid once frames render; update() places then
+      this._needsPlacement = true;
     });
     renderer.xr.addEventListener("sessionend", () => {
       console.log("[vr] session ended");
@@ -141,6 +141,7 @@ class VRManager {
 
   resetDiorama() {
     this.dioramaRoot.position.set(0, 0, 0);
+    this.dioramaRoot.rotation.set(0, 0, 0);
     this.dioramaRoot.scale.setScalar(1);
   }
 
@@ -184,6 +185,14 @@ class VRManager {
   /** Per-frame: apply grabs, recenter button, hover from controller 0. */
   update() {
     if (!this.presenting) return;
+    if (this._needsPlacement) {
+      try {
+        if (this.hooks.placeDiorama()) this._needsPlacement = false;
+      } catch (e) {
+        console.error("[vr] placement failed:", e);
+        this._needsPlacement = false;
+      }
+    }
     this._pollRecenter();
     const g = this._grab;
     if (g && g.mode === 1 && g.c.userData.gripping) {

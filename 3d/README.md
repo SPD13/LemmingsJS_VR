@@ -41,17 +41,18 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
 
 The same page is the VR build: an ENTER VR button appears bottom-center when
 WebXR is available. In the headset the diorama is scaled to 2.5&nbsp;mm per
-game pixel (a 1600&nbsp;px level is a 4&nbsp;m tabletop strip) and placed at
-chest height, focused on the level's intended start area.
+game pixel (a 1600&nbsp;px level is a 4&nbsp;m tabletop strip) and placed just
+below eye level, 0.9&nbsp;m in front of wherever you are actually standing
+and facing (not the room-calibration origin), focused on the level's
+intended start area.
 
 - **trigger** — the desktop click: aim the controller ray at a lemming to
   assign the selected skill, or at the skill panel to use it as in the game
   (controller&nbsp;0's ray also drives the highlight ring)
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
-- **A/X** (either controller) — recenter: snap the diorama back to its
-  session-start placement and scale (the headset's own system recenter —
-  long-press the Meta button on Quest — re-aligns your standing origin too)
+- **A/X** (either controller) — recenter: bring the diorama back in front of
+  where you are looking right now, at default scale
 - the world never moves on its own, so there is no comfort concern
 
 WebXR needs a secure context. Ways to run it:
