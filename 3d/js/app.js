@@ -46,6 +46,11 @@
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x10141c);
 
+  // everything game-sized lives under this root: identity on desktop
+  // (1 unit = 1 game pixel), scaled to meters and placed in reach in VR
+  const dioramaRoot = new THREE.Group();
+  scene.add(dioramaRoot);
+
   const camera = new THREE.PerspectiveCamera(
     50, window.innerWidth / window.innerHeight, 1, 10000);
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -76,7 +81,7 @@
     session.particles.dispose();
     session.terrain.dispose();
     session.gui.dispose();
-    scene.remove(session.worldGroup);
+    dioramaRoot.remove(session.worldGroup);
     session.resources.disposeAll();
     session = null;
   }
@@ -111,7 +116,7 @@
     const worldGroup = new THREE.Group();
     worldGroup.scale.y = -1;
     worldGroup.position.y = level.height;
-    scene.add(worldGroup);
+    dioramaRoot.add(worldGroup);
 
     const terrain = new TerrainMesh(worldGroup, level, depthMap, resources);
 
@@ -154,7 +159,7 @@
     const lemCapture = new SpriteCapture();
     const objCapture = new SpriteCapture();
 
-    const gui = new GuiPanel(scene, game, resources);
+    const gui = new GuiPanel(dioramaRoot, game, resources);
 
     if (state.replay) {
       game.getCommandManager().loadReplay(state.replay);
@@ -229,6 +234,7 @@
       getLastTickTime: () => lastTickTime,
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
+    if (renderer.xr.isPresenting) placeDioramaForXR();
   }
 
   async function moveLevel(delta) {
@@ -255,17 +261,49 @@
   }
 
   /** Ray hit against panel + gameplay plane; returns {panelUv} or {simX, simY}. */
-  function pick(e) {
+  function pickWithRaycaster(rc) {
     if (!session) return null;
-    raycaster.setFromCamera(ndcFromEvent(e), camera);
     const targets = [session.pickPlane];
     if (session.gui.mesh) targets.push(session.gui.mesh);
-    const hits = raycaster.intersectObjects(targets, false);
+    const hits = rc.intersectObjects(targets, false);
     if (hits.length === 0) return null;
     const hit = hits[0];
     if (hit.object.name === "gui-panel") return { panelUv: hit.uv };
     const local = session.worldGroup.worldToLocal(hit.point.clone());
     return { simX: Math.round(local.x), simY: Math.round(local.y) };
+  }
+
+  function pick(e) {
+    raycaster.setFromCamera(ndcFromEvent(e), camera);
+    return pickWithRaycaster(raycaster);
+  }
+
+  /** A confirmed activation on the play area (mouse click or VR trigger). */
+  function actOnSimPick(simX, simY) {
+    if (!session) return;
+    if (session.editor && session.editor.enabled) {
+      session.editor.handleSimClick(simX, simY);
+      return;
+    }
+    const lem = session.game.getLemmingManager().getLemmingAt(simX, simY);
+    if (lem) session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
+  }
+
+  /** Aiming feedback (mouse hover or VR controller ray). */
+  function applyHover(p) {
+    if (!session) return;
+    if (p && p.simX !== undefined) {
+      const lem = session.game.getLemmingManager().getLemmingAt(p.simX, p.simY);
+      if (lem && lem.action) {
+        session.ring.visible = true;
+        session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
+        hud.hover.textContent =
+          "lemming " + lem.id + " — " + lem.action.getActionName();
+        return;
+      }
+    }
+    session.ring.visible = false;
+    hud.hover.innerHTML = "&nbsp;";
   }
 
   let downAt = null;
@@ -279,34 +317,41 @@
     if (p && p.panelUv) session.gui.onMouseUp(p.panelUv);
     // treat as a click only if the pointer barely moved (else it was an orbit)
     if (!downAt || Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y) > 5) return;
-    if (p && p.simX !== undefined && session) {
-      if (session.editor && session.editor.enabled) {
-        session.editor.handleSimClick(p.simX, p.simY);
-        return;
-      }
-      const lem = session.game.getLemmingManager().getLemmingAt(p.simX, p.simY);
-      if (lem) session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
-    }
+    if (p && p.simX !== undefined) actOnSimPick(p.simX, p.simY);
   });
   renderer.domElement.addEventListener("dblclick", (e) => {
     const p = pick(e);
     if (p && p.panelUv) session.gui.onDoubleClick(p.panelUv);
   });
   renderer.domElement.addEventListener("pointermove", (e) => {
+    if (!session || renderer.xr.isPresenting) return;
+    applyHover(pick(e));
+  });
+
+  // ------------------------------------------------------------------ WebXR
+  function placeDioramaForXR() {
     if (!session) return;
-    const p = pick(e);
-    if (p && p.simX !== undefined) {
-      const lem = session.game.getLemmingManager().getLemmingAt(p.simX, p.simY);
-      if (lem && lem.action) {
-        session.ring.visible = true;
-        session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
-        hud.hover.textContent =
-          "lemming " + lem.id + " — " + lem.action.getActionName();
-        return;
+    dioramaRoot.scale.setScalar(VR_PIXEL_SCALE);
+    // bring the level's intended start area to the diorama focus point
+    const startX = session.level.screenPositionX + 200;
+    const focus = new THREE.Vector3(
+      startX, session.level.height / 2, TERRAIN_DEPTH / 2);
+    dioramaRoot.position.copy(VR_VIEW_POSITION)
+      .sub(focus.multiplyScalar(VR_PIXEL_SCALE));
+  }
+
+  const vr = new VRManager(renderer, scene, dioramaRoot, {
+    pickWithRaycaster,
+    onSelectPick: (p) => {
+      if (p.panelUv && session) {
+        session.gui.onMouseDown(p.panelUv);
+        session.gui.onMouseUp(p.panelUv);
+      } else if (p.simX !== undefined) {
+        actOnSimPick(p.simX, p.simY);
       }
-    }
-    session.ring.visible = false;
-    hud.hover.innerHTML = "&nbsp;";
+    },
+    onHoverPick: applyHover,
+    placeDiorama: placeDioramaForXR,
   });
 
   function togglePause() {
@@ -357,7 +402,6 @@
   let tickDebt = 0;
 
   function animate() {
-    requestAnimationFrame(animate);
     const now = performance.now();
     const dt = now - lastFrameTime;
     lastFrameTime = now;
@@ -380,7 +424,11 @@
       session.lemmingPool.applyInterpolation(alpha);
       session.gui.update();
     }
-    controls.update();
+    if (renderer.xr.isPresenting) {
+      vr.update(); // controller grabs + hover; headset pose drives the camera
+    } else {
+      controls.update();
+    }
     renderer.render(scene, camera);
   }
 
@@ -395,11 +443,16 @@
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
 
   // debug handle for the console / automated checks
-  window.__lem3d = { state, camera, renderer, controls, library, get session() { return session; } };
+  window.__lem3d = {
+    state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
+    get session() { return session; },
+  };
 
   loadLevel().catch((err) => {
     hud.loading.textContent = "FAILED TO LOAD — see console";
     console.error(err);
   });
-  animate();
+  // setAnimationLoop instead of window rAF: inside an XR session the
+  // headset's frame loop (90Hz) drives the same fixed-step accumulator
+  renderer.setAnimationLoop(animate);
 })();

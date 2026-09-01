@@ -60,6 +60,13 @@
   .lib-sub { font-size: 11px; color: #8fa1bb; }
   .lib-mark { font-size: 11px; color: #5a6a7c; margin-top: 4px; }
   .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
+  #vr-button {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 12; font: inherit; font-size: 13px; letter-spacing: 0.08em;
+    color: #6fce7e; background: rgba(10, 14, 22, 0.85);
+    border: 1px solid #6fce7e; border-radius: 6px; padding: 8px 22px; cursor: pointer;
+  }
+  #vr-button:disabled { color: #5a6a7c; border-color: #33405a; cursor: default; }
   #hud-editor { bottom: 12px; right: 12px; max-width: 320px; }
   #hud-editor h1 { font-size: 13px; margin: 0 0 4px; color: #ffd866; letter-spacing: 0.06em; }
   #ed-info { color: #cdd6e4; min-height: 16px; margin-bottom: 4px; }
@@ -127,6 +134,7 @@
 <script src="js/terrain.js"></script>
 <script src="js/editor.js"></script>
 <script src="js/library.js"></script>
+<script src="js/vr.js"></script>
 <script src="js/gui.js"></script>
 <script src="js/app.js"></script>
 </body>
