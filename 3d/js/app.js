@@ -422,6 +422,11 @@
    * valid pose, so it runs on the first rendered XR frame, not sessionstart;
    * returns false to request a retry when the level isn't loaded yet.
    */
+  // Some runtime/headset combos report a viewer pose whose forward axis is
+  // rotated on Y (observed: 90° off on PSVR2 + SteamVR + Chrome). Applied to
+  // the placement basis; tune live with the [ and ] keys, re-place with V.
+  let vrYawCorrection = -Math.PI / 2;
+
   function placeDioramaForXR(headPose) {
     if (!session) return false;
     const s = VR_PIXEL_SCALE;
@@ -438,6 +443,7 @@
     fwd.y = 0;
     if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
     else fwd.normalize();
+    fwd.applyAxisAngle(new THREE.Vector3(0, 1, 0), vrYawCorrection);
 
     // level face (+Z local) turns back toward the player
     dioramaRoot.rotation.set(0, Math.atan2(-fwd.x, -fwd.z), 0);
@@ -507,6 +513,16 @@
       case ".": moveLevel(1); break;
       case "e":
         if (session.editor) session.editor.toggle();
+        break;
+      case "v":
+        if (renderer.xr.isPresenting) vr.recenterNow();
+        break;
+      case "[":
+      case "]":
+        vrYawCorrection += (e.key === "]" ? 1 : -1) * (Math.PI / 12);
+        console.log("[vr] yaw correction: " +
+          Math.round(vrYawCorrection * 180 / Math.PI) + "°");
+        if (renderer.xr.isPresenting) vr.recenterNow();
         break;
       case "w":
         window.__lem3d.library.toggle();
