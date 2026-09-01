@@ -303,7 +303,12 @@
         const tick = game.getGameTimer().getGameTicks();
         for (const portal of portals) {
           const frame = portal.animation.getFrame(tick);
-          if (frame) portal.mesh.material = materialCache.forFrame(frame).material;
+          // A hatch keeps the open frame on its ceiling square: the doors are
+          // real geometry now, so following the animation there would leave
+          // the painted ones lying in the opening as the real ones swing.
+          if (frame && !portal.hatch) {
+            portal.mesh.material = materialCache.forFrame(frame).material;
+          }
           if (!portal.flaps || !portal.openness) continue;
           // swing the doors by however far this frame has the hatch open
           const frames = portal.animation.frames;

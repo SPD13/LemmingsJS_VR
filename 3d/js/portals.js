@@ -250,7 +250,7 @@ function buildFlapGeometry(uv, halfWidth, depth, sign) {
  *     the landscape drawn inside it. The sprite draws that square in
  *     perspective, so each of its rows is laid down as a depth slice
  *     stretched to the square's full width, which undoes the perspective.
- *   - the surrounding frame, pillars and legs as a slab of the same depth.
+ *   - the surrounding artwork as an ordinary shallow sprite in its own plane.
  * The two door flaps are separate meshes so they can swing (see below).
  */
 function buildCeilingGeometry(frame) {
@@ -299,20 +299,6 @@ function buildCeilingGeometry(frame) {
     for (let n = 0; n < PORTAL_RIM_MAX && r.max < w - 1 && mask[y * w + r.max + 1]; n++) r.max++;
     r.width = r.max - r.min + 1;
   }
-  // The grey lip drawn below the opening is the near part of the same rim.
-  // Left in the frame it would be extruded the full depth and jut out in
-  // front of the landscape; it belongs flat in the ceiling plane.
-  const lipRows = [];
-  for (let y = farY + 1; y < h && lipRows.length < PORTAL_RIM_MAX; y++) {
-    let min = null, max = null;
-    for (let x = Math.max(0, rows[farY].min - PORTAL_RIM_MAX);
-         x <= Math.min(w - 1, rows[farY].max + PORTAL_RIM_MAX); x++) {
-      if (mask[y * w + x]) { if (min === null) min = x; max = x; }
-    }
-    if (min === null || max - min + 1 < nearW * 0.4) break;
-    lipRows.push({ y, min, max });
-  }
-
   // the door's own extents, before the rim was folded in: the flaps must be
   // textured from the doors themselves, not the frame beside them
   const doorMin = doorExtent.min, doorMax = doorExtent.max;
@@ -320,7 +306,6 @@ function buildCeilingGeometry(frame) {
   const side = rows[nearY].width;                       // a square: side x side
   const centre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const span = farY - nearY + 1;
-  const slice = side / span;
   const zOf = (y) => side / 2 - ((y - nearY) / span) * side; // centred on z=0
 
   // --- the square, one strip per sprite row ---
@@ -341,22 +326,18 @@ function buildCeilingGeometry(frame) {
     panel.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
   for (let y = nearY; y <= farY; y++) strip(rows[y], y, zOf(y), zOf(y + 1));
-  // the lip carries on forward from the square's near edge, still flat
-  lipRows.forEach((r, k) => {
-    strip(r, r.y, side / 2 + (k + 1) * slice, side / 2 + k * slice);
-  });
   if (panel.indices.length === 0) return null;
 
-  // --- the frame around it: beams and legs running the same depth as the
-  // square, so the structure is a box rather than a plate pinned to the
-  // front of it ---
+  // --- the artwork around it: the painted surround, drawn upright in the
+  // sprite plane like any other object. Giving it the square's depth would
+  // sweep the whole drawing across the opening as a box and bury it. ---
   const frameGeom = buildExtrudedSpriteGeometry(
-    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, side);
+    (x, y) => mask[y * w + x] !== 0 && !inPanel[y * w + x], w, h, SPRITE_DEPTH);
   let framePart = null;
   if (frameGeom) {
     const positions = Array.from(frameGeom.attributes.position.array);
-    // the extruder builds toward the viewer from z=0; centre it on the square
-    for (let i = 2; i < positions.length; i += 3) positions[i] -= side / 2;
+    // the extruder builds toward the viewer from z=0; straddle the plane
+    for (let i = 2; i < positions.length; i += 3) positions[i] -= SPRITE_DEPTH / 2;
     framePart = {
       positions,
       colors: Array.from(frameGeom.attributes.color.array),
