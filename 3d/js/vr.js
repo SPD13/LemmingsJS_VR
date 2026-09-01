@@ -185,6 +185,12 @@ class VRManager {
     return this.renderer.xr.isPresenting;
   }
 
+  /** Live count of WebXR input sources (0 = no controllers delivered). */
+  get inputSourceCount() {
+    const session = this.renderer.xr.getSession();
+    return session ? session.inputSources.length : 0;
+  }
+
   _makeDiagBoard() {
     const canvas = document.createElement("canvas");
     canvas.width = 512;
@@ -203,9 +209,10 @@ class VRManager {
   _updateDiagBoard() {
     const session = this.renderer.xr.getSession();
     const sources = session ? Array.from(session.inputSources) : [];
-    // visible while controllers are missing, and for the first 8s regardless
+    // info card for the first seconds only; the persistent no-controller
+    // warning lives on the sign beside the play area instead
     const show = this.presenting &&
-      (sources.length === 0 || performance.now() - this._sessionStartedAt < 8000);
+      performance.now() - this._sessionStartedAt < 8000;
     this._diag.mesh.visible = show;
     if (!show || this._diagFrame++ % 30 !== 0) return;
 
