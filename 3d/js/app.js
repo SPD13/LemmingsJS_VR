@@ -426,6 +426,8 @@
   let mouseCursorOnBoard = false;
   let vrPan = null;   // right-drag pan state in VR mouse-fallback
   let vrOrbit = null; // left-drag rotate state in VR mouse-fallback
+  let rightDownAt = null; // for right-double-click detection (no native event)
+  let lastRightClickAt = 0;
 
   /** World position of the level's focus point (the wheel/orbit pivot). */
   function dioramaFocusWorld() {
@@ -466,6 +468,7 @@
 
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
+    if (e.button === 2) rightDownAt = { x: e.clientX, y: e.clientY };
     if (e.button === 2 && vrMouseFallback()) {
       // right-drag = pan, as in the web view: grab the point under the
       // cursor on the board's plane and slide the diorama with it
@@ -494,7 +497,26 @@
     if (p && p.panelUv) session.gui.onMouseDown(p.panelUv);
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
-    if (e.button === 2) { vrPan = null; return; }
+    if (e.button === 2) {
+      vrPan = null;
+      // double right-click (no drag) = reset the view to its default
+      const dragged = !rightDownAt ||
+        Math.abs(e.clientX - rightDownAt.x) + Math.abs(e.clientY - rightDownAt.y) > 5;
+      if (!dragged) {
+        const now = performance.now();
+        if (now - lastRightClickAt < 400) {
+          lastRightClickAt = 0;
+          if (renderer.xr.isPresenting) {
+            if (vrMouseFallback()) vr.recenterNow();
+          } else if (session) {
+            frameDesktopCamera(session.level);
+          }
+        } else {
+          lastRightClickAt = now;
+        }
+      }
+      return;
+    }
     if (e.button === 0) vrOrbit = null;
     if (!mouseAllowed() || e.button !== 0) return;
     const p = pick(e);
