@@ -422,10 +422,11 @@
    * valid pose, so it runs on the first rendered XR frame, not sessionstart;
    * returns false to request a retry when the level isn't loaded yet.
    */
-  // Some runtime/headset combos report a viewer pose whose forward axis is
-  // rotated on Y (observed: 90° off on PSVR2 + SteamVR + Chrome). Applied to
-  // the placement basis; tune live with the [ and ] keys, re-place with V.
-  let vrYawCorrection = -Math.PI / 4;
+  // Yaw correction applied to the reported viewer pose. Live calibration on
+  // PSVR2 + SteamVR + Chrome settled on 0 - the pose is trustworthy; earlier
+  // apparent offsets were placement-race artifacts. Kept (with the [ ] tuning
+  // keys, V to re-place) in case another runtime ever reports a rotated axis.
+  let vrYawCorrection = 0;
 
   function placeDioramaForXR(headPose) {
     if (!session) return false;
