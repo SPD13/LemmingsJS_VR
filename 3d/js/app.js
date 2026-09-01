@@ -279,10 +279,73 @@
     return { simX: Math.round(local.x), simY: Math.round(local.y) };
   }
 
-  function pick(e) {
-    raycaster.setFromCamera(ndcFromEvent(e), camera);
-    return pickWithRaycaster(raycaster);
+  /** Mouse ray: desktop camera normally; inside a session, the XR eye camera
+   *  so aiming at the headset's mirrored view on the monitor maps correctly. */
+  function mouseRaycaster(e) {
+    const ndc = ndcFromEvent(e);
+    if (renderer.xr.isPresenting) {
+      const xrCam = renderer.xr.getCamera();
+      const eye = xrCam.cameras && xrCam.cameras.length ? xrCam.cameras[0] : xrCam;
+      const projInv = new THREE.Matrix4().copy(eye.projectionMatrix).invert();
+      const origin = new THREE.Vector3().setFromMatrixPosition(eye.matrixWorld);
+      const target = new THREE.Vector3(ndc.x, ndc.y, 0.5)
+        .applyMatrix4(projInv).applyMatrix4(eye.matrixWorld);
+      raycaster.set(origin, target.sub(origin).normalize());
+    } else {
+      raycaster.setFromCamera(ndc, camera);
+    }
+    return raycaster;
   }
+
+  function pick(e) {
+    return pickWithRaycaster(mouseRaycaster(e));
+  }
+
+  /** True while a session runs without any controllers: mouse takes over. */
+  function vrMouseFallback() {
+    return renderer.xr.isPresenting && vr.inputSourceCount === 0;
+  }
+
+  // glowing in-headset dot showing where the desktop mouse is aiming
+  const mouseCursor = new THREE.Mesh(
+    new THREE.SphereGeometry(0.008, 12, 8),
+    new THREE.MeshBasicMaterial({
+      color: 0xffd866, transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    })
+  );
+  mouseCursor.visible = false;
+  scene.add(mouseCursor);
+
+  // warning sign shown beside the play area when a session has no controllers
+  const vrWarningSign = (() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 224;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "rgba(12, 16, 24, 0.92)";
+    ctx.fillRect(0, 0, 512, 224);
+    ctx.strokeStyle = "#ffd866";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, 506, 218);
+    ctx.fillStyle = "#ffd866";
+    ctx.font = "bold 38px monospace";
+    ctx.fillText("NO VR CONTROLLERS", 28, 62);
+    ctx.fillStyle = "#cdd6e4";
+    ctx.font = "26px monospace";
+    ctx.fillText("Mouse fallback is active:", 28, 118);
+    ctx.fillText("aim and click with the mouse", 28, 154);
+    ctx.fillText("on the desktop window.", 28, 190);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(canvas), transparent: true,
+      })
+    );
+    mesh.visible = false;
+    dioramaRoot.add(mesh);
+    return mesh;
+  })();
 
   /** A confirmed activation on the play area (mouse click or VR trigger). */
   function actOnSimPick(simX, simY) {
@@ -312,13 +375,20 @@
     hud.hover.innerHTML = "&nbsp;";
   }
 
+  // while a session has controllers, they own the pointer and stray desktop
+  // mouse events are ignored; with none, the mouse is the pointer (fallback)
+  const mouseAllowed = () => session &&
+    (!renderer.xr.isPresenting || vrMouseFallback());
+
   let downAt = null;
   renderer.domElement.addEventListener("pointerdown", (e) => {
+    if (!mouseAllowed()) return;
     downAt = { x: e.clientX, y: e.clientY };
     const p = pick(e);
     if (p && p.panelUv) session.gui.onMouseDown(p.panelUv);
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
+    if (!mouseAllowed()) return;
     const p = pick(e);
     if (p && p.panelUv) session.gui.onMouseUp(p.panelUv);
     // treat as a click only if the pointer barely moved (else it was an orbit)
@@ -326,11 +396,20 @@
     if (p && p.simX !== undefined) actOnSimPick(p.simX, p.simY);
   });
   renderer.domElement.addEventListener("dblclick", (e) => {
+    if (!mouseAllowed()) return;
     const p = pick(e);
     if (p && p.panelUv) session.gui.onDoubleClick(p.panelUv);
   });
   renderer.domElement.addEventListener("pointermove", (e) => {
-    if (!session || renderer.xr.isPresenting) return;
+    if (!mouseAllowed()) return;
+    if (vrMouseFallback()) {
+      const rc = mouseRaycaster(e);
+      const hit = raycastHit(rc);
+      mouseCursor.visible = !!hit;
+      if (hit) mouseCursor.position.copy(hit.point);
+      applyHover(hit ? pickWithRaycaster(rc) : null);
+      return;
+    }
     applyHover(pick(e));
   });
 
@@ -364,6 +443,12 @@
     target.y = Math.max(0.6, headPos.y - 0.35); // just below eye level
     dioramaRoot.position.copy(target)
       .sub(focusLocal.multiplyScalar(s).applyEuler(dioramaRoot.rotation));
+
+    // park the no-controller warning to the left of the visible play area
+    const signW = 230, signH = signW * 224 / 512;
+    vrWarningSign.scale.set(signW, signH, 1);
+    vrWarningSign.position.set(
+      startX - 200 - signW / 2 - 24, session.level.height * 0.6, 60);
     return true;
   }
 
@@ -483,9 +568,12 @@
     }
     if (renderer.xr.isPresenting) {
       vr.update(); // controller grabs + hover; headset pose drives the camera
+      vrWarningSign.visible = vrMouseFallback();
     } else {
       controls.update();
+      vrWarningSign.visible = false;
     }
+    if (!vrMouseFallback()) mouseCursor.visible = false;
     renderer.render(scene, camera);
   }
 

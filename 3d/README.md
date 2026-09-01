@@ -53,6 +53,11 @@ intended start area.
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale
+- **no controllers?** The session still runs: a warning sign appears beside
+  the play area and the desktop mouse becomes the pointer — aim on the
+  mirrored view on the monitor; a glowing dot in the headset marks the aim
+  point, and clicks work on lemmings and the panel as on desktop. As soon
+  as controllers appear, they take the pointer back automatically.
 - the world never moves on its own, so there is no comfort concern
 
 WebXR needs a secure context. Ways to run it:
