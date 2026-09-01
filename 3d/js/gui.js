@@ -19,12 +19,13 @@ const GUI_TILE_GROW = 1.08;
 // taller or those two edges are left behind.
 const GUI_CROP_H = GUI_TILE_H + 1;
 const GUI_BUTTONS = 13;
-// ...but the last button has no next tile - the status box sits there - so it
-// crops to its own width and is not grown, or the raised copy would bite into
-// the box beside it.
+// ...but the last button (speed) has no next tile: the status box's red
+// border starts at x=207, so that button's cell is only 15 columns wide.
+// Crop it short and don't grow it, or the raised copy lifts the box's border
+// along with it.
 const GUI_LAST_BUTTON = GUI_BUTTONS - 1;
 const GUI_CROP_W = (index) =>
-  index >= GUI_LAST_BUTTON ? GUI_TILE_W : GUI_TILE_W + 1;
+  index >= GUI_LAST_BUTTON ? GUI_TILE_W - 1 : GUI_TILE_W + 1;
 const GUI_GROW_FOR = (index) =>
   index >= GUI_LAST_BUTTON ? 1 : GUI_TILE_GROW;
 const GUI_CROP_CX = (index) => index * GUI_TILE_W + GUI_CROP_W(index) / 2;
