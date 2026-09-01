@@ -93,6 +93,24 @@ class VRManager {
 
     renderer.xr.addEventListener("sessionstart", () => this.hooks.placeDiorama());
     renderer.xr.addEventListener("sessionend", () => this.resetDiorama());
+    this._recenterHeld = false;
+  }
+
+  /** A/X button (xr-standard button 4) on either controller = recenter:
+   *  snap the diorama back to its session-start placement and scale. */
+  _pollRecenter() {
+    const session = this.renderer.xr.getSession();
+    if (!session) return;
+    let pressed = false;
+    for (const source of session.inputSources) {
+      const b = source.gamepad && source.gamepad.buttons && source.gamepad.buttons[4];
+      if (b && b.pressed) pressed = true;
+    }
+    if (pressed && !this._recenterHeld) {
+      this._grab = null;
+      this.hooks.placeDiorama();
+    }
+    this._recenterHeld = pressed;
   }
 
   get presenting() {
@@ -141,9 +159,10 @@ class VRManager {
     }
   }
 
-  /** Per-frame: apply grabs, drive hover from controller 0. */
+  /** Per-frame: apply grabs, recenter button, hover from controller 0. */
   update() {
     if (!this.presenting) return;
+    this._pollRecenter();
     const g = this._grab;
     if (g && g.mode === 1 && g.c.userData.gripping) {
       const cur = g.c.getWorldPosition(new THREE.Vector3());

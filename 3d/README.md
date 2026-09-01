@@ -49,6 +49,9 @@ chest height, focused on the level's intended start area.
   (controller&nbsp;0's ray also drives the highlight ring)
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
+- **A/X** (either controller) — recenter: snap the diorama back to its
+  session-start placement and scale (the headset's own system recenter —
+  long-press the Meta button on Quest — re-aligns your standing origin too)
 - the world never moves on its own, so there is no comfort concern
 
 WebXR needs a secure context. Ways to run it:
