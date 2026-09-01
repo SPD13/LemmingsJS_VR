@@ -56,8 +56,15 @@
   const dioramaRoot = new THREE.Group();
   scene.add(dioramaRoot);
 
+
   const camera = new THREE.PerspectiveCamera(
     50, window.innerWidth / window.innerHeight, 1, 10000);
+  // the skill toolbar rides the camera instead of the level, so it stays in
+  // view while the play area is panned, orbited, zoomed or grabbed
+  scene.add(camera); // children of the camera render only once it is in the graph
+  const guiRoot = new THREE.Group();
+  camera.add(guiRoot);
+
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
@@ -67,6 +74,7 @@
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    layoutGuiPanel(); // the toolbar is sized to the viewport
   });
 
   const factory = new Lemmings.GameFactory("../");
@@ -202,7 +210,7 @@
     const lemCapture = new SpriteCapture();
     const objCapture = new SpriteCapture();
 
-    const gui = new GuiPanel(dioramaRoot, game, resources);
+    const gui = new GuiPanel(guiRoot, game, resources);
 
     if (state.replay) {
       game.getCommandManager().loadReplay(state.replay);
@@ -268,7 +276,6 @@
 
     // camera: frame the level's intended start position
     frameDesktopCamera(level);
-    gui.layout(level.screenPositionX + 200);
 
     hud.name.textContent = level.name.trim() || "(unnamed level)";
     hud.meta.textContent =
@@ -284,11 +291,27 @@
       getLastTickTime: () => lastTickTime,
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
+    layoutGuiPanel();
     if (renderer.xr.isPresenting) placeDioramaForXR();
 
     const entrance = level.entrances[0];
     audio.playSfx(SFX.LETSGO,
       entrance ? sfxPos(entrance.x + 24, entrance.y + 14) : null);
+  }
+
+  /** Park the toolbar in camera space: bottom-centre of the view on desktop,
+   *  a comfortable HUD panel below the line of sight in VR. */
+  function layoutGuiPanel() {
+    if (!session || !session.gui) return;
+    if (renderer.xr.isPresenting) {
+      session.gui.place(VR_GUI_WIDTH, VR_GUI_Y, VR_GUI_Z); // metres
+    } else {
+      const dist = 600;
+      const viewH = 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const width = viewH * camera.aspect * 0.55;
+      const height = width * session.gui.canvas.height / session.gui.canvas.width;
+      session.gui.place(width, -viewH / 2 + height / 2 + viewH * 0.05, -dist);
+    }
   }
 
   /** Default desktop framing: the level's intended start area, slightly above. */
@@ -323,12 +346,16 @@
     );
   }
 
-  /** Raw nearest hit on the interactive surfaces (gameplay plane, panel). */
+  /** Raw nearest hit on the interactive surfaces (toolbar, gameplay plane).
+   *  The toolbar is a fixed overlay in front of the viewer, so it takes
+   *  priority over the play area behind it regardless of distance. */
   function raycastHit(rc) {
     if (!session) return null;
-    const targets = [session.pickPlane];
-    if (session.gui.mesh) targets.push(session.gui.mesh);
-    const hits = rc.intersectObjects(targets, false);
+    if (session.gui.mesh) {
+      const guiHits = rc.intersectObject(session.gui.mesh, false);
+      if (guiHits.length) return guiHits[0];
+    }
+    const hits = rc.intersectObject(session.pickPlane, false);
     return hits.length ? hits[0] : null;
   }
 
@@ -701,6 +728,7 @@
     // OrbitControls would silently accumulate wheel/drag input during the
     // session and apply it as a jump on exit
     controls.enabled = false;
+    layoutGuiPanel();
   });
   renderer.xr.addEventListener("sessionend", () => {
     camera.near = desktopClip.near;
@@ -710,6 +738,7 @@
     // near the scene origin); restore the page-load framing
     controls.enabled = true;
     if (session) frameDesktopCamera(session.level);
+    layoutGuiPanel();
   });
 
   const vr = new VRManager(renderer, scene, camera, dioramaRoot, {

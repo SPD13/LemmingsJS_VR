@@ -176,7 +176,7 @@ class GuiPanel {
     this.reliefMesh.position.set(
       this.mesh.position.x - this.mesh.scale.x / 2,
       this.mesh.position.y + this.mesh.scale.y / 2,
-      this.mesh.position.z + 0.2);
+      this.mesh.position.z + 0.2 * sx);
     if (this.digitMesh) {
       this.digitMesh.scale.copy(this.reliefMesh.scale);
       this.digitMesh.position.copy(this.reliefMesh.position);
@@ -196,7 +196,7 @@ class GuiPanel {
     this.hoverRelief.position.set(
       this.mesh.position.x - pw / 2 + cx * sx * (1 - g),
       this.mesh.position.y + ph / 2 + cy * sy * (g - 1),
-      this.mesh.position.z + GUI_TILE_POP + 0.2);
+      this.mesh.position.z + (GUI_TILE_POP + 0.2) * sx);
   }
 
   /** Create the plane once the first GameGui.render sized the buffer. */
@@ -278,33 +278,41 @@ class GuiPanel {
     this.hoverTile.position.set(
       this.mesh.position.x + ((index + 0.5) * GUI_TILE_W / cw - 0.5) * pw,
       this.mesh.position.y + (0.5 - (GUI_TILE_TOP + GUI_TILE_H / 2) / ch) * phh,
-      this.mesh.position.z + GUI_TILE_POP
+      this.mesh.position.z + GUI_TILE_POP * this._unit
     );
   }
 
-  /** Position under the diorama, centered on the camera's current target x.
-   *  The buffer may not exist yet on the first call (GameGui sizes it on its
-   *  first render), so remember the request and apply it from update(). */
-  layout(centerX, scale = 2) {
-    this._layoutRequest = { centerX, scale };
-    this._applyLayout();
+  /** Place the panel in its parent's space: `width` wide, centred on x=0,
+   *  at (y, z). The parent is the camera rig, so the toolbar stays put while
+   *  the play area is moved. The buffer may not exist yet on the first call
+   *  (GameGui sizes it on its first render), so the request is remembered and
+   *  applied from update(). */
+  place(width, y, z) {
+    this._placement = { width, y, z };
+    this._placed = false;
+    this._applyPlacement();
   }
 
-  _applyLayout() {
-    if (!this._layoutRequest || !this._ensureMesh()) return;
-    const { centerX, scale } = this._layoutRequest;
-    const w = this.canvas.width * scale;
-    const h = this.canvas.height * scale;
-    this.mesh.scale.set(w, h, 1);
-    this.mesh.position.set(centerX, -h / 2 - 14, TERRAIN_DEPTH);
-    this._layoutRequest = null;
+  _applyPlacement() {
+    if (this._placed || !this._placement || !this._ensureMesh()) return;
+    const { width, y, z } = this._placement;
+    const height = width * this.canvas.height / this.canvas.width;
+    this.mesh.scale.set(width, height, 1);
+    this.mesh.position.set(0, y, z);
+    this._placed = true;
     if (this.hoverIndex != null) this._layoutHoverTile(this.hoverIndex);
     this._layoutRelief();
   }
 
+  /** Parent-space units per panel pixel: keeps depth offsets proportional
+   *  whether the parent measures in game pixels or metres. */
+  get _unit() {
+    return this.mesh ? this.mesh.scale.x / this.canvas.width : 1;
+  }
+
   update() {
     if (!this._ensureMesh()) return;
-    this._applyLayout();
+    this._applyPlacement();
     if (!this.dirty) return;
     this.dirty = false;
     this.ctx.putImageData(this.display.getImageData(), 0, 0);

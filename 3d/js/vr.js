@@ -16,6 +16,10 @@
  */
 
 const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
+// skill toolbar, head-fixed so it is always to hand (metres, camera space)
+const VR_GUI_WIDTH = 0.42;
+const VR_GUI_Y = -0.26;
+const VR_GUI_Z = -0.75;
 
 function createVRButton(renderer) {
   const button = document.createElement("button");
