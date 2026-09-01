@@ -1,0 +1,12 @@
+{
+  "name": "lemmings-vr-launcher",
+  "version": "0.1.0",
+  "description": "Launcher app to control the LemmingsJS VR dev server",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
