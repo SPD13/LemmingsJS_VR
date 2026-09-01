@@ -23,7 +23,6 @@ const PORTAL_SKY_SAT = 0.35;       // this saturated (not a tinted grey),
 const PORTAL_SKY_WARM = 0.2;       // and this far off red (not a yellow)
 const PORTAL_SKY_PATCH_MIN = 6;    // a doorway is a patch, not a stray pixel
 const PORTAL_FRAME_THICK = 1;      // an exit's frame is a slab this deep
-const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
@@ -62,53 +61,6 @@ function portalConfigFor(objectId, info, profile) {
     return { shape: "portal", depth: PORTAL_EXIT_DEPTH };
   }
   return null;
-}
-
-/**
- * Chebyshev distance from each opaque pixel to the sprite's outline: 1 on the
- * rim, growing toward the middle of the opening. Two passes, in place.
- */
-function spriteInteriorDistance(frame) {
-  const w = frame.width, h = frame.height, mask = frame.getMask();
-  const dist = new Float32Array(w * h);
-  const INF = 1e6;
-  for (let i = 0; i < w * h; i++) dist[i] = mask[i] ? INF : 0;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (!mask[i]) continue;
-      let m = dist[i];
-      if (x > 0) m = Math.min(m, dist[i - 1] + 1);
-      if (y > 0) m = Math.min(m, dist[i - w] + 1);
-      if (x > 0 && y > 0) m = Math.min(m, dist[i - w - 1] + 1);
-      if (x < w - 1 && y > 0) m = Math.min(m, dist[i - w + 1] + 1);
-      dist[i] = m;
-    }
-  }
-  for (let y = h - 1; y >= 0; y--) {
-    for (let x = w - 1; x >= 0; x--) {
-      const i = y * w + x;
-      if (!mask[i]) continue;
-      let m = dist[i];
-      if (x < w - 1) m = Math.min(m, dist[i + 1] + 1);
-      if (y < h - 1) m = Math.min(m, dist[i + w] + 1);
-      if (x < w - 1 && y < h - 1) m = Math.min(m, dist[i + w + 1] + 1);
-      if (x > 0 && y < h - 1) m = Math.min(m, dist[i + w - 1] + 1);
-      dist[i] = m;
-    }
-  }
-  // pixels touching the sprite's bounding edge are rim, not interior
-  for (let x = 0; x < w; x++) {
-    if (mask[x]) dist[x] = Math.min(dist[x], 1);
-    const b = (h - 1) * w + x;
-    if (mask[b]) dist[b] = Math.min(dist[b], 1);
-  }
-  for (let y = 0; y < h; y++) {
-    if (mask[y * w]) dist[y * w] = Math.min(dist[y * w], 1);
-    const r = y * w + w - 1;
-    if (mask[r]) dist[r] = Math.min(dist[r], 1);
-  }
-  return dist;
 }
 
 /** Concatenate two geometries built by the helpers below. */
@@ -606,16 +558,21 @@ function buildPortalGeometry(frame, depth, triggerX, triggerY) {
  * Clear the render-only terrain depth behind an opening so the tunnel is not
  * filled by the slab. The collision mask is untouched, so the simulation is
  * unchanged - a lemming still walks on whatever the game says is there.
+ *
+ * Every pixel the sprite covers, right out to its outline. An object sits
+ * inside the slab's depth rather than in front of it, so terrain left under
+ * even the outermost ring stands in front of the opening's edge and cuts it
+ * off - which reads as the door being split along the line where the carve
+ * stopped.
  */
 function carveTerrainForPortal(depthMap, level, originX, originY, frame) {
   const w = frame.width, h = frame.height, mask = frame.getMask();
-  const dist = spriteInteriorDistance(frame);
   const W = level.width, H = level.height;
   let carved = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      if (!mask[i] || dist[i] < PORTAL_CARVE_MIN) continue;
+      if (!mask[i]) continue;
       const tx = originX + x, ty = originY + y;
       if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
       const ti = ty * W + tx;
