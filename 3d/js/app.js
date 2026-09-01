@@ -424,6 +424,13 @@
 
   let downAt = null;
   let mouseCursorOnBoard = false;
+  let vrPan = null; // right-drag pan state in VR mouse-fallback
+
+  // OrbitControls suppresses the context menu only while enabled (desktop);
+  // in a session the right button belongs to our pan
+  renderer.domElement.addEventListener("contextmenu", (e) => {
+    if (renderer.xr.isPresenting) e.preventDefault();
+  });
 
   // wheel in VR mouse-fallback: zoom the diorama toward the cursor's point
   // on the board (desktop wheel zoom stays with OrbitControls)
@@ -450,12 +457,30 @@
 
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
+    if (e.button === 2 && vrMouseFallback()) {
+      // right-drag = pan, as in the web view: grab the point under the
+      // cursor on the board's plane and slide the diorama with it
+      const rc = mouseRaycaster(e);
+      const hit = raycastHit(rc);
+      const point = hit ? hit.point.clone()
+        : mouseCursor.visible ? mouseCursor.position.clone() : null;
+      if (point) {
+        const normal = new THREE.Vector3(0, 0, 1).applyEuler(dioramaRoot.rotation);
+        vrPan = {
+          plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, point),
+          last: point,
+        };
+      }
+      return;
+    }
+    if (e.button !== 0) return;
     downAt = { x: e.clientX, y: e.clientY };
     const p = pick(e);
     if (p && p.panelUv) session.gui.onMouseDown(p.panelUv);
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
-    if (!mouseAllowed()) return;
+    if (e.button === 2) { vrPan = null; return; }
+    if (!mouseAllowed() || e.button !== 0) return;
     const p = pick(e);
     if (p && p.panelUv) session.gui.onMouseUp(p.panelUv);
     // treat as a click only if the pointer barely moved (else it was an orbit)
@@ -471,6 +496,15 @@
     if (!mouseAllowed()) return;
     if (vrMouseFallback()) {
       const rc = mouseRaycaster(e);
+      if (vrPan) {
+        // slide the diorama so the grabbed board point follows the cursor
+        const p = new THREE.Vector3();
+        if (rc.ray.intersectPlane(vrPan.plane, p)) {
+          dioramaRoot.position.add(p.clone().sub(vrPan.last));
+          vrPan.last = p;
+        }
+        return;
+      }
       const hit = raycastHit(rc);
       // always render the cursor so it can be steered back onto the board:
       // yellow at the hit point, dimmed mid-air along the ray when off it
@@ -681,7 +715,10 @@
       controls.update();
       vrWarningSign.visible = false;
     }
-    if (!vrMouseFallback()) mouseCursor.visible = false;
+    if (!vrMouseFallback()) {
+      mouseCursor.visible = false;
+      vrPan = null;
+    }
     renderer.render(scene, camera);
   }
 
