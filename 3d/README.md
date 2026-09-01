@@ -21,7 +21,9 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
 
 ## Controls
 
-- drag = orbit, right-drag = pan, wheel = zoom
+- drag = orbit, right-drag = pan, wheel = zoom, double right-click = reset
+  view (all four also work with the mouse inside a controller-less VR
+  session, moving the diorama instead of the camera)
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
