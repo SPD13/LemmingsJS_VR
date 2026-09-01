@@ -67,17 +67,12 @@ class HeadlessStage {
  */
 function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
   const isSolid = (x, y) => x >= 0 && x < w && y >= 0 && y < h && isSolidRaw(x, y);
-  const positions = [], colors = [], uvs = [], indices = [];
-
-  const pushQuad = (p, uv, shade) => {
-    const base = positions.length / 3;
-    for (let i = 0; i < 4; i++) {
-      positions.push(p[i][0], p[i][1], p[i][2]);
-      colors.push(shade, shade, shade);
-      uvs.push(uv[i][0], uv[i][1]);
-    }
-    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  };
+  // Collected per face group and emitted back -> walls -> fronts, so the
+  // geometry is also correct in painter's order: overlays that draw without
+  // depth testing (the skill toolbar) would otherwise have their dim back
+  // faces and side walls paint over the bright front faces.
+  const backQuads = [], wallQuads = [], frontQuads = [];
+  const pushTo = (list) => (p, uv, shade) => list.push({ p, uv, shade });
 
   // front + back faces from greedy rectangles
   const visited = new Uint8Array(w * h);
@@ -98,10 +93,10 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
 
       const u0 = x / w, u1 = (x + rw) / w;
       const v0 = y / h, v1 = (y + rh) / h;
-      pushQuad(
+      pushTo(frontQuads)(
         [[x, y, depth], [x + rw, y, depth], [x + rw, y + rh, depth], [x, y + rh, depth]],
         [[u0, v0], [u1, v0], [u1, v1], [u0, v1]], SPRITE_SHADE_FRONT);
-      pushQuad(
+      pushTo(backQuads)(
         [[x, y, 0], [x + rw, y, 0], [x + rw, y + rh, 0], [x, y + rh, 0]],
         [[u0, v0], [u1, v0], [u1, v1], [u0, v1]], SPRITE_SHADE_BACK);
     }
@@ -117,7 +112,7 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
         while (y + run < h && isSolid(x, y + run) && !isSolid(x + dir, y + run)) run++;
         const wx = dir === -1 ? x : x + 1;
         const u = (x + 0.5) / w, va = y / h, vb = (y + run) / h;
-        pushQuad(
+        pushTo(wallQuads)(
           [[wx, y, 0], [wx, y, depth], [wx, y + run, depth], [wx, y + run, 0]],
           [[u, va], [u, va], [u, vb], [u, vb]],
           dir === -1 ? SPRITE_SHADE_LEFT : SPRITE_SHADE_RIGHT);
@@ -134,13 +129,24 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
         while (x + run < w && isSolid(x + run, y) && !isSolid(x + run, y + dir)) run++;
         const wy = dir === -1 ? y : y + 1;
         const v = (y + 0.5) / h, ua = x / w, ub = (x + run) / w;
-        pushQuad(
+        pushTo(wallQuads)(
           [[x, wy, 0], [x + run, wy, 0], [x + run, wy, depth], [x, wy, depth]],
           [[ua, v], [ub, v], [ub, v], [ua, v]],
           dir === -1 ? SPRITE_SHADE_TOP : SPRITE_SHADE_BOTTOM);
         x += run;
       }
     }
+  }
+
+  const positions = [], colors = [], uvs = [], indices = [];
+  for (const q of backQuads.concat(wallQuads, frontQuads)) {
+    const base = positions.length / 3;
+    for (let i = 0; i < 4; i++) {
+      positions.push(q.p[i][0], q.p[i][1], q.p[i][2]);
+      colors.push(q.shade, q.shade, q.shade);
+      uvs.push(q.uv[i][0], q.uv[i][1]);
+    }
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
 
   if (indices.length === 0) return null;
