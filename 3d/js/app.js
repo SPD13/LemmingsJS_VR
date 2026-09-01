@@ -753,6 +753,32 @@
         e.preventDefault();
         const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
         const dy = e.key === "ArrowUp" ? 1 : e.key === "ArrowDown" ? -1 : 0;
+        if (e.shiftKey) {
+          // shift+arrows = orbit (10 degrees per press)
+          const step = Math.PI / 18;
+          if (renderer.xr.isPresenting) {
+            const pivot = dioramaFocusWorld();
+            const up = new THREE.Vector3(0, 1, 0);
+            rotateDioramaAroundPivot(
+              new THREE.Quaternion().setFromAxisAngle(up, dx * step), pivot);
+            const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+            right.y = 0;
+            if (right.lengthSq() > 1e-4) {
+              rotateDioramaAroundPivot(
+                new THREE.Quaternion().setFromAxisAngle(right.normalize(), dy * step), pivot);
+            }
+          } else {
+            const offset = camera.position.clone().sub(controls.target);
+            const spherical = new THREE.Spherical().setFromVector3(offset);
+            spherical.theta -= dx * step;
+            spherical.phi = THREE.MathUtils.clamp(
+              spherical.phi - dy * step, 0.05, Math.PI - 0.05);
+            camera.position.copy(controls.target)
+              .add(offset.setFromSpherical(spherical));
+            controls.update();
+          }
+          break;
+        }
         const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
         const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
         if (renderer.xr.isPresenting) {
@@ -771,6 +797,33 @@
         }
         break;
       }
+      case "PageUp":
+      case "PageDown": {
+        e.preventDefault();
+        const zoomIn = e.key === "PageUp";
+        if (renderer.xr.isPresenting) {
+          const cur = dioramaRoot.scale.x;
+          const next = THREE.MathUtils.clamp(
+            cur * (zoomIn ? 1.15 : 1 / 1.15),
+            VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
+          const k = next / cur;
+          const pivot = dioramaFocusWorld();
+          dioramaRoot.scale.setScalar(next);
+          dioramaRoot.position.copy(pivot)
+            .add(dioramaRoot.position.sub(pivot).multiplyScalar(k));
+        } else {
+          const dir = camera.position.clone().sub(controls.target)
+            .multiplyScalar(zoomIn ? 1 / 1.15 : 1.15);
+          camera.position.copy(controls.target).add(dir);
+          controls.update();
+        }
+        break;
+      }
+      case "Home":
+        e.preventDefault();
+        if (renderer.xr.isPresenting) vr.recenterNow();
+        else frameDesktopCamera(session.level);
+        break;
       case "v":
         if (renderer.xr.isPresenting) vr.recenterNow();
         break;
