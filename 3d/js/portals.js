@@ -152,28 +152,56 @@ function toBufferGeometry(parts) {
  * tileset without naming a single colour.
  */
 function hatchOpenness(frames, openingMask, w) {
-  const last = frames[frames.length - 1];
-  const lastBuf = last.getBuffer(), lastMask = last.getMask();
-  let total = 0;
-  for (let i = 0; i < openingMask.length; i++) if (openingMask[i]) total++;
-  if (total === 0) return frames.map(() => 1);
-
-  const ratios = frames.map((frame) => {
-    const buf = frame.getBuffer(), mask = frame.getMask();
+  const open = frames[frames.length - 1];
+  const openBuf = open.getBuffer(), openMask = open.getMask();
+  const pixel = (frame, i) => (frame.getMask()[i] ? frame.getBuffer()[i] : -1);
+  const matchOver = (frame, region, total) => {
+    if (total === 0) return 1;
     let same = 0;
-    for (let i = 0; i < openingMask.length; i++) {
-      if (!openingMask[i]) continue;
-      const a = mask[i] ? buf[i] : -1;
-      const b = lastMask[i] ? lastBuf[i] : -1;
-      if (a === b) same++;
+    for (let i = 0; i < region.length; i++) {
+      if (!region[i]) continue;
+      if (pixel(frame, i) === (openMask[i] ? openBuf[i] : -1)) same++;
     }
     return same / total;
+  };
+
+  let openingTotal = 0;
+  for (let i = 0; i < openingMask.length; i++) if (openingMask[i]) openingTotal++;
+  if (openingTotal === 0) return frames.map(() => 1);
+
+  // the shut frame is the one that looks least like the open one
+  let shut = frames[0], worst = Infinity;
+  for (const frame of frames) {
+    const r = matchOver(frame, openingMask, openingTotal);
+    if (r < worst) { worst = r; shut = frame; }
+  }
+
+  // Measure only the hole - where shut and open actually differ. The rest of
+  // the opening region is the doors themselves, and those are now 3D flaps
+  // whose painted position must not be mistaken for the hatch being ajar.
+  const hole = new Uint8Array(openingMask.length);
+  let holeTotal = 0;
+  for (let i = 0; i < openingMask.length; i++) {
+    if (!openingMask[i]) continue;
+    if (pixel(shut, i) !== (openMask[i] ? openBuf[i] : -1)) { hole[i] = 1; holeTotal++; }
+  }
+  if (holeTotal === 0) return frames.map(() => 1);
+
+  // Openness is how much of the hole is no longer covered by a door, i.e.
+  // how far each frame has departed from the shut one. Asking "does this
+  // still look shut?" rather than "does this match one chosen open frame?"
+  // keeps every fully open frame at a full quarter turn, however the
+  // artwork varies between them.
+  const ratios = frames.map((frame) => {
+    let uncovered = 0;
+    for (let i = 0; i < hole.length; i++) {
+      if (hole[i] && pixel(frame, i) !== pixel(shut, i)) uncovered++;
+    }
+    return uncovered / holeTotal;
   });
-  // normalise: the least-matching frame is shut, the best-matching wide open,
-  // so the doors always travel the full quarter turn whatever the artwork
-  const lo = Math.min(...ratios), hi = Math.max(...ratios);
-  if (hi - lo < 0.05) return ratios.map(() => 1);
-  return ratios.map((r) => (r - lo) / (hi - lo));
+  const hi = Math.max(...ratios);
+  if (hi < 0.05) return ratios.map(() => 1);
+  return ratios.map((r) => Math.min(1, r / hi)); // shut -> 0, open -> 90 degrees
 }
 
 /** A flap: half the opening wide, hinged along one side, textured from the
