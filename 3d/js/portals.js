@@ -22,7 +22,10 @@ const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
 // The artist's viewing distance, in hatch widths: the trapezoid fixes the
 // ratio between the near and far edge distances but not the absolute scale,
 // so this sets how deep a given taper reads. Larger = deeper hatch.
-const PORTAL_VIEW_DISTANCE = 3;
+const PORTAL_VIEW_DISTANCE = 5;
+const PORTAL_FLAP_THICKNESS = 1;   // the doors are thin flat panels
+const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
+const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
 
 /** Stash the object list and their metadata as the level is built. */
 (function installObjectDataHook() {
@@ -208,23 +211,43 @@ function hatchOpenness(frames, openingMask, w) {
   return ratios.map((r) => Math.min(1, r / hi)); // shut -> 0, open -> 90 degrees
 }
 
-/** A flap: half the opening wide, hinged along one side, textured from the
- *  closed frame so it carries the door's own artwork rather than the void. */
+/**
+ * A flap: half the opening wide and a pixel thick, hinged along one side and
+ * textured from the closed frame so it carries the door's own artwork rather
+ * than the void. Spans the opening's depth, centred like the opening is.
+ */
 function buildFlapGeometry(uv, halfWidth, depth, sign) {
   const positions = [], colors = [], uvs = [], indices = [];
-  // hinge at local x=0; the panel extends to sign*halfWidth, back to -depth
-  const corners = [
-    [0, 0, 0, sign > 0 ? uv.u0 : uv.u1, uv.v0],
-    [sign * halfWidth, 0, 0, sign > 0 ? uv.u1 : uv.u0, uv.v0],
-    [sign * halfWidth, 0, -depth, sign > 0 ? uv.u1 : uv.u0, uv.v1],
-    [0, 0, -depth, sign > 0 ? uv.u0 : uv.u1, uv.v1],
-  ];
-  for (const [x, y, z, u, v] of corners) {
+  const zNear = depth / 2, zFar = -depth / 2;
+  const uOuter = sign > 0 ? uv.u1 : uv.u0;
+  const uInner = sign > 0 ? uv.u0 : uv.u1;
+  const push = (x, y, z, u, v, shade) => {
     positions.push(x, y, z);
-    colors.push(0.9, 0.9, 0.9);
+    colors.push(shade, shade, shade);
     uvs.push(u, v);
-  }
-  indices.push(0, 1, 2, 0, 2, 3);
+  };
+  const quad = (pts, shade) => {
+    const base = positions.length / 3;
+    for (const [x, y, z, u, v] of pts) push(x, y, z, u, v, shade);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const w = sign * halfWidth;
+  // the two broad faces, a pixel apart
+  quad([[0, 0, zNear, uInner, uv.v0], [w, 0, zNear, uOuter, uv.v0],
+        [w, 0, zFar, uOuter, uv.v1], [0, 0, zFar, uInner, uv.v1]], 1);
+  quad([[0, PORTAL_FLAP_THICKNESS, zNear, uInner, uv.v0],
+        [w, PORTAL_FLAP_THICKNESS, zNear, uOuter, uv.v0],
+        [w, PORTAL_FLAP_THICKNESS, zFar, uOuter, uv.v1],
+        [0, PORTAL_FLAP_THICKNESS, zFar, uInner, uv.v1]], 0.55);
+  // the thin edges
+  const t = PORTAL_FLAP_THICKNESS;
+  quad([[w, 0, zNear, uOuter, uv.v0], [w, t, zNear, uOuter, uv.v0],
+        [w, t, zFar, uOuter, uv.v1], [w, 0, zFar, uOuter, uv.v1]], 0.75);
+  quad([[0, 0, zNear, uInner, uv.v0], [w, 0, zNear, uOuter, uv.v0],
+        [w, t, zNear, uOuter, uv.v0], [0, t, zNear, uInner, uv.v0]], 0.85);
+  quad([[0, 0, zFar, uInner, uv.v1], [w, 0, zFar, uOuter, uv.v1],
+        [w, t, zFar, uOuter, uv.v1], [0, t, zFar, uInner, uv.v1]], 0.65);
+
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -282,6 +305,21 @@ function buildCeilingGeometry(frame, depth) {
   depth = farW > 0 && farW < nearW
     ? PORTAL_VIEW_DISTANCE * nearW * (nearW / farW - 1)
     : nearW;
+  // The grey border drawn beside the opening is its rim, part of the ceiling
+  // rather than the vertical frame: widen each row over the pixels that run
+  // straight out from the door, so the rim lies flat around the square.
+  for (let y = nearY; y <= farY; y++) {
+    const r = rows[y];
+    for (let n = 0; n < PORTAL_RIM_MAX && r.min > 0 && mask[y * w + r.min - 1]; n++) {
+      r.min--;
+    }
+    for (let n = 0; n < PORTAL_RIM_MAX && r.max < w - 1 && mask[y * w + r.max + 1]; n++) {
+      r.max++;
+    }
+    r.width = r.max - r.min + 1;
+  }
+  nearW = rows[nearY].width;
+
   const span = farY - nearY;
   const nearCentre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const rowAt = (y) => rows[Math.max(nearY, Math.min(farY, y))];
@@ -291,8 +329,10 @@ function buildCeilingGeometry(frame, depth) {
     const centre = (r.min + r.max + 1) / 2;
     return nearCentre + (x - centre) * (nearW / r.width);
   };
+  // centred on the object's plane, so a lemming spawning there drops through
+  // the middle of the square rather than off its front edge
   const panelZ = (y) =>
-    -((Math.max(nearY, Math.min(farY, y)) - nearY) / span) * depth;
+    depth / 2 - ((Math.max(nearY, Math.min(farY, y)) - nearY) / span) * depth;
 
   const panel = { positions: [], colors: [], uvs: [], indices: [] };
   const inPanel = new Uint8Array(w * h);
@@ -332,7 +372,7 @@ function buildCeilingGeometry(frame, depth) {
     // the extruder builds from z=0 back to z=depth toward the viewer; shift it
     // so the box's face is at the sprite plane and its body recedes, matching
     // the opening
-    for (let i = 2; i < positions.length; i += 3) positions[i] -= depth;
+    for (let i = 2; i < positions.length; i += 3) positions[i] -= depth / 2;
     framePart = {
       positions,
       colors: Array.from(frameGeom.attributes.color.array),
@@ -467,8 +507,14 @@ function buildPortals(level, profile, depthMap) {
     }
     if (!geometry) continue;
 
-    const originX = mapObject.x + frame.offsetX;
+    let originX = mapObject.x + frame.offsetX;
     const originY = mapObject.y + frame.offsetY;
+    if (hatch) {
+      // line the opening up with where lemmings actually spawn, so they drop
+      // through its middle (LemmingManager: entrance.x + 24)
+      const spawnLocalX = mapObject.x + PORTAL_SPAWN_OFFSET_X - originX;
+      originX += spawnLocalX - (hatch.leftX + hatch.halfWidth);
+    }
     portals.push({
       index: i, objectId, geometry, originX, originY, shape: config.shape,
       hatch, openness, closedFrame: mapObject.animation.frames[1] || frame,
