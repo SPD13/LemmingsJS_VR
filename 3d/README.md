@@ -53,6 +53,11 @@ intended start area.
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale
+- **desktop keys while in VR** (handy in mouse-fallback): `v` re-places the
+  diorama at your current gaze; `[` / `]` tune the pose yaw correction by 15°
+  and re-place (some runtimes report a rotated forward axis — the default
+  correction is −90°, calibrated on PSVR2 + SteamVR; set your final value in
+  `vrYawCorrection` in `js/app.js`)
 - **no controllers?** The session still runs: a warning sign appears beside
   the play area and the desktop mouse becomes the pointer — aim on the
   mirrored view on the monitor; a glowing dot in the headset marks the aim

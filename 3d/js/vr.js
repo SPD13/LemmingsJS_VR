@@ -169,8 +169,7 @@ class VRManager {
       if (b && b.pressed) pressed = true;
     }
     if (pressed && !this._recenterHeld) {
-      this._grab = null;
-      this.hooks.placeDiorama(this._lastHeadPose);
+      this.recenterNow();
     }
     this._recenterHeld = pressed;
   }
@@ -190,6 +189,12 @@ class VRManager {
     return e[0] === 1 && e[5] === 1 && e[10] === 1 && e[15] === 1 &&
       e[12] === 0 && e[13] === 0 && e[14] === 0 &&
       e[1] === 0 && e[2] === 0 && e[4] === 0 && e[6] === 0 && e[8] === 0 && e[9] === 0;
+  }
+
+  /** Re-place the diorama using the most recent head pose. */
+  recenterNow() {
+    this._grab = null;
+    this.hooks.placeDiorama(this._lastHeadPose);
   }
 
   resetDiorama() {
