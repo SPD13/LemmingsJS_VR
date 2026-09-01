@@ -329,6 +329,12 @@
       case "e":
         if (session.editor) session.editor.toggle();
         break;
+      case "w":
+        window.__lem3d.library.toggle();
+        break;
+      case "Escape":
+        window.__lem3d.library.close();
+        break;
       case "c":
         if (session.editor && session.editor.enabled) session.editor.cycleClass();
         break;
@@ -378,8 +384,18 @@
     renderer.render(scene, camera);
   }
 
+  // world library: catalog of tilesets, click-to-enter for tagging sessions
+  const library = new WorldLibrary(factory, async (gameType, group, level) => {
+    state.gameType = gameType;
+    state.group = group;
+    state.level = level;
+    await loadLevel();
+    if (session && session.editor) session.editor.enable();
+  });
+  document.getElementById("btn-library").addEventListener("click", () => library.toggle());
+
   // debug handle for the console / automated checks
-  window.__lem3d = { state, camera, renderer, controls, get session() { return session; } };
+  window.__lem3d = { state, camera, renderer, controls, library, get session() { return session; } };
 
   loadLevel().catch((err) => {
     hud.loading.textContent = "FAILED TO LOAD — see console";

@@ -33,6 +33,33 @@
     z-index: 20; background: #10141c; color: #6fce7e; font-size: 14px; letter-spacing: 0.1em;
   }
   #loading.hidden { display: none; }
+  #library {
+    position: absolute; inset: 0; z-index: 15; overflow-y: auto;
+    background: rgba(10, 14, 22, 0.96); padding: 28px 36px;
+  }
+  #library[hidden] { display: none; }
+  #lib-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; }
+  #lib-head h1 { font-size: 15px; color: #6fce7e; letter-spacing: 0.08em; margin: 0; }
+  #lib-status { color: #8fa1bb; font-size: 12px; min-height: 16px; margin-bottom: 10px; }
+  .lib-game {
+    font-size: 13px; color: #f0f3f8; letter-spacing: 0.06em;
+    margin: 18px 0 8px; border-bottom: 1px solid #2a3446; padding-bottom: 4px;
+  }
+  #lib-grid { display: flex; flex-direction: column; }
+  .lib-card {
+    display: inline-block; background: #161c28; border: 1px solid #2a3446;
+    border-radius: 6px; padding: 10px 12px; margin: 6px 0; cursor: pointer;
+    max-width: 440px;
+  }
+  .lib-card:hover { border-color: #6fce7e; background: #1a2231; }
+  .lib-card canvas {
+    display: block; width: 400px; max-width: 100%; image-rendering: pixelated;
+    background: #05070c; border-radius: 3px;
+  }
+  .lib-label { font-size: 13px; color: #f0f3f8; margin-top: 7px; }
+  .lib-sub { font-size: 11px; color: #8fa1bb; }
+  .lib-mark { font-size: 11px; color: #5a6a7c; margin-top: 4px; }
+  .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
   #hud-editor { bottom: 12px; right: 12px; max-width: 320px; }
   #hud-editor h1 { font-size: 13px; margin: 0 0 4px; color: #ffd866; letter-spacing: 0.06em; }
   #ed-info { color: #cdd6e4; min-height: 16px; margin-bottom: 4px; }
@@ -54,14 +81,25 @@
     <button id="btn-restart">restart</button>
     <button id="btn-next">next &rarr;</button>
     <button id="btn-pause">pause</button>
+    <button id="btn-library">worlds</button>
   </div>
+</div>
+
+<div id="library" hidden>
+  <div id="lib-head">
+    <h1>WORLD LIBRARY</h1>
+    <button id="lib-rescan">rescan</button>
+    <button id="lib-close">close</button>
+  </div>
+  <div id="lib-status">&nbsp;</div>
+  <div id="lib-grid"></div>
 </div>
 
 <div id="hud-keys" class="hud">
   <b>drag</b> orbit &middot; <b>right-drag</b> pan &middot; <b>wheel</b> zoom<br>
   <b>click</b> lemming: assign skill &middot; panel: as in game<br>
   <b>space</b> pause &middot; <b>n</b> step &middot; <b>+/-</b> speed &middot; <b>,/.</b> level<br>
-  <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>r</b> dump replay
+  <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>w</b> world library &middot; <b>r</b> dump replay
 </div>
 
 <div id="hud-hover" class="hud">&nbsp;</div>
@@ -88,6 +126,7 @@
 <script src="js/depth.js"></script>
 <script src="js/terrain.js"></script>
 <script src="js/editor.js"></script>
+<script src="js/library.js"></script>
 <script src="js/gui.js"></script>
 <script src="js/app.js"></script>
 </body>
