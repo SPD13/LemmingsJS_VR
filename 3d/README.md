@@ -41,9 +41,12 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
 
 - `js/bridge.js` — the sim/scene boundary. `SpriteCapture` is a fake "display"
   handed to the game's own render methods: every `drawFrame`/`drawMask`/
-  `setPixel` call is captured and turned into textured billboards
-  (lemmings, objects, countdown numbers, explosion particles) instead of
-  software-blitted pixels. `HeadlessStage` satisfies the Stage contract for
+  `setPixel` call is captured and turned into voxel sprites (lemmings,
+  objects, countdown numbers, explosion particles) instead of
+  software-blitted pixels. Sprites are not flat cutouts: each animation
+  frame's opaque pixels are greedy-meshed once into a `SPRITE_DEPTH`-deep
+  relief with shaded edge walls (the plan's "characters get volume", §5.5)
+  and cached. `HeadlessStage` satisfies the Stage contract for
   `DisplayImage` without a canvas.
 - `js/depth.js` — depth compositing (plan §5.1). A per-pixel depth-class
   buffer (backdrop / terrain / relief / overlay) is built by replaying the
@@ -79,8 +82,9 @@ camera, renderer, controls}` for console debugging and automated checks.
 - No tileset has been hand-tagged yet — the editor exists (`e`), the
   authoring sessions haven't happened. Exported profiles must be saved into
   `3d/profiles/` manually.
-- Objects are flat billboards at fixed depths (background objects behind the
-  slab, others in front); no extruded/animated object meshes yet.
+- Objects extrude like all sprites but still sit at fixed depths (background
+  objects behind the slab, others in front); no shape classes (exit
+  interiors, hinged hatches, water shaders) yet.
 - `VGASPEC` special levels untested; no audio; steel areas and multi-entrance
   behavior inherited as-is from LemmingsJS.
 - Replay-based 2D-vs-3D end-state comparison is manual for now (`r` dump +
