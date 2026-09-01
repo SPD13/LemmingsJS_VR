@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lemmings VR Launcher</title>
+<style>
+  :root {
+    --bg: #10141c; --surface: #161c28; --line: #2a3446;
+    --ink: #cdd6e4; --muted: #8fa1bb; --green: #6fce7e; --red: #e07a6a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px;
+    user-select: none;
+  }
+  header {
+    padding: 14px 18px 0;
+  }
+  h1 {
+    font-size: 13px; margin: 0 0 12px; color: var(--green);
+    letter-spacing: 0.08em;
+  }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); padding: 0 18px; }
+  .tab {
+    font: inherit; color: var(--muted); background: none; border: none;
+    border-bottom: 2px solid transparent; padding: 8px 14px; cursor: pointer;
+  }
+  .tab.active { color: var(--ink); border-bottom-color: var(--green); }
+  section { padding: 18px; }
+  section[hidden] { display: none; }
+
+  .row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  #toggle {
+    font: inherit; font-size: 14px; padding: 10px 26px; cursor: pointer;
+    color: var(--green); background: var(--surface);
+    border: 1px solid var(--green); border-radius: 6px; letter-spacing: 0.06em;
+  }
+  #toggle.running { color: var(--red); border-color: var(--red); }
+  #status-pill {
+    padding: 4px 12px; border-radius: 999px; font-size: 11px;
+    letter-spacing: 0.1em; background: var(--surface); color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  #status-pill.running { color: var(--green); border-color: var(--green); }
+  .urls { border-top: 1px solid var(--line); padding-top: 14px; line-height: 2; }
+  .url-label { color: var(--muted); display: inline-block; width: 110px; }
+  .url {
+    color: var(--ink); cursor: pointer; text-decoration: underline;
+    text-decoration-color: var(--line);
+  }
+  .url:hover { color: var(--green); }
+  .url.disabled { color: var(--muted); cursor: default; text-decoration: none; }
+  #error { color: var(--red); min-height: 18px; margin-top: 12px; }
+
+  label { color: var(--muted); display: block; margin-bottom: 6px; }
+  input[type="number"] {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px;
+    width: 120px; outline: none;
+  }
+  input[type="number"]:focus { border-color: var(--green); }
+  #save-port {
+    font: inherit; padding: 8px 18px; cursor: pointer; margin-left: 8px;
+    color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 6px;
+  }
+  #save-port:hover { border-color: var(--green); color: var(--green); }
+  .hint { color: var(--muted); margin-top: 12px; line-height: 1.6; }
+  #setup-msg { min-height: 18px; margin-top: 10px; }
+  #setup-msg.ok { color: var(--green); }
+  #setup-msg.err { color: var(--red); }
+</style>
+</head>
+<body>
+<header><h1>LEMMINGS VR LAUNCHER</h1></header>
+<nav class="tabs">
+  <button class="tab active" data-tab="server">Server</button>
+  <button class="tab" data-tab="setup">Setup</button>
+</nav>
+
+<section id="tab-server">
+  <div class="row">
+    <button id="toggle">START</button>
+    <span id="status-pill">STOPPED</span>
+  </div>
+  <div class="urls">
+    <div><span class="url-label">Internal URL</span> <span id="internal-url" class="url disabled">—</span></div>
+    <div><span class="url-label">External URL</span> <span id="external-url" class="url disabled">—</span></div>
+  </div>
+  <div id="error"></div>
+</section>
+
+<section id="tab-setup" hidden>
+  <label for="port">Server port</label>
+  <input id="port" type="number" min="1024" max="65535" step="1">
+  <button id="save-port">Save</button>
+  <div id="setup-msg"></div>
+  <div class="hint">
+    Ports 1024–65535. If the server is running, it restarts on the new port
+    automatically. The external URL is what a headset on the same network
+    uses; for VR on a Quest over USB, prefer
+    <code>adb reverse</code> with the internal URL.
+  </div>
+</section>
+
+<script src="renderer.js"></script>
+</body>
+</html>
