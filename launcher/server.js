@@ -36,6 +36,31 @@ function createStaticServer(root, port, tls = null) {
     const handler = (req, res) => {
       try {
         const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+
+        // profile save endpoint: the piece editor POSTs its depth profile
+        // here so it lands in 3d/profiles/ and auto-loads on the next game
+        // load. The strict filename pattern is the only writable location.
+        if ((req.method === "POST" || req.method === "PUT") &&
+            /^\/3d\/profiles\/[a-z0-9]+-g\d+\.json$/.test(urlPath)) {
+          let body = "";
+          req.on("data", (chunk) => {
+            body += chunk;
+            if (body.length > 1e6) req.destroy();
+          });
+          req.on("end", () => {
+            try {
+              const json = JSON.stringify(JSON.parse(body), null, 2) + "\n";
+              fs.writeFileSync(path.join(absRoot, urlPath), json);
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end('{"ok":true}');
+            } catch (e) {
+              res.writeHead(400);
+              res.end("invalid JSON");
+            }
+          });
+          return;
+        }
+
         let filePath = path.normalize(path.join(absRoot, urlPath));
         if (filePath !== absRoot && !filePath.startsWith(absRoot + path.sep)) {
           res.writeHead(403);
