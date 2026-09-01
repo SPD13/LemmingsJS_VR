@@ -139,6 +139,68 @@ function toBufferGeometry(parts) {
  * The rest of the sprite (frame, pillars, legs) keeps the usual flat
  * extrusion.
  */
+/**
+ * The two flaps of an entrance hatch. They are flat panels that fill the
+ * square when shut and swing down on hinges along its left and right edges,
+ * so each is half the opening wide and as long as the opening is deep.
+ *
+ * How far they are open is read from the artwork rather than assumed: the
+ * last animation frame is the fully open hatch, so for each frame we count
+ * how many of the opening's pixels already match it. The closed frame
+ * matches almost none (the doors cover the hole), a half-open frame matches
+ * about half. That ratio becomes the hinge angle, and it works for any
+ * tileset without naming a single colour.
+ */
+function hatchOpenness(frames, openingMask, w) {
+  const last = frames[frames.length - 1];
+  const lastBuf = last.getBuffer(), lastMask = last.getMask();
+  let total = 0;
+  for (let i = 0; i < openingMask.length; i++) if (openingMask[i]) total++;
+  if (total === 0) return frames.map(() => 1);
+
+  const ratios = frames.map((frame) => {
+    const buf = frame.getBuffer(), mask = frame.getMask();
+    let same = 0;
+    for (let i = 0; i < openingMask.length; i++) {
+      if (!openingMask[i]) continue;
+      const a = mask[i] ? buf[i] : -1;
+      const b = lastMask[i] ? lastBuf[i] : -1;
+      if (a === b) same++;
+    }
+    return same / total;
+  });
+  // normalise: the least-matching frame is shut, the best-matching wide open,
+  // so the doors always travel the full quarter turn whatever the artwork
+  const lo = Math.min(...ratios), hi = Math.max(...ratios);
+  if (hi - lo < 0.05) return ratios.map(() => 1);
+  return ratios.map((r) => (r - lo) / (hi - lo));
+}
+
+/** A flap: half the opening wide, hinged along one side, textured from the
+ *  closed frame so it carries the door's own artwork rather than the void. */
+function buildFlapGeometry(uv, halfWidth, depth, sign) {
+  const positions = [], colors = [], uvs = [], indices = [];
+  // hinge at local x=0; the panel extends to sign*halfWidth, back to -depth
+  const corners = [
+    [0, 0, 0, sign > 0 ? uv.u0 : uv.u1, uv.v0],
+    [sign * halfWidth, 0, 0, sign > 0 ? uv.u1 : uv.u0, uv.v0],
+    [sign * halfWidth, 0, -depth, sign > 0 ? uv.u1 : uv.u0, uv.v1],
+    [0, 0, -depth, sign > 0 ? uv.u0 : uv.u1, uv.v1],
+  ];
+  for (const [x, y, z, u, v] of corners) {
+    positions.push(x, y, z);
+    colors.push(0.9, 0.9, 0.9);
+    uvs.push(u, v);
+  }
+  indices.push(0, 1, 2, 0, 2, 3);
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geom.setIndex(indices);
+  return geom;
+}
+
 function buildCeilingGeometry(frame, depth) {
   const w = frame.width, h = frame.height, mask = frame.getMask();
   const dist = spriteInteriorDistance(frame);
@@ -167,6 +229,8 @@ function buildCeilingGeometry(frame, depth) {
   }
   if (farY - nearY < 2) return null; // no taper: not a panel in perspective
 
+  // the hatch is a square: it is as deep as it is wide
+  depth = nearW;
   const span = farY - nearY;
   const nearCentre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const rowAt = (y) => rows[Math.max(nearY, Math.min(farY, y))];
@@ -219,7 +283,22 @@ function buildCeilingGeometry(frame, depth) {
     };
     frameGeom.dispose();
   }
-  return toBufferGeometry(mergePortalGeometry(framePart, panel));
+  return {
+    geometry: toBufferGeometry(mergePortalGeometry(framePart, panel)),
+    openingMask: inPanel,
+    hatch: {
+      // hinge lines along the square's left and right edges, at the near row
+      leftX: nearCentre - nearW / 2,
+      rightX: nearCentre + nearW / 2,
+      y: nearY,
+      halfWidth: nearW / 2,
+      depth,
+      uv: {
+        u0: (nearCentre - nearW / 2) / w, u1: nearCentre / w,
+        v0: nearY / h, v1: (farY + 1) / h,
+      },
+    },
+  };
 }
 
 /**
@@ -317,15 +396,24 @@ function buildPortals(level, profile, depthMap) {
     const mapObject = level.objects[i];
     const frame = mapObject.animation.frames[0];
     if (!frame) continue;
-    const geometry = config.shape === "ceiling"
-      ? buildCeilingGeometry(frame, config.depth)
-      : buildPortalGeometry(frame, config.depth);
+    let geometry = null, hatch = null, openness = null;
+    if (config.shape === "ceiling") {
+      const built = buildCeilingGeometry(frame, config.depth);
+      if (!built) continue;
+      geometry = built.geometry;
+      hatch = built.hatch;
+      openness = hatchOpenness(mapObject.animation.frames, built.openingMask,
+        frame.width);
+    } else {
+      geometry = buildPortalGeometry(frame, config.depth);
+    }
     if (!geometry) continue;
 
     const originX = mapObject.x + frame.offsetX;
     const originY = mapObject.y + frame.offsetY;
     portals.push({
       index: i, objectId, geometry, originX, originY, shape: config.shape,
+      hatch, openness, closedFrame: mapObject.animation.frames[1] || frame,
       animation: mapObject.animation,
       carved: carveTerrainForPortal(depthMap, level, originX, originY, frame),
     });

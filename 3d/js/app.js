@@ -253,6 +253,24 @@
         materialCache.forFrame(portal.animation.frames[0]).material);
       portal.mesh.position.set(portal.originX, portal.originY, OBJECT_Z);
       worldGroup.add(portal.mesh);
+
+      // hatch flaps: flat doors hinged on the opening's left and right edges,
+      // textured from the closed frame so they carry the door's own artwork
+      if (portal.hatch) {
+        const h = portal.hatch;
+        const material = materialCache.forFrame(portal.closedFrame).material;
+        portal.flaps = [
+          { sign: 1, x: h.leftX },
+          { sign: -1, x: h.rightX },
+        ].map((side) => {
+          const geom = resources.track(
+            buildFlapGeometry(h.uv, h.halfWidth, h.depth, side.sign));
+          const mesh = new THREE.Mesh(geom, material);
+          mesh.position.set(portal.originX + side.x, portal.originY + h.y, OBJECT_Z);
+          worldGroup.add(mesh);
+          return { mesh, sign: side.sign };
+        });
+      }
     }
     const lemmingPool = new BillboardPool(worldGroup, materialCache);
     const objectPool = new BillboardPool(worldGroup, materialCache);
@@ -286,6 +304,14 @@
         for (const portal of portals) {
           const frame = portal.animation.getFrame(tick);
           if (frame) portal.mesh.material = materialCache.forFrame(frame).material;
+          if (!portal.flaps || !portal.openness) continue;
+          // swing the doors by however far this frame has the hatch open
+          const frames = portal.animation.frames;
+          const idx = Math.max(0, frames.indexOf(frame));
+          const angle = (portal.openness[idx] || 0) * Math.PI / 2;
+          for (const flap of portal.flaps) {
+            flap.mesh.rotation.z = flap.sign * angle;
+          }
         }
       }
       objectPool.sync(objectItems, (layer) =>
