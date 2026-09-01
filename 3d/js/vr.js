@@ -35,8 +35,10 @@ function createVRButton(renderer) {
     button.addEventListener("click", async () => {
       if (currentSession) { currentSession.end(); return; }
       try {
+        // minimal session request: extra optional features exercise more
+        // runtime paths, and some runtime/controller combos are fragile there
         const session = await navigator.xr.requestSession("immersive-vr", {
-          optionalFeatures: ["local-floor", "bounded-floor"],
+          optionalFeatures: ["local-floor"],
         });
         session.addEventListener("end", () => {
           currentSession = null;
