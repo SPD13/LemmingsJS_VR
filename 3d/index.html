@@ -70,7 +70,8 @@
   .lib-mark { font-size: 11px; color: #5a6a7c; }
   .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
   #vr-button {
-    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    /* top centre: the 3D toolbar owns the bottom of the viewport */
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
     z-index: 12; font: inherit; font-size: 13px; letter-spacing: 0.08em;
     color: #6fce7e; background: rgba(10, 14, 22, 0.85);
     border: 1px solid #6fce7e; border-radius: 6px; padding: 8px 22px; cursor: pointer;
