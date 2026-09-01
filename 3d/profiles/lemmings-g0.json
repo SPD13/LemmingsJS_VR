@@ -2,6 +2,14 @@
   "tileset": "Lemmings ground set 0 (dirt)",
   "terrain": {
     "default": "terrain",
-    "byId": {}
+    "byId": {
+      "33": "backdrop",
+      "34": "backdrop",
+      "35": "backdrop",
+      "36": "backdrop",
+      "37": "backdrop",
+      "38": "backdrop",
+      "39": "backdrop"
+    }
   }
 }
