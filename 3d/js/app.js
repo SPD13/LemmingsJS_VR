@@ -424,7 +424,21 @@
 
   let downAt = null;
   let mouseCursorOnBoard = false;
-  let vrPan = null; // right-drag pan state in VR mouse-fallback
+  let vrPan = null;   // right-drag pan state in VR mouse-fallback
+  let vrOrbit = null; // left-drag rotate state in VR mouse-fallback
+
+  /** World position of the level's focus point (the wheel/orbit pivot). */
+  function dioramaFocusWorld() {
+    const startX = session.level.screenPositionX + 200;
+    return dioramaRoot.localToWorld(new THREE.Vector3(
+      startX, session.level.height / 2, TERRAIN_DEPTH / 2));
+  }
+
+  /** Rotate the diorama by q about a fixed world pivot. */
+  function rotateDioramaAroundPivot(q, pivot) {
+    dioramaRoot.quaternion.premultiply(q);
+    dioramaRoot.position.sub(pivot).applyQuaternion(q).add(pivot);
+  }
 
   // OrbitControls suppresses the context menu only while enabled (desktop);
   // in a session the right button belongs to our pan
@@ -442,14 +456,9 @@
       cur * Math.pow(0.998, e.deltaY),
       VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
     const k = next / cur;
-    let pivot;
-    if (mouseCursorOnBoard) {
-      pivot = mouseCursor.position.clone();
-    } else {
-      const startX = session.level.screenPositionX + 200;
-      pivot = dioramaRoot.localToWorld(new THREE.Vector3(
-        startX, session.level.height / 2, TERRAIN_DEPTH / 2));
-    }
+    const pivot = mouseCursorOnBoard
+      ? mouseCursor.position.clone()
+      : dioramaFocusWorld();
     dioramaRoot.scale.setScalar(next);
     dioramaRoot.position.copy(pivot)
       .add(dioramaRoot.position.sub(pivot).multiplyScalar(k));
@@ -475,11 +484,18 @@
     }
     if (e.button !== 0) return;
     downAt = { x: e.clientX, y: e.clientY };
+    if (vrMouseFallback()) {
+      // left-drag = orbit, as in the web view: rotates the diorama about
+      // its focus point; a barely-moved press stays a click
+      vrOrbit = { lastX: e.clientX, lastY: e.clientY,
+                  pivot: dioramaFocusWorld(), active: false };
+    }
     const p = pick(e);
     if (p && p.panelUv) session.gui.onMouseDown(p.panelUv);
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
     if (e.button === 2) { vrPan = null; return; }
+    if (e.button === 0) vrOrbit = null;
     if (!mouseAllowed() || e.button !== 0) return;
     const p = pick(e);
     if (p && p.panelUv) session.gui.onMouseUp(p.panelUv);
@@ -504,6 +520,30 @@
           vrPan.last = p;
         }
         return;
+      }
+      if (vrOrbit && (e.buttons & 1)) {
+        const dx = e.clientX - vrOrbit.lastX;
+        const dy = e.clientY - vrOrbit.lastY;
+        if (!vrOrbit.active && downAt &&
+            Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y) > 5) {
+          vrOrbit.active = true;
+        }
+        if (vrOrbit.active) {
+          const up = new THREE.Vector3(0, 1, 0);
+          rotateDioramaAroundPivot(
+            new THREE.Quaternion().setFromAxisAngle(up, dx * 0.005), vrOrbit.pivot);
+          const right = new THREE.Vector3()
+            .setFromMatrixColumn(camera.matrixWorld, 0);
+          right.y = 0;
+          if (right.lengthSq() > 1e-4) {
+            right.normalize();
+            rotateDioramaAroundPivot(
+              new THREE.Quaternion().setFromAxisAngle(right, dy * 0.005), vrOrbit.pivot);
+          }
+        }
+        vrOrbit.lastX = e.clientX;
+        vrOrbit.lastY = e.clientY;
+        if (vrOrbit.active) return;
       }
       const hit = raycastHit(rc);
       // always render the cursor so it can be steered back onto the board:
@@ -718,6 +758,7 @@
     if (!vrMouseFallback()) {
       mouseCursor.visible = false;
       vrPan = null;
+      vrOrbit = null;
     }
     renderer.render(scene, camera);
   }
