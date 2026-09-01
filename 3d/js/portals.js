@@ -19,7 +19,8 @@ const PORTAL_ENTRANCE_ID = 1;      // level-object id of an entrance
 const PORTAL_DEFAULT_DEPTH = 12;   // game pixels of recession
 const PORTAL_EXIT_DEPTH = 14;
 const PORTAL_CARVE_MIN = 2;        // interior pixels (by distance) get carved
-const PORTAL_RIM_MAX = 4;          // grey rim pixels bordering the opening
+const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
+const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
 const PORTAL_PANEL_THICK = 1;      // the ceiling square is a game pixel thick
 const PORTAL_FLAP_THICK = 1;       // and so are the doors hinged under it
@@ -260,37 +261,86 @@ function buildFlapGeometry(frame, doorRows, halfWidth, depth, sign) {
 }
 
 /**
- * The entrance hatch, built simply:
- *   - one flat square lying parallel to the ground, carrying the grey rim and
- *     the landscape drawn inside it. The sprite draws that square in
- *     perspective, so each of its rows is laid down as a depth slice
- *     stretched to the square's full width, which undoes the perspective.
- *   - the surrounding artwork as an ordinary shallow sprite in its own plane.
- * The two door flaps are separate meshes so they can swing (see below).
+ * Where the opening is, row by row, found by asking what the doors hide.
+ *
+ * Shut, the doors cover the hole; open, the same pixels show landscape. So
+ * the colours that gain pixels when the hatch opens are the landscape's, and
+ * the opening is the region painted in them. Counts rather than presence,
+ * because a tileset may put a stray pixel of sky elsewhere in the sprite -
+ * one such pixel is enough to lose the sky from a set difference.
+ *
+ * That alone can also pick up the swung doors, which are redrawn as they
+ * open, so the region is taken as the blob connected to the commonest
+ * revealed colour: the sky, in the middle of the hole. The grey rim comes
+ * along with it, being revealed too, which is what we want - it belongs to
+ * the square.
+ *
+ * Keying off the animation rather than the artwork's colours is what makes
+ * this hold across tilesets. Reading the palette directly cannot: an opening
+ * drawn touching the sprite's edge puts sky on the silhouette, where a
+ * colour-based reading has to call it frame.
  */
-function buildCeilingGeometry(frame) {
-  const w = frame.width, h = frame.height;
-  const mask = frame.getMask(), buf = frame.getBuffer();
-  const dist = spriteInteriorDistance(frame);
+function spriteOpeningRows(open, shut) {
+  const w = open.width, h = open.height;
+  const maskOpen = open.getMask(), bufOpen = open.getBuffer();
+  const maskShut = shut.getMask(), bufShut = shut.getBuffer();
 
-  // Tell the door from its frame without naming a colour: the frame's colours
-  // are the ones drawn on the sprite's outline, so interior pixels painted in
-  // anything else are the door.
-  const outline = new Set();
-  for (let i = 0; i < w * h; i++) if (mask[i] && dist[i] <= 1) outline.add(buf[i]);
+  const countOpen = new Map(), countShut = new Map();
+  for (let i = 0; i < w * h; i++) {
+    if (maskOpen[i]) countOpen.set(bufOpen[i], (countOpen.get(bufOpen[i]) || 0) + 1);
+    if (maskShut[i]) countShut.set(bufShut[i], (countShut.get(bufShut[i]) || 0) + 1);
+  }
+  const revealed = new Set();
+  let sky = null, skyCount = 0;
+  for (const [colour, n] of countOpen) {
+    if (n < PORTAL_REVEAL_MIN) continue;
+    if ((countShut.get(colour) || 0) * PORTAL_REVEAL_RATIO > n) continue;
+    revealed.add(colour);
+    if (n > skyCount) { skyCount = n; sky = colour; }
+  }
+  if (sky === null) return null;
+
+  const inOpening = new Uint8Array(w * h), stack = [];
+  for (let i = 0; i < w * h; i++) {
+    if (maskOpen[i] && bufOpen[i] === sky) { inOpening[i] = 1; stack.push(i); }
+  }
+  while (stack.length) {
+    const i = stack.pop(), x = i % w, y = (i / w) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      if (inOpening[j] || !maskOpen[j] || !revealed.has(bufOpen[j])) continue;
+      inOpening[j] = 1;
+      stack.push(j);
+    }
+  }
 
   const rows = [];
   for (let y = 0; y < h; y++) {
     let min = null, max = null;
     for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (mask[i] && dist[i] >= PORTAL_CARVE_MIN && !outline.has(buf[i])) {
-        if (min === null) min = x;
-        max = x;
-      }
+      if (inOpening[y * w + x]) { if (min === null) min = x; max = x; }
     }
     rows[y] = min === null ? null : { min, max, width: max - min + 1 };
   }
+  return rows;
+}
+
+/**
+ * The entrance hatch, built simply:
+ *   - one flat square lying parallel to the ground, carrying the grey rim and
+ *     the landscape drawn inside it. The sprite draws that square in
+ *     perspective, so each of its rows is laid down as a depth slice
+ *     stretched to the square's full width, which undoes the perspective.
+ * The two door flaps are separate meshes so they can swing (see below).
+ */
+function buildCeilingGeometry(frame, shutFrame) {
+  const w = frame.width, h = frame.height;
+  const mask = frame.getMask();
+  if (!shutFrame || shutFrame === frame) return null;
+  const rows = spriteOpeningRows(frame, shutFrame);
+  if (!rows) return null;
 
   let nearY = -1, nearW = 0;
   for (let y = 0; y < h; y++) {
@@ -305,22 +355,14 @@ function buildCeilingGeometry(frame) {
   }
   if (farY - nearY < 2) return null; // no taper: not drawn in perspective
 
-  // The doors' own extents, row by row and before the rim is folded in: this
-  // is the shut hatch as the artist drew it, and it is what the flaps are
-  // painted from. Taken after the rim expansion below they would pick up the
-  // grey frame beside the doors instead of the doors.
+  // The opening's extents are the doors' extents: shut, the doors are exactly
+  // what covers this. So the same rows both size the square and say where to
+  // read each door's paint from the shut hatch.
   const doorRows = [];
   for (let y = nearY; y <= farY; y++) {
     doorRows.push({ y, min: rows[y].min, max: rows[y].max });
   }
 
-  // the grey border beside the opening is its rim and belongs to the square
-  for (let y = nearY; y <= farY; y++) {
-    const r = rows[y];
-    for (let n = 0; n < PORTAL_RIM_MAX && r.min > 0 && mask[y * w + r.min - 1]; n++) r.min--;
-    for (let n = 0; n < PORTAL_RIM_MAX && r.max < w - 1 && mask[y * w + r.max + 1]; n++) r.max++;
-    r.width = r.max - r.min + 1;
-  }
   const side = rows[nearY].width;                     // a square: side x side
   const centre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const span = farY - nearY + 1;
@@ -490,7 +532,7 @@ function buildPortals(level, profile, depthMap) {
     if (!frame) continue;
     let geometry = null, hatch = null, openness = null;
     if (config.shape === "ceiling") {
-      const built = buildCeilingGeometry(frame);
+      const built = buildCeilingGeometry(frame, mapObject.animation.frames[1]);
       if (!built) continue;
       geometry = built.geometry;
       hatch = built.hatch;
