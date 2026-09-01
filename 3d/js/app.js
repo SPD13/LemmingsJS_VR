@@ -25,14 +25,16 @@
   });
 
   const params = new URLSearchParams(location.search);
-  let embossStored = null, smoothStored = null;
+  let embossStored = null, smoothStored = null, doorsStored = null;
   try {
     embossStored = localStorage.getItem("lem3d-emboss");
     smoothStored = localStorage.getItem("lem3d-smooth");
+    doorsStored = localStorage.getItem("lem3d-doors");
   } catch (e) {}
   const state = {
     emboss: embossStored === "on", // colour-keyed terrain relief, off by default
     smooth: smoothStored === "on", // slope between relief heights, off by default
+    doors: doorsStored !== "off",  // entrances/exits as openings, on by default
     gameType: parseInt(params.get("type") || "1", 10),
     group: parseInt(params.get("group") || "0", 10),
     level: parseInt(params.get("level") || "0", 10),
@@ -113,6 +115,21 @@
   });
   renderEmbossBtn();
 
+  // entrances and exits as real openings rather than flat sprites. The
+  // opening carves the terrain behind it as the level is built, so unlike the
+  // relief this cannot be swapped in place - the level is rebuilt.
+  const doorsBtn = document.getElementById("btn-doors");
+  const renderDoorsBtn = () => {
+    doorsBtn.textContent = "3D doors: " + (state.doors ? "on" : "off");
+  };
+  doorsBtn.addEventListener("click", () => {
+    state.doors = !state.doors;
+    try { localStorage.setItem("lem3d-doors", state.doors ? "on" : "off"); } catch (e) {}
+    renderDoorsBtn();
+    loadLevel().catch((err) => console.error(err));
+  });
+  renderDoorsBtn();
+
   // slope the relief between heights instead of stepping
   const smoothBtn = document.getElementById("btn-smooth");
   const renderSmoothBtn = () => {
@@ -187,8 +204,9 @@
     const pieceMap = buildPieceMap(level, groundData);
     const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss);
     // entrances/exits become real openings; this also carves the terrain
-    // behind them (render only - collision is untouched)
-    const portals = buildPortals(level, profile, depthMap);
+    // behind them (render only - collision is untouched). Switched off, they
+    // stay the flat sprites the original draws and nothing is carved.
+    const portals = state.doors ? buildPortals(level, profile, depthMap) : [];
     const portalIndices = new Set(portals.map((p) => p.index));
 
     // music: the original rotates tunes with the level ordinal
