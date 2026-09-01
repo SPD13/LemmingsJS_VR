@@ -39,14 +39,26 @@ class PieceEditor {
       info: document.getElementById("ed-info"),
       classBtns: Array.from(document.querySelectorAll("#hud-editor [data-class]")),
       autoBtn: document.getElementById("ed-auto"),
+      resetBtn: document.getElementById("ed-reset"),
+      saveBtn: document.getElementById("ed-save"),
       exportBtn: document.getElementById("ed-export"),
+      msg: document.getElementById("ed-msg"),
     };
     this._onClassBtn = (e) => this.setClass(e.target.dataset.class);
     this._onAutoBtn = () => this.setClass(null);
+    this._onResetBtn = () => this.resetAll();
+    this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
     this.dom.classBtns.forEach((b) => b.addEventListener("click", this._onClassBtn));
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
+    this.dom.resetBtn.addEventListener("click", this._onResetBtn);
+    this.dom.saveBtn.addEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.addEventListener("click", this._onExportBtn);
+  }
+
+  _msg(text, ok) {
+    this.dom.msg.textContent = text;
+    this.dom.msg.className = ok ? "ok" : "err";
   }
 
   get _hasPieceData() {
@@ -211,6 +223,33 @@ class PieceEditor {
                         : "auto: " + this._autoClasses(this.selectedId).join("/"));
   }
 
+  /** POST the profile to the launcher server, which writes 3d/profiles/. */
+  async save() {
+    const profile = this.s.profile || { terrain: { default: "terrain", byId: {} } };
+    try {
+      const res = await fetch(this.profileUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile, null, 2),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      this._msg("saved — " + this.profileUrl + " loads automatically now", true);
+    } catch (e) {
+      this._msg("save failed (needs the launcher server) — use export JSON", false);
+    }
+  }
+
+  /** Clear every tag for this tileset (in memory; press save to persist). */
+  resetAll() {
+    if (!this.s.profile) this.s.profile = {};
+    if (!this.s.profile.terrain) this.s.profile.terrain = { default: "terrain" };
+    this.s.profile.terrain.byId = {};
+    DepthProfiles._cache.set(this.profileUrl, this.s.profile);
+    this._applyProfile();
+    this._renderInfo();
+    this._msg("all tags reset to default (not saved yet)", true);
+  }
+
   export() {
     const profile = this.s.profile || { terrain: { default: "terrain", byId: {} } };
     const json = JSON.stringify(profile, null, 2) + "\n";
@@ -229,6 +268,8 @@ class PieceEditor {
     this._highlightMat.dispose();
     this.dom.classBtns.forEach((b) => b.removeEventListener("click", this._onClassBtn));
     this.dom.autoBtn.removeEventListener("click", this._onAutoBtn);
+    this.dom.resetBtn.removeEventListener("click", this._onResetBtn);
+    this.dom.saveBtn.removeEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.removeEventListener("click", this._onExportBtn);
     this.dom.panel.hidden = true;
   }

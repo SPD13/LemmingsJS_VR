@@ -80,6 +80,9 @@
   #ed-info { color: #cdd6e4; min-height: 16px; margin-bottom: 4px; }
   #hud-editor button.active { background: #4a4326; border-color: #ffd866; color: #ffd866; }
   #hud-editor button:disabled { opacity: 0.4; cursor: default; }
+  #ed-msg { min-height: 16px; margin-top: 6px; font-size: 11px; }
+  #ed-msg.ok { color: #6fce7e; }
+  #ed-msg.err { color: #e07a6a; }
 </style>
 </head>
 <body>
@@ -130,8 +133,13 @@
   </div>
   <div class="btnrow">
     <button id="ed-auto">auto</button>
+    <button id="ed-reset">reset all</button>
+  </div>
+  <div class="btnrow">
+    <button id="ed-save">save</button>
     <button id="ed-export">export JSON</button>
   </div>
+  <div id="ed-msg"></div>
 </div>
 
 <script src="../js/lemmings.js"></script>
