@@ -16,13 +16,17 @@ const GUI_TILE_POP = 5;    // how far a hovered button rises toward the player
 const GUI_TILE_GROW = 1.08;
 const GUI_BUTTONS = 13;
 
-// The panel ships as one composited bitmap - the lemming pictures are baked
-// into their tiles - but the tile background is only the yellow/gray dither
-// plus black, so the figures can be color-keyed out and extruded.
-const GUI_BG_COLORS = new Set(["240,240,0", "128,128,128", "0,0,0"]);
-const GUI_ICON_TOP = 26;     // below the skill-count digits (they change)
+// The panel ships as one composited bitmap - the button pictures are baked
+// into their tiles - but every tile's background is just the yellow/gray
+// dither, so the artwork color-keys out and can be extruded. Black counts as
+// artwork: it outlines the figures and *is* the pause/nuke/speed icons.
+const GUI_BG_COLORS = new Set(["240,240,0", "128,128,128"]);
 const GUI_ICON_BOTTOM = 39;
-const GUI_ICON_DEPTH = 1;    // panel pixels of relief on the figures
+const GUI_ICON_DEPTH = 1;    // panel pixels of relief on the artwork
+// Buttons 0..9 carry a count drawn at y17..25 (it changes as skills are
+// spent, so it must stay flat); 10..12 have no digits and their art runs
+// the full tile height.
+const guiIconTop = (index) => (index <= 9 ? 26 : 17);
 
 class GuiPanel {
   constructor(scene, game, resources) {
@@ -49,11 +53,12 @@ class GuiPanel {
     const W = this.canvas.width, H = this.canvas.height;
     const data = this.ctx.getImageData(0, 0, W, H).data;
     const mask = new Uint8Array(W * H);
-    for (let y = GUI_ICON_TOP; y < GUI_ICON_BOTTOM; y++) {
-      for (let x = 0; x < GUI_BUTTONS * GUI_TILE_W && x < W; x++) {
-        const col = x % GUI_TILE_W;
-        // skip tile edges: the selection frame is drawn there and moves
-        if (col === 0 || col === GUI_TILE_W - 1) continue;
+    for (let x = 0; x < GUI_BUTTONS * GUI_TILE_W && x < W; x++) {
+      const col = x % GUI_TILE_W;
+      // skip tile edges: the selection frame is drawn there and moves
+      if (col === 0 || col === GUI_TILE_W - 1) continue;
+      const top = guiIconTop(Math.trunc(x / GUI_TILE_W));
+      for (let y = top; y < GUI_ICON_BOTTOM; y++) {
         const i = (y * W + x) * 4;
         const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
         if (!GUI_BG_COLORS.has(key)) mask[y * W + x] = 1;
