@@ -42,6 +42,11 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   opt out with "3D shade" in the piece editor, or flip which shades are
   raised with "invert" (some pieces are drawn with dark highlights, so
   darker pixels are the ones standing proud).
+- "3D doors" builds entrances and exits as real openings instead of flat
+  sprites (see `js/portals.js`). Off, they stay the sprites the original
+  draws and the terrain behind them is left uncarved. The carve happens as
+  the level is built, so toggling this rebuilds the level rather than
+  swapping in place. On by default, persisted in localStorage.
 - "smooth" slopes the relief between neighbouring heights instead of stepping
   them, by averaging the pixel heights that meet at each quad corner (crisp
   at depth-class boundaries and silhouettes). Also off by default and
@@ -104,7 +109,12 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   entrance is a square hatch lying flat overhead with two doors hinged along
   its left and right edges: the trapezoid in the artwork is un-projected back
   into a horizontal square, and the doors swing on real hinges, their angle
-  read from how far each animation frame has the opening revealed. Their
+  read from how far each animation frame has the opening revealed. Nothing
+  else from the sprite is drawn — the rest of it is the same hatch in 2D
+  perspective, and rebuilding that as upright pixels only stands a wall
+  behind the doors. Each door is a slab one pixel thick, laid down as one
+  strip per sprite row so the perspective is undone and the artist's own
+  door artwork lands square on a panel that stays flat. Their
   sprites are perspective drawings of a box, so instead of keying depth off
   brightness the opening is rebuilt geometrically: a distance transform of the
   sprite's silhouette says how far inside each pixel lies, and that becomes
