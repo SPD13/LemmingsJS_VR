@@ -436,6 +436,7 @@
   /** Aiming feedback (mouse hover or VR controller ray). */
   function applyHover(p) {
     if (!session) return;
+    session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
       cursorSim = { x: p.simX, y: p.simY };
       const lem = session.game.getLemmingManager().getLemmingAt(p.simX, p.simY);
