@@ -25,10 +25,14 @@
   });
 
   const params = new URLSearchParams(location.search);
-  let embossStored = null;
-  try { embossStored = localStorage.getItem("lem3d-emboss"); } catch (e) {}
+  let embossStored = null, smoothStored = null;
+  try {
+    embossStored = localStorage.getItem("lem3d-emboss");
+    smoothStored = localStorage.getItem("lem3d-smooth");
+  } catch (e) {}
   const state = {
     emboss: embossStored === "on", // colour-keyed terrain relief, off by default
+    smooth: smoothStored === "on", // slope between relief heights, off by default
     gameType: parseInt(params.get("type") || "1", 10),
     group: parseInt(params.get("group") || "0", 10),
     level: parseInt(params.get("level") || "0", 10),
@@ -109,6 +113,19 @@
   });
   renderEmbossBtn();
 
+  // slope the relief between heights instead of stepping
+  const smoothBtn = document.getElementById("btn-smooth");
+  const renderSmoothBtn = () => {
+    smoothBtn.textContent = "smooth: " + (state.smooth ? "on" : "off");
+  };
+  smoothBtn.addEventListener("click", () => {
+    state.smooth = !state.smooth;
+    try { localStorage.setItem("lem3d-smooth", state.smooth ? "on" : "off"); } catch (e) {}
+    renderSmoothBtn();
+    if (session) session.terrain.setSmooth(state.smooth);
+  });
+  renderSmoothBtn();
+
   audio.configureSpatial({
     isActive: () => renderer.xr.isPresenting,
     getListenerMatrix: () => camera.matrixWorld,
@@ -187,6 +204,7 @@
     dioramaRoot.add(worldGroup);
 
     const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources);
+    if (state.smooth) terrain.setSmooth(true);
 
     // dark backdrop behind the terrain so holes read as depth, not void
     const backdrop = new THREE.Mesh(

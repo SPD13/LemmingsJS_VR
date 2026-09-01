@@ -40,6 +40,10 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   giving rock and grass real texture. Off by default (it multiplies the
   terrain's triangle count), persisted in localStorage; individual pieces can
   opt out with "3D shade" in the piece editor.
+- "smooth" slopes the relief between neighbouring heights instead of stepping
+  them, by averaging the pixel heights that meet at each quad corner (crisp
+  at depth-class boundaries and silhouettes). Also off by default and
+  persisted; it only changes anything while "3D terrain" is on.
 - `e` toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama

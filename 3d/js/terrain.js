@@ -41,6 +41,8 @@ class TerrainMesh {
     parent.add(this.group);
 
     this.maskLayer = level.getGroundMaskLayer();
+    this.hasRelief = this.relief.some((v) => v > 0);
+    this.smooth = false;
 
     // one texture for the whole level; alpha mirrors the solidity mask
     this.texData = new Uint8Array(this.w * this.h * 4);
@@ -100,9 +102,35 @@ class TerrainMesh {
   /** Swap in a new relief map (the 3D-terrain toggle) and re-mesh. */
   setRelief(reliefMap) {
     this.relief = reliefMap || new Uint8Array(this.w * this.h);
+    this.hasRelief = this.relief.some((v) => v > 0);
+    this._rebuildAll();
+  }
+
+  /** Slope between neighbouring heights instead of stepping (toggle). */
+  setSmooth(smooth) {
+    this.smooth = !!smooth;
+    this._rebuildAll();
+  }
+
+  _rebuildAll() {
     for (let cy = 0; cy < this.chunksY; cy++) {
       for (let cx = 0; cx < this.chunksX; cx++) this._rebuildChunk(cx, cy);
     }
+  }
+
+  /**
+   * Height at a pixel corner: the mean front of the (up to four) pixels of
+   * the same class that meet there. Averaging turns the per-pixel columns
+   * into a continuous surface; restricting it to one class keeps the
+   * boundaries between depth classes crisp.
+   */
+  _cornerZ(x, y, cls, fallback) {
+    let sum = 0, n = 0;
+    if (this._classAt(x - 1, y - 1) === cls) { sum += this._frontAt(x - 1, y - 1); n++; }
+    if (this._classAt(x, y - 1) === cls) { sum += this._frontAt(x, y - 1); n++; }
+    if (this._classAt(x - 1, y) === cls) { sum += this._frontAt(x - 1, y); n++; }
+    if (this._classAt(x, y) === cls) { sum += this._frontAt(x, y); n++; }
+    return n ? sum / n : fallback;
   }
 
   _refillTexRect(x0, y0, w, h) {
@@ -200,7 +228,103 @@ class TerrainMesh {
     return null;
   }
 
+  /**
+   * Smooth path: every solid pixel becomes one quad whose corners sit at the
+   * averaged corner heights, so differing heights slope into each other. No
+   * internal walls are needed (the slope covers them) - only silhouettes and
+   * drops onto a lower depth class - which usually makes this cheaper than
+   * the stepped path even though the fronts are no longer greedy-merged.
+   */
+  _buildChunkGeometrySmooth(cx, cy) {
+    const x0 = cx * TERRAIN_CHUNK;
+    const y0 = cy * TERRAIN_CHUNK;
+    const cw = Math.min(TERRAIN_CHUNK, this.w - x0);
+    const ch = Math.min(TERRAIN_CHUNK, this.h - y0);
+    const W = this.w, H = this.h;
+
+    const positions = [], colors = [], uvs = [], indices = [];
+    const pushQuad = (p, uv, shade) => {
+      const base = positions.length / 3;
+      for (let i = 0; i < 4; i++) {
+        positions.push(p[i][0], p[i][1], p[i][2]);
+        colors.push(shade, shade, shade);
+        uvs.push(uv[i][0], uv[i][1]);
+      }
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
+
+    for (let ly = 0; ly < ch; ly++) {
+      for (let lx = 0; lx < cw; lx++) {
+        const px = x0 + lx, py = y0 + ly;
+        const c = this._classAt(px, py);
+        if (c === DepthClass.EMPTY) continue;
+        const band = DEPTH_BANDS[c];
+        const front = this._frontAt(px, py);
+        const z00 = this._cornerZ(px, py, c, front);
+        const z10 = this._cornerZ(px + 1, py, c, front);
+        const z11 = this._cornerZ(px + 1, py + 1, c, front);
+        const z01 = this._cornerZ(px, py + 1, c, front);
+
+        const u0 = px / W, u1 = (px + 1) / W;
+        const v0 = py / H, v1 = (py + 1) / H;
+        const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+        pushQuad([[px, py, z00], [px + 1, py, z10],
+                  [px + 1, py + 1, z11], [px, py + 1, z01]],
+          uv, SHADE_FRONT * band.frontShade);
+        pushQuad([[px, py, band.back], [px + 1, py, band.back],
+                  [px + 1, py + 1, band.back], [px, py + 1, band.back]],
+          uv, SHADE_BACK);
+
+        // a wall only where this pixel overhangs empty space or a lower class
+        const wallBase = (nx, ny) => {
+          const nc = this._classAt(nx, ny);
+          if (nc === DepthClass.EMPTY) return band.back;
+          if (nc !== c && DEPTH_BANDS[nc].front < band.front) return DEPTH_BANDS[nc].front;
+          return null;
+        };
+        const vMid = (py + 0.5) / H;
+        let base = wallBase(px - 1, py);
+        if (base !== null) {
+          pushQuad([[px, py, base], [px, py, z00], [px, py + 1, z01], [px, py + 1, base]],
+            [[u0, v0], [u0, v0], [u0, v1], [u0, v1]], SHADE_LEFT);
+        }
+        base = wallBase(px + 1, py);
+        if (base !== null) {
+          pushQuad([[px + 1, py, base], [px + 1, py, z10],
+                    [px + 1, py + 1, z11], [px + 1, py + 1, base]],
+            [[u1, v0], [u1, v0], [u1, v1], [u1, v1]], SHADE_RIGHT);
+        }
+        base = wallBase(px, py - 1);
+        if (base !== null) {
+          pushQuad([[px, py, base], [px + 1, py, base], [px + 1, py, z10], [px, py, z00]],
+            [[u0, vMid], [u1, vMid], [u1, vMid], [u0, vMid]], SHADE_TOP);
+        }
+        base = wallBase(px, py + 1);
+        if (base !== null) {
+          pushQuad([[px, py + 1, base], [px + 1, py + 1, base],
+                    [px + 1, py + 1, z11], [px, py + 1, z01]],
+            [[u0, vMid], [u1, vMid], [u1, vMid], [u0, vMid]], SHADE_BOTTOM);
+        }
+      }
+    }
+
+    if (indices.length === 0) return null;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    return geom;
+  }
+
   _buildChunkGeometry(cx, cy) {
+    // smoothing only differs where heights vary, so keep the cheaper greedy
+    // stepped path when the relief is flat
+    if (this.smooth && this.hasRelief) return this._buildChunkGeometrySmooth(cx, cy);
+    return this._buildChunkGeometryStepped(cx, cy);
+  }
+
+  _buildChunkGeometryStepped(cx, cy) {
     const x0 = cx * TERRAIN_CHUNK;
     const y0 = cy * TERRAIN_CHUNK;
     const cw = Math.min(TERRAIN_CHUNK, this.w - x0);
