@@ -136,7 +136,11 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   the dent is the connected patch of sky nearest the exit's own trigger box,
   the spot a lemming has to reach to get out. Stray saturated pixels
   elsewhere in the artwork are left alone, and a patch under a few pixels is
-  ignored so a lone pixel nearer the trigger cannot win. Both carve
+  ignored so a lone pixel nearer the trigger cannot win. A door is not
+  always one object either — the tilesets stack an exit and its cap as two,
+  and only the piece carrying the trigger reads as an opening — so a piece
+  abutting an exit along most of a side is built as the same slab at the
+  same depth, or the door renders as two halves on two planes. Both carve
   the terrain behind them from
   the render-only depth map, being a hole a lemming really falls through; an
   exit's dent stays well clear of the slab, so carving there would hollow out
