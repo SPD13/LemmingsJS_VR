@@ -33,6 +33,11 @@
     z-index: 20; background: #10141c; color: #6fce7e; font-size: 14px; letter-spacing: 0.1em;
   }
   #loading.hidden { display: none; }
+  #hud-editor { bottom: 12px; right: 12px; max-width: 320px; }
+  #hud-editor h1 { font-size: 13px; margin: 0 0 4px; color: #ffd866; letter-spacing: 0.06em; }
+  #ed-info { color: #cdd6e4; min-height: 16px; margin-bottom: 4px; }
+  #hud-editor button.active { background: #4a4326; border-color: #ffd866; color: #ffd866; }
+  #hud-editor button:disabled { opacity: 0.4; cursor: default; }
 </style>
 </head>
 <body>
@@ -56,10 +61,25 @@
   <b>drag</b> orbit &middot; <b>right-drag</b> pan &middot; <b>wheel</b> zoom<br>
   <b>click</b> lemming: assign skill &middot; panel: as in game<br>
   <b>space</b> pause &middot; <b>n</b> step &middot; <b>+/-</b> speed &middot; <b>,/.</b> level<br>
-  <b>r</b> dump replay to console
+  <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>r</b> dump replay
 </div>
 
 <div id="hud-hover" class="hud">&nbsp;</div>
+
+<div id="hud-editor" class="hud" hidden>
+  <h1>PIECE EDITOR</h1>
+  <div id="ed-info">click a terrain piece to tag it</div>
+  <div class="btnrow">
+    <button data-class="backdrop">backdrop</button>
+    <button data-class="terrain">terrain</button>
+    <button data-class="relief">relief</button>
+    <button data-class="overlay">overlay</button>
+  </div>
+  <div class="btnrow">
+    <button id="ed-auto">auto</button>
+    <button id="ed-export">export JSON</button>
+  </div>
+</div>
 
 <script src="../js/lemmings.js"></script>
 <script src="lib/three.min.js"></script>
@@ -67,6 +87,7 @@
 <script src="js/bridge.js"></script>
 <script src="js/depth.js"></script>
 <script src="js/terrain.js"></script>
+<script src="js/editor.js"></script>
 <script src="js/gui.js"></script>
 <script src="js/app.js"></script>
 </body>

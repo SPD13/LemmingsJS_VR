@@ -70,6 +70,7 @@
     try {
       if (session.game && session.game.getGameTimer()) session.game.stop();
     } catch (e) { /* already stopped */ }
+    if (session.editor) session.editor.dispose();
     session.lemmingPool.dispose();
     session.objectPool.dispose();
     session.particles.dispose();
@@ -95,10 +96,12 @@
     const config = await factory.getConfig(state.gameType);
     const groundData = window.__lem3dGroundData;
     let profile = null;
+    let profileUrl = null;
     if (groundData && groundData.lr) {
       const slug = (config.path || "game").replace(/[^a-z0-9]/gi, "").toLowerCase();
       const setId = groundData.lr.graphicSet1 != null ? groundData.lr.graphicSet1 : 0;
-      profile = await DepthProfiles.load("profiles/" + slug + "-g" + setId + ".json");
+      profileUrl = "profiles/" + slug + "-g" + setId + ".json";
+      profile = await DepthProfiles.load(profileUrl);
     }
     const depthMap = buildDepthMap(level, groundData, profile);
 
@@ -222,8 +225,10 @@
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
       lemmingPool, objectPool, particles, resources, depthMap, profile,
+      groundData, profileUrl,
       getLastTickTime: () => lastTickTime,
     };
+    session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
   }
 
   async function moveLevel(delta) {
@@ -275,6 +280,10 @@
     // treat as a click only if the pointer barely moved (else it was an orbit)
     if (!downAt || Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y) > 5) return;
     if (p && p.simX !== undefined && session) {
+      if (session.editor && session.editor.enabled) {
+        session.editor.handleSimClick(p.simX, p.simY);
+        return;
+      }
       const lem = session.game.getLemmingManager().getLemmingAt(p.simX, p.simY);
       if (lem) session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
     }
@@ -317,6 +326,12 @@
       case "-": timer.speedFactor = Math.max(0.5, timer.speedFactor - 0.5); break;
       case ",": moveLevel(-1); break;
       case ".": moveLevel(1); break;
+      case "e":
+        if (session.editor) session.editor.toggle();
+        break;
+      case "c":
+        if (session.editor && session.editor.enabled) session.editor.cycleClass();
+        break;
       case "r":
         console.log("replay string (append as ?replay=... to reproduce this run):");
         console.log(session.game.getCommandManager().serialize());

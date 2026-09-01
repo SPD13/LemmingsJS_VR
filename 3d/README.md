@@ -26,6 +26,11 @@ URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
   original panel (release rate, skills, pause, nuke, speed)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `r` dump the replay string to the console
+- `e` toggles the piece editor (pauses the sim): click a terrain piece to
+  select it — every placement of that piece id highlights — then pick a depth
+  class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
+  re-meshes live. "export JSON" downloads the profile for `profiles/`; a tag
+  applies to the piece id, so it covers every level of the same tileset.
 
 ## Architecture (mirrors the VR plan)
 
@@ -66,9 +71,9 @@ camera, renderer, controls}` for console debugging and automated checks.
 
 ## Known gaps / next steps
 
-- Profiles are flag-defaults only so far: no hand-tagged piece ids yet, and
-  no `relief` assignments — the in-browser piece-tagging editor (plan §6)
-  comes next.
+- No tileset has been hand-tagged yet — the editor exists (`e`), the
+  authoring sessions haven't happened. Exported profiles must be saved into
+  `3d/profiles/` manually.
 - Objects are flat billboards at fixed depths (background objects behind the
   slab, others in front); no extruded/animated object meshes yet.
 - `VGASPEC` special levels untested; no audio; steel areas and multi-entrance
