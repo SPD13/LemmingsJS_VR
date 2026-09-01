@@ -5,6 +5,7 @@
  */
 
 const http = require("http");
+const https = require("https");
 const path = require("path");
 const fs = require("fs");
 
@@ -24,13 +25,15 @@ const MIME = {
 };
 
 /**
- * Serve `root` on `port` (all interfaces). Resolves to {port, close()} once
- * listening; rejects on listen errors (e.g. the port is already in use).
+ * Serve `root` on `port` (all interfaces). Pass `tls` ({key, cert} PEMs) to
+ * serve HTTPS — required for WebXR on other devices, which refuse insecure
+ * origins. Resolves to {port, close()} once listening; rejects on listen
+ * errors (e.g. the port is already in use).
  */
-function createStaticServer(root, port) {
+function createStaticServer(root, port, tls = null) {
   const absRoot = path.resolve(root);
   return new Promise((resolve, reject) => {
-    const srv = http.createServer((req, res) => {
+    const handler = (req, res) => {
       try {
         const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
         let filePath = path.normalize(path.join(absRoot, urlPath));
@@ -54,7 +57,8 @@ function createStaticServer(root, port) {
         res.writeHead(404);
         res.end("not found");
       }
-    });
+    };
+    const srv = tls ? https.createServer(tls, handler) : http.createServer(handler);
     srv.on("error", reject);
     srv.listen(port, "0.0.0.0", () => {
       srv.removeListener("error", reject);

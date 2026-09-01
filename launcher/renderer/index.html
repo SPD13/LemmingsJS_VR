@@ -54,6 +54,8 @@
   #error { color: var(--red); min-height: 18px; margin-top: 12px; }
 
   label { color: var(--muted); display: block; margin-bottom: 6px; }
+  label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); cursor: pointer; }
+  label.check input { accent-color: #6fce7e; }
   input[type="number"] {
     font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
     border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px;
@@ -95,12 +97,15 @@
   <label for="port">Server port</label>
   <input id="port" type="number" min="1024" max="65535" step="1">
   <button id="save-port">Save</button>
+  <label class="check" style="margin-top: 18px">
+    <input type="checkbox" id="https-toggle"> Serve over HTTPS (self-signed)
+  </label>
   <div id="setup-msg"></div>
   <div class="hint">
-    Ports 1024–65535. If the server is running, it restarts on the new port
-    automatically. The external URL is what a headset on the same network
-    uses; for VR on a Quest over USB, prefer
-    <code>adb reverse</code> with the internal URL.
+    Ports 1024–65535. Changes apply immediately — a running server restarts.
+    HTTPS is required for VR from another device: the browser there shows a
+    certificate warning the first time (self-signed) — choose Advanced →
+    proceed, and WebXR works from then on.
   </div>
 </section>
 

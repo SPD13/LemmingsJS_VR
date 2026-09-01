@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { createStaticServer } = require("./server");
+const selfsigned = require("selfsigned");
 
 const WEB_ROOT = path.join(__dirname, "..");
 const DEFAULT_PORT = 8123;
@@ -18,7 +19,7 @@ const PORT_MAX = 65535;
 
 let win = null;
 let server = null;
-let config = { port: DEFAULT_PORT };
+let config = { port: DEFAULT_PORT, https: true };
 let lastError = null;
 
 function configPath() {
@@ -30,7 +31,53 @@ function loadConfig() {
     const raw = JSON.parse(fs.readFileSync(configPath(), "utf8"));
     const port = parseInt(raw.port, 10);
     if (port >= PORT_MIN && port <= PORT_MAX) config.port = port;
+    if (typeof raw.https === "boolean") config.https = raw.https;
   } catch (e) { /* first run: defaults */ }
+}
+
+/**
+ * Self-signed TLS cert with localhost + the current LAN IP as subject alt
+ * names, cached in the user-data folder; regenerated if the LAN IP changes.
+ * Browsers warn once (self-signed), but after accepting, the origin counts
+ * as secure and WebXR works.
+ */
+async function ensureCert() {
+  const dir = app.getPath("userData");
+  const keyPath = path.join(dir, "key.pem");
+  const certPath = path.join(dir, "cert.pem");
+  const metaPath = path.join(dir, "cert-meta.json");
+  const ip = externalIPv4();
+  try {
+    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    if (!ip || (meta.ips || []).includes(ip)) {
+      return { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) };
+    }
+  } catch (e) { /* no cert yet, or unreadable: regenerate */ }
+  const ips = ["127.0.0.1"];
+  if (ip) ips.push(ip);
+  const pems = await selfsigned.generate(
+    [{ name: "commonName", value: "lemmings-vr-launcher" }],
+    {
+      days: 3650,
+      keySize: 2048,
+      algorithm: "sha256",
+      extensions: [
+        { name: "basicConstraints", cA: false },
+        {
+          name: "subjectAltName",
+          altNames: [
+            { type: 2, value: "localhost" },
+            ...ips.map((v) => ({ type: 7, ip: v })),
+          ],
+        },
+      ],
+    }
+  );
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(keyPath, pems.private);
+  fs.writeFileSync(certPath, pems.cert);
+  fs.writeFileSync(metaPath, JSON.stringify({ ips }) + "\n");
+  return { key: pems.private, cert: pems.cert };
 }
 
 function saveConfig() {
@@ -54,11 +101,13 @@ function externalIPv4() {
 
 function status() {
   const ip = externalIPv4();
+  const scheme = config.https ? "https" : "http";
   return {
     running: !!server,
     port: config.port,
-    internalUrl: "http://localhost:" + config.port + "/3d/",
-    externalUrl: ip ? "http://" + ip + ":" + config.port + "/3d/" : null,
+    https: config.https,
+    internalUrl: scheme + "://localhost:" + config.port + "/3d/",
+    externalUrl: ip ? scheme + "://" + ip + ":" + config.port + "/3d/" : null,
     error: lastError,
   };
 }
@@ -71,7 +120,8 @@ async function startServer() {
   if (server) return;
   lastError = null;
   try {
-    server = await createStaticServer(WEB_ROOT, config.port);
+    const tls = config.https ? await ensureCert() : null;
+    server = await createStaticServer(WEB_ROOT, config.port, tls);
   } catch (e) {
     server = null;
     lastError = e.code === "EADDRINUSE"
@@ -123,6 +173,16 @@ app.whenReady().then(() => {
     saveConfig();
     lastError = null;
     if (wasRunning) await startServer(); // apply the new port immediately
+    broadcast();
+    return status();
+  });
+  ipcMain.handle("set-https", async (e, enabled) => {
+    const wasRunning = !!server;
+    if (wasRunning) await stopServer();
+    config.https = !!enabled;
+    saveConfig();
+    lastError = null;
+    if (wasRunning) await startServer(); // apply the scheme immediately
     broadcast();
     return status();
   });

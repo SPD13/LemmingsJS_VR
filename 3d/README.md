@@ -52,10 +52,12 @@ chest height, focused on the level's intended start area.
 - the world never moves on its own, so there is no comfort concern
 
 WebXR needs a secure context. Ways to run it:
+- over the network: the launcher app (`launcher/`) serves HTTPS by default
+  with a self-signed cert — open its external URL on the VR device and
+  accept the one-time certificate warning
 - desktop, no headset: the Immersive Web Emulator extension in Chrome
 - Quest via USB: `adb reverse tcp:8123 tcp:8123`, then open
   `http://localhost:8123/3d/` in the Quest browser (localhost is secure)
-- Quest via Wi-Fi: serve HTTPS (`http-server -S`) and accept the cert warning
 
 Exiting VR restores the desktop camera and scale exactly as they were.
 
