@@ -67,6 +67,7 @@
     gameType: 1, group: 0, level: 0, // the classic engine's own addressing of it
     speed: parseFloat(params.get("speed") || "1"),
     replay: params.get("replay"),
+    nxrp: params.get("nxrp"),      // a NeoLemmix .nxrp replay, for Lemmix levels
   };
 
   /** A lemming's action name, from either engine. */
@@ -1365,14 +1366,21 @@
     const level = game.level;
     // the doors and water need the objects' trigger boxes; the DOS engine
     // stashes them as the level builds, a Lemmix level describes its own
-    if (state.engine === "lemmix") window.__lem3dObjectData = lemmixEngine.objectData(level);
+    if (state.engine === "lemmix") {
+      window.__lem3dObjectData = lemmixEngine.objectData(level);
+      window.__lem3dGroundData = lemmixEngine.groundData(level);
+    }
 
     // depth compositing (plan §5.1): per-tileset profile + per-pixel classes
     const config = await factory.getConfig(state.gameType);
     const groundData = window.__lem3dGroundData;
     let profile = null;
     let profileUrl = null;
-    if (groundData && groundData.lr) {
+    if (state.engine === "lemmix") {
+      // a Lemmix level's pieces are tagged by name, in a profile per theme style
+      profileUrl = "profiles/nx-" + (level.themeName || "default").replace(/[^a-z0-9_]/gi, "") + ".json";
+      profile = await DepthProfiles.load(profileUrl);
+    } else if (groundData && groundData.lr) {
       // the profile is named after the pack's folder, wherever it lives
       const slug = (config.path || "game").split("/").pop()
         .replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -1382,7 +1390,7 @@
     }
     const depthMap = buildDepthMap(level, groundData, profile);
     const pieceMap = buildPieceMap(level, groundData);
-    const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss);
+    const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss, groundData);
     // entrances/exits become real openings; this also carves the terrain
     // behind them (render only - collision is untouched). Switched off, they
     // stay the flat sprites the original draws and nothing is carved.
@@ -1502,6 +1510,15 @@
     if (state.replay) {
       game.getCommandManager().loadReplay(state.replay);
       state.replay = null;
+    }
+    // a NeoLemmix replay file (?nxrp=<url>) drives a Lemmix game from its own frames
+    if (state.nxrp && game.sim) {
+      try {
+        const res = await fetch(state.nxrp);
+        if (res.ok) game.loadReplay(Lemmix.Replay.parse(await res.text()));
+        else console.warn("[3d] replay not found: " + state.nxrp);
+      } catch (e) { console.warn("[3d] replay failed:", e); }
+      state.nxrp = null;
     }
 
     // our per-tick bridge; registered after Game's own handler so it runs
@@ -1716,7 +1733,7 @@
       // re-derive the colour-keyed relief (master switch or a per-piece tag)
       rebuildRelief: () => {
         session.terrain.setRelief(
-          buildReliefMap(level, pieceMap, session.profile, state.emboss));
+          buildReliefMap(level, pieceMap, session.profile, state.emboss, groundData));
       },
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
@@ -2685,6 +2702,10 @@
       case "r":
         console.log("replay string (append as ?replay=... to reproduce this run):");
         console.log(session.game.getCommandManager().serialize());
+        if (session.game.sim) {
+          console.log("the same as a NeoLemmix replay (.nxrp):");
+          console.log(Lemmix.Replay.serialize(session.game.sim, {}));
+        }
         break;
     }
   });
@@ -2804,7 +2825,34 @@
       const setName = (level.theme && level.theme.lemmings) || "default";
       if (!this.spriteSets.has(setName)) this.spriteSets.set(setName, new Lemmix.SpriteSet(Lemmix.io).load(setName));
       const sprites = await this.spriteSets.get(setName);
-      return new Lemmix.Game(level, { masks: this.masks, sprites });
+      const game = new Lemmix.Game(level, { masks: this.masks, sprites });
+      game.packDir = where.pack && where.pack.dir ? where.pack.dir : null; // a pack's own panel graphics
+      return game;
+    },
+    /**
+     * What depth.js and the piece editor read: the placed pieces with an id
+     * per distinct drawn image, each image as a palette-style frame (0x80 =
+     * transparent), and the piece's name as the key its tags live under.
+     */
+    groundData(level) {
+      const ids = new Map();
+      const terraImages = {};
+      const terrains = [];
+      for (const p of level.pieces || []) {
+        const d = p.drawn;
+        if (!ids.has(d.variantKey)) {
+          const id = ids.size;
+          ids.set(d.variantKey, id);
+          const frame = new Uint8Array(d.width * d.height);
+          for (let i = 0, a = 3; i < frame.length; i++, a += 4) frame[i] = d.image.data[a] < 128 ? 0x80 : 0;
+          terraImages[id] = { width: d.width, height: d.height, frames: [frame], name: d.key };
+        }
+        terrains.push({
+          x: p.x, y: p.y, id: ids.get(d.variantKey), key: d.key,
+          drawProperties: { isUpsideDown: false, noOverwrite: p.noOverwrite, onlyOverwrite: false, isErase: p.erase },
+        });
+      }
+      return { lr: { levelWidth: level.width, levelHeight: level.height, terrains, graphicSet1: null, steel: [] }, terraImages };
     },
     /**
      * Where a level's music may be: its MUSIC line (a ;-separated list of

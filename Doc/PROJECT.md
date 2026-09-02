@@ -293,10 +293,11 @@ the DOS engine's generic parts by reference — `DisplayImage`, `Frame`,
 | `pixels.js` | bitmaps and LemRendering.pas's combine rules: no-overwrite, erase, the solidity/steel/one-way channels, nine-slice |
 | `styles.js` | terrain, gadget and background pieces from `styles/`, with their metadata, aliases and rotated/flipped variations |
 | `level.js` | `.nxlv` → `Lemmix.Level`: the picture, the physics map cut at NeoLemmix's alpha cutoff, one-way arrows stamped, gadgets with trigger rectangles, receivers paired, spawn order and save requirement as PrepareForUse computes them |
-| `lemgame.js` | `TLemmingGame` from LemGame.pas, method for method: every skill the packs use, the trigger areas, spawning, nuke, time, talismans; no Jumper/Shimmier/Slider/Laserer/Portal |
+| `lemgame.js` | `TLemmingGame` from LemGame.pas, method for method: all 21 skills (jumper, shimmier, slider and laserer included), every gadget effect including portals, spawning, nuke, time, talismans; records what the player did |
+| `replay.js` | NeoLemmix `.nxrp` replays read (`?nxrp=<url>`, `nx-run --nxrp`) and written (the `r` key, `nx-run --save-nxrp`) |
 | `sprites.js` | a sprite set (`styles/<set>/lemmings/`) with its scheme and state recolouring; pickup pictures; the `gfx/mask` masks |
 | `game.js` | `Lemmix.Game`: the same surface `app.js` drives for the DOS game (timer at 17 fps, lemming manager with NeoLemmix's cursor priority, skills, victory condition, command manager) |
-| `panel.js` | the NeoLemmix skill panel drawn on the DOS panel's 320×40 canvas, so `gui.js` extrudes it unchanged |
+| `panel.js` | the NeoLemmix skill panel drawn on the DOS panel's 320×40 canvas, so `gui.js` extrudes it unchanged; a pack's own panel graphics when it ships them |
 
 The physics runs on integer maps only and has no randomness, so a run is
 reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
@@ -310,15 +311,25 @@ file is missing); a level's music - its `MUSIC` line or the pack's rotation
 libopenmpt (chiptune3, `lemmix/vendor/`) in an AudioWorklet, other files
 decoded and looped, the AdLib track when nothing is found. Pre-level text
 shows in the status line, post-level text and talismans with the result
-(`lem3d-talismans` records them).
+(`lem3d-talismans` records them). Nuked lemmings carry their countdown
+digits; pickups and capped exits carry their counts; moving backgrounds
+draw behind the terrain.
+
+Edit mode works on Lemmix levels too: the placed pieces go to `depth.js`
+and the piece editor as an id per distinct drawn image, and tags are kept
+by piece *name* (`namida_abstract:bar_purple_arrows`) in a profile per theme
+style, `profiles/nx-<style>.json`, which the launcher's save route accepts;
+the catalog's rank view says which styles have one.
 
 Checks (all under `tools/`, run with node): `nx-check` resolves every piece
 reference of every level against `styles/`; `nx-render` draws levels
 headlessly and its physics counts are kept as `tools/fixtures/nx-physics.txt`;
-`nx-run` plays every level for N frames with no input (796 levels, no
-exceptions, 12 s); `nx-physics-test` holds the fixtures of the numbers the
-packs depend on — splat height, brick counts, tunnel shapes, steel and
-one-way rules, spawn cadence.
+`nx-run` plays every level for N frames with no input or with a replay
+(796 levels, no exceptions, 12 s) and can write the run out as `.nxrp`;
+`nx-physics-test` holds 23 fixtures of the numbers the packs depend on —
+splat height, brick counts, tunnel shapes, steel and one-way rules, spawn
+cadence, the jumper's arc, the shimmier, the slider and the laserer. A
+run written as `.nxrp` and played back gives the same outcome.
 ---
 
 ## 3. Play mode and edit mode

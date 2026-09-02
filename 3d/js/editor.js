@@ -125,8 +125,9 @@ class PieceEditor {
 
   _placements(id) {
     if (!this._hasPieceData) return [];
+    const key = this._key(id);
     return this.s.groundData.lr.terrains.filter(
-      (p) => p.id === id && !p.drawProperties.isErase);
+      (p) => (p.key != null ? p.key === key : p.id === id) && !p.drawProperties.isErase);
   }
 
   _rebuildHighlights() {
@@ -137,17 +138,23 @@ class PieceEditor {
     const src = this.s.groundData.terraImages[this.selectedId];
     if (!src) return;
     for (const piece of this._placements(this.selectedId)) {
+      const img = this.s.groundData.terraImages[piece.id] || src;
       const m = new THREE.Mesh(this._highlightGeom, this._highlightMat);
-      m.scale.set(src.width, src.height, 1);
-      m.position.set(piece.x + src.width / 2, piece.y + src.height / 2, 28);
+      m.scale.set(img.width, img.height, 1);
+      m.position.set(piece.x + img.width / 2, piece.y + img.height / 2, 28);
       m.renderOrder = 10;
       this.highlightGroup.add(m);
     }
   }
 
+  /** What a piece id is tagged by: its name for Lemmix styles, the id itself for DOS tilesets. */
+  _key(id) {
+    const src = this.s.groundData && this.s.groundData.terraImages[id];
+    return src && src.name != null ? src.name : id;
+  }
   _override(id) {
     const p = this.s.profile;
-    return (p && p.terrain && p.terrain.byId && p.terrain.byId[id]) || null;
+    return (p && p.terrain && p.terrain.byId && p.terrain.byId[this._key(id)]) || null;
   }
 
   /** The class(es) flag-defaults would give this id's placements. */
@@ -167,8 +174,8 @@ class PieceEditor {
     const p = this.s.profile;
     if (!p.terrain) p.terrain = { default: "terrain", byId: {} };
     if (!p.terrain.byId) p.terrain.byId = {};
-    if (name) p.terrain.byId[this.selectedId] = name;
-    else delete p.terrain.byId[this.selectedId];
+    if (name) p.terrain.byId[this._key(this.selectedId)] = name;
+    else delete p.terrain.byId[this._key(this.selectedId)];
     DepthProfiles._cache.set(this.profileUrl, p); // survives level reloads
     this._applyProfile();
     this._renderInfo();
@@ -179,7 +186,7 @@ class PieceEditor {
     const p = this.s.profile;
     if (!p.emboss) p.emboss = { byId: {} };
     if (!p.emboss.byId) p.emboss.byId = {};
-    p.emboss.byId[this.selectedId] = value;
+    p.emboss.byId[this._key(this.selectedId)] = value;
     DepthProfiles._cache.set(this.profileUrl, p);
     if (this.s.rebuildRelief) this.s.rebuildRelief();
     this._renderInfo();
@@ -188,16 +195,16 @@ class PieceEditor {
   /** Turn colour-keyed 3D relief on/off for the selected piece. */
   toggleEmboss() {
     if (this.selectedId == null) return;
-    const on = embossEnabledFor(this.selectedId, this.s.profile);
+    const on = embossEnabledFor(this._key(this.selectedId), this.s.profile);
     // turning it back on keeps whichever direction was in use
     this._setEmboss(on ? false
-      : (embossInvertedFor(this.selectedId, this.s.profile) ? "invert" : true));
+      : (embossInvertedFor(this._key(this.selectedId), this.s.profile) ? "invert" : true));
   }
 
   /** Swap which shades are raised: lighter (default) or darker (inverted). */
   toggleEmbossInvert() {
     if (this.selectedId == null) return;
-    const inverted = embossInvertedFor(this.selectedId, this.s.profile);
+    const inverted = embossInvertedFor(this._key(this.selectedId), this.s.profile);
     this._setEmboss(inverted ? true : "invert"); // also enables the effect
   }
 
@@ -242,10 +249,10 @@ class PieceEditor {
       btnsOn && !this._override(this.selectedId));
     this.dom.embossBtn.disabled = !btnsOn;
     this.dom.embossBtn.classList.toggle("active",
-      btnsOn && embossEnabledFor(this.selectedId, this.s.profile));
+      btnsOn && embossEnabledFor(this._key(this.selectedId), this.s.profile));
     this.dom.invertBtn.disabled = !btnsOn;
     this.dom.invertBtn.classList.toggle("active",
-      btnsOn && embossInvertedFor(this.selectedId, this.s.profile));
+      btnsOn && embossInvertedFor(this._key(this.selectedId), this.s.profile));
     if (!this._hasPieceData) {
       this.dom.info.textContent = "no piece data for this level (special level)";
       return;
@@ -257,11 +264,11 @@ class PieceEditor {
     const n = this._placements(this.selectedId).length;
     const override = this._override(this.selectedId);
     this.dom.info.textContent =
-      "piece " + this.selectedId + " · " + n + " placement" + (n === 1 ? "" : "s") +
+      "piece " + this._key(this.selectedId) + " · " + n + " placement" + (n === 1 ? "" : "s") +
       " · " + (override ? "tagged: " + override
                         : "auto: " + this._autoClasses(this.selectedId).join("/")) +
-      " · 3D shade " + (embossEnabledFor(this.selectedId, this.s.profile)
-        ? (embossInvertedFor(this.selectedId, this.s.profile)
+      " · 3D shade " + (embossEnabledFor(this._key(this.selectedId), this.s.profile)
+        ? (embossInvertedFor(this._key(this.selectedId), this.s.profile)
             ? "on (dark raised)" : "on (light raised)")
         : "off");
   }

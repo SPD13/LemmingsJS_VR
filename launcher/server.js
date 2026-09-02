@@ -55,7 +55,7 @@ function createStaticServer(root, port, tls = null) {
         // load. The strict path suffix (any nesting depth, so serving a
         // parent folder still works) is the only writable location.
         if ((req.method === "POST" || req.method === "PUT") &&
-            /\/3d\/profiles\/[a-z0-9]+-g\d+\.json$/.test(urlPath)) {
+            /\/3d\/profiles\/([a-z0-9]+-g\d+|nx-[a-z0-9_]+)\.json$/.test(urlPath)) {
           const savePath = path.normalize(path.join(absRoot, urlPath));
           if (!savePath.startsWith(absRoot + path.sep)) {
             res.writeHead(403);

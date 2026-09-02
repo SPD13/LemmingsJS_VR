@@ -22,7 +22,8 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `lemmings/0/3` or
 `LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv`; the old
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
-`?replay=<string>` (from the `r` key dump), and the render settings
+`?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
+`.nxrp` replay, for a Lemmix level), and the render settings
 `?emboss=`, `?smooth=`, `?doors=` and `?edit=` (`1`/`on`/`true` or
 `0`/`off`/`false`). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them

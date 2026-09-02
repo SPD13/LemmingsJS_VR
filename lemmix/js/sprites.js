@@ -201,10 +201,11 @@
 
   /** The gfx/mask bitmaps the game carves with. */
   async function loadMasks(io) {
-    const names = ["bomber", "stoner", "basher", "fencer", "miner", "laser"];
+    const names = ["bomber", "stoner", "basher", "fencer", "miner", "laser", "countdown"];
     const masks = {};
     await Promise.all(names.map(async (n) => { masks[n] = await io.image("gfx/mask/" + n + ".png"); }));
     for (const n of names) if (!masks[n]) throw new Error("missing gfx/mask/" + n + ".png - see README, Levels and assets");
+    Lemmix.digitFont = masks.countdown; // 4x5 digits, used on gadgets and over nuked lemmings
     return masks;
   }
 

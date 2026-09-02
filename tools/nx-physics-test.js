@@ -245,6 +245,54 @@ async function main() {
     check("spawn at frames 54, 107, 160 for SI 53", JSON.stringify(releases) === "[54,107,160]", releases);
   }
 
+  // --- jumper: clears a 3 px step and lands walking further on
+  {
+    const level = makeLevel(200, 100, 60);
+    level.fill(80, 57, 200, 60, PM.SOLID);
+    const game = makeGame(level, 60, 60, 1, ["JUMPER"]);
+    run(game, 5);
+    game.assignSkillTo(game.lemmings[0], "JUMPER");
+    let saw = new Set(), landed = null;
+    run(game, 60, () => { const L = game.lemmings[0]; saw.add(Lemmix.ACTION_NAMES[L.action]); if (saw.has("jumping") && L.action === BA.WALKING && landed === null) { landed = { x: L.x, y: L.y }; return false; } });
+    check("jumper jumps an arc and lands walking on the step", saw.has("jumping") && landed && landed.x > 70 && landed.y === 57, { saw: [...saw], landed });
+  }
+
+  // --- shimmier: reaches a ceiling and shimmies along it
+  {
+    const level = makeLevel(200, 100, 60);
+    level.fill(0, 44, 200, 47, PM.SOLID); // a ceiling 13-16 px above the floor
+    const game = makeGame(level, 40, 60, 1, ["SHIMMIER"]);
+    run(game, 5);
+    game.assignSkillTo(game.lemmings[0], "SHIMMIER");
+    let saw = new Set(), far = 0;
+    run(game, 120, () => { const L = game.lemmings[0]; saw.add(Lemmix.ACTION_NAMES[L.action]); if (L.action === BA.SHIMMYING) far = Math.max(far, L.x); });
+    check("shimmier reaches the ceiling and moves along it", saw.has("reaching") && saw.has("shimmying") && far > 60, { saw: [...saw], far });
+  }
+
+  // --- slider: slides down a wall instead of falling off it, then walks
+  {
+    const level = makeLevel(200, 120, 100);
+    level.fill(0, 40, 60, 100, PM.SOLID); // a 60 px cliff
+    const game = makeGame(level, 50, 40, 1, []);
+    game.lemmings[0].isSlider = true;
+    let saw = new Set(), ended = null;
+    run(game, 150, () => { const L = game.lemmings[0]; saw.add(Lemmix.ACTION_NAMES[L.action]); if (saw.has("sliding") && L.action === BA.WALKING && ended === null) { ended = { x: L.x, y: L.y }; return false; } });
+    check("slider dehoists at the edge, slides down the cliff and walks on", saw.has("dehoisting") && saw.has("sliding") && !saw.has("splatting") && ended && ended.y === 100, { saw: [...saw], ended });
+  }
+
+  // --- laserer: cuts a diagonal upward through a wall
+  {
+    const level = makeLevel(200, 120, 100);
+    level.fill(70, 20, 200, 100, PM.SOLID);
+    const game = makeGame(level, 60, 100, 1, ["LASERER"]);
+    run(game, 3);
+    game.assignSkillTo(game.lemmings[0], "LASERER");
+    const before = solidCount(level);
+    run(game, 60);
+    const removed = before - solidCount(level);
+    check("laserer removes terrain along its beam", removed > 30, { removed });
+  }
+
   console.log(passed + " passed, " + failed + " failed");
   process.exitCode = failed ? 1 : 0;
 }

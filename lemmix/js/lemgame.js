@@ -6,10 +6,8 @@
  * traced to a Pascal line. Everything is integer arithmetic on the physics
  * map; there is no randomness, so a run is reproducible from its inputs.
  *
- * What is not ported: the Jumper, Shimmier, Slider, Dehoister, Laserer and
- * Portal (none of the packs this was built for use them - the enum slots and
- * assignment rules stay, the handlers fall through to walking), replay files,
- * shadows, hyperspeed and the save states.
+ * Not ported: shadows, hyperspeed, the save states and the skill queue's
+ * frame limit setting. Replays are read and written by replay.js.
  *
  * The game works on a Lemmix.Level: its physics map (PM bits), its gadgets
  * (Lemmix.Gadget) and its spawn order. Terrain changes go through the
@@ -57,6 +55,18 @@
   const RM = { NEUTRAL: 0, SAVE: 1, KILL: 2, ZOMBIE: 3 };
   const NO_OBJECT = 65535;
   const MIN_SI = 4;
+  // each step moves one pixel; horizontal steps are for a right-facing lemming
+  const JUMP_PATTERNS = [
+    [[0, -1], [0, -1], [1, 0], [0, -1], [0, -1], [1, 0]],
+    [[0, -1], [1, 0], [0, -1], [1, 0], [0, -1], [1, 0]],
+    [[0, -1], [1, 0], [0, -1], [1, 0], [1, 0], [0, 0]],
+    [[0, -1], [1, 0], [1, 0], [0, -1], [1, 0], [0, 0]],
+    [[1, 0], [1, 0], [1, 0], [1, 0], [0, 0], [0, 0]],
+    [[1, 0], [0, 1], [1, 0], [1, 0], [0, 1], [0, 0]],
+    [[1, 0], [1, 0], [0, 1], [1, 0], [0, 1], [0, 0]],
+    [[1, 0], [0, 1], [1, 0], [0, 1], [1, 0], [0, 1]],
+    [[1, 0], [0, 1], [0, 1], [1, 0], [0, 1], [0, 1]],
+  ];
 
   // trigger map bits (one map, a bit per TTriggerTypes entry that is a gadget area)
   const TR = {
@@ -135,6 +145,7 @@
       this.actionOld = BA.NONE;
       this.actionNew = BA.NONE;
       this.portalWarpFrame = 0; this.inPortal = -1;
+      this.jumpPositions = [];
       this.queueAction = BA.NONE; this.queueFrame = 0;
     }
 
@@ -209,6 +220,32 @@
       this.fixedColor = null;
       this.playing = false;
       this.resultRec = null;
+      this.replay = null;        // {assignments, spawnIntervals, nukes} being played back
+      this.recorded = [];        // what the player did, for replay.js to write out
+    }
+
+    /** Play back a parsed replay (replay.js): its actions fire on their frames. */
+    loadReplay(replay) { this.replay = replay; }
+
+    /** CheckForReplayAction: what the replay says happens on this frame. */
+    checkForReplayAction() {
+      const r = this.replay;
+      if (!r) return;
+      const f = this.currentIteration;
+      for (const c of r.spawnIntervals) if (c.frame === f) this.adjustSpawnInterval(c.interval);
+      for (const n of r.nukes) if (n.frame === f) { this.userSetNuking = true; this.exploderAssignInProgress = true; }
+      for (const a of r.assignments) {
+        if (a.frame !== f) continue;
+        let L = null;
+        if (a.lemId) L = this.lemmings.find((x) => x.identifier.toUpperCase() === a.lemId) || null;
+        if (!L && a.lemIndex >= 0 && a.lemIndex < this.lemmings.length) L = this.lemmings[a.lemIndex];
+        const action = SKILL_TO_ACTION[a.skill];
+        if (!L || action === undefined || !ASSIGNABLE.has(action)) continue;
+        if (L.removed || L.teleporting || L.portalWarpFrame > 0) continue;
+        if (this.mayAssign(action, L) && this.checkSkillAvailable(action)) {
+          if (this.doSkillAssignment(L, action, true)) this.cueSoundEffect(SFX.ASSIGN_SKILL, L);
+        }
+      }
     }
 
     // ---- setup
@@ -492,6 +529,19 @@
         }
         L.trueFallen = L.fallen;
       }
+      if (((newAction === BA.SHIMMYING || newAction === BA.JUMPING) && L.action === BA.CLIMBING) ||
+          (newAction === BA.JUMPING && L.action === BA.SLIDING)) {
+        this.turnAround(L);
+        L.x += L.dx;
+        if (newAction === BA.SHIMMYING && this.hasPixelAt(L.x, L.y - 8)) L.y++;
+      }
+      if (newAction === BA.SHIMMYING && L.action === BA.SLIDING) { L.y += 2; if (this.hasPixelAt(L.x, L.y - 8)) L.y++; }
+      if (newAction === BA.SHIMMYING && L.action === BA.DEHOISTING) { L.y += 2; if (this.hasPixelAt(L.x, L.y - 9 + 1)) L.y++; }
+      if (newAction === BA.SHIMMYING && L.action === BA.JUMPING) {
+        for (let i = -1; i <= 3; i++) {
+          if (this.hasPixelAt(L.x, L.y - 9 - i) && !this.hasPixelAt(L.x, L.y - 8 - i)) { L.y -= i; break; }
+        }
+      }
       if (newAction === BA.DEHOISTING) L.dehoistPinY = L.y;
       if (newAction === BA.SLIDING) L.dehoistPinY = -1;
 
@@ -600,15 +650,47 @@
         case A.MINING: return inSet(L.action, [A.WALKING, A.SHRUGGING, A.PLATFORMING, A.BUILDING, A.STACKING, A.BASHING, A.FENCING, A.DIGGING, A.LASERING]) && !this.hasIndestructibleAt(L.x, L.y, L.dx, A.MINING);
         case A.DIGGING: return inSet(L.action, [A.WALKING, A.SHRUGGING, A.PLATFORMING, A.BUILDING, A.STACKING, A.BASHING, A.FENCING, A.MINING, A.LASERING]) && !this.hasIndestructibleAt(L.x, L.y, L.dx, A.DIGGING);
         case A.CLONING: return inSet(L.action, [A.WALKING, A.SHRUGGING, A.PLATFORMING, A.BUILDING, A.STACKING, A.BASHING, A.FENCING, A.MINING, A.DIGGING, A.ASCENDING, A.FALLING, A.FLOATING, A.SWIMMING, A.GLIDING, A.FIXING, A.REACHING, A.SHIMMYING, A.JUMPING, A.LASERING]);
-        case A.SHIMMYING: case A.JUMPING: case A.LASERING: return false; // not ported
+        case A.SHIMMYING: return this.mayAssignShimmier(L);
+        case A.JUMPING: return inSet(L.action, [A.WALKING, A.DIGGING, A.BUILDING, A.BASHING, A.MINING, A.SHRUGGING, A.PLATFORMING, A.STACKING, A.FENCING, A.CLIMBING, A.SLIDING, A.LASERING]);
+        case A.LASERING: return inSet(L.action, [A.WALKING, A.SHRUGGING, A.PLATFORMING, A.BUILDING, A.STACKING, A.BASHING, A.FENCING, A.MINING, A.DIGGING]);
       }
       return false;
     }
 
+    mayAssignShimmier(L) {
+      const A = BA;
+      let result = inSet(L.action, [A.WALKING, A.SHRUGGING, A.PLATFORMING, A.BUILDING, A.STACKING, A.BASHING, A.FENCING, A.MINING, A.DIGGING, A.LASERING]);
+      if (L.action === A.CLIMBING) {
+        const copy = new Lemming(L.index); copy.assign(L); copy.isPhysicsSimulation = true;
+        const saved = this.physics.slice();
+        this.simulateLem(copy, false);
+        this.physics.set(saved);
+        if ((copy.action === A.FALLING && copy.dx === -L.dx) || copy.action === A.SLIDING) {
+          if (this.hasPixelAt(copy.x, copy.y - 9) || this.hasPixelAt(copy.x, copy.y - 8)) result = true;
+        }
+      } else if (L.action === A.SLIDING || L.action === A.DEHOISTING) {
+        const copy = new Lemming(L.index); copy.assign(L); copy.isPhysicsSimulation = true;
+        const old = copy.action;
+        const saved = this.physics.slice();
+        this.simulateLem(copy, false);
+        this.physics.set(saved);
+        if (copy.action !== old && copy.dx === L.dx && (old !== A.DEHOISTING || copy.action !== A.SLIDING)) {
+          result = L.y > this.height + 4 ? !this.hasPixelAt(L.x, this.height - 1) : true;
+        }
+      } else if (L.action === A.JUMPING) {
+        for (let i = -1; i <= 3; i++) {
+          if (this.hasPixelAt(L.x, L.y - 9 - i) && !this.hasPixelAt(L.x, L.y - 8 - i)) { result = true; break; }
+        }
+      }
+      return result;
+    }
+
     /** DoSkillAssignment: the skill goes to this lemming now. */
-    doSkillAssignment(L, newSkill) {
+    doSkillAssignment(L, newSkill, fromReplay) {
       if (!this.checkSkillAvailable(newSkill)) return false;
       if (this.doneAssignmentThisFrame) return false;
+      if (!fromReplay) this.recorded.push({ type: "assignment", frame: this.currentIteration, skill: ACTION_TO_SKILL[newSkill],
+        lemIndex: L.index, lemId: L.identifier, x: L.x, y: L.y, dx: L.dx });
       this.updateSkillCount(newSkill);
       L.queueAction = BA.NONE; L.queueFrame = 0;
       if (newSkill === BA.STACKING) L.stackLow = !this.hasPixelAt(L.x + L.dx, L.y);
@@ -634,6 +716,8 @@
       } else if (newSkill === BA.CLONING) {
         this.lemmingsCloned++;
         this.generateClonedLem(L);
+      } else if (newSkill === BA.SHIMMYING) {
+        this.transition(L, inSet(L.action, [BA.CLIMBING, BA.SLIDING, BA.JUMPING, BA.DEHOISTING]) ? BA.SHIMMYING : BA.REACHING);
       } else this.transition(L, newSkill);
       this.doneAssignmentThisFrame = true;
       return true;
@@ -698,6 +782,12 @@
       const moveH = () => { while (cx !== L.x) { cx += Math.sign(L.x - cx); save(); } };
       const moveV = () => { while (cy !== L.y) { cy += Math.sign(L.y - cy); save(); } };
       if (L.x === L.xOld && L.y === L.yOld) save();
+      else {
+        if (L.actionOld === BA.JUMPING) {
+          for (const p of L.jumpPositions) { if (p[0] < 0 || p[1] < 0) break; cx = p[0]; cy = p[1]; save(); }
+        }
+      }
+      if (L.x === L.xOld && L.y === L.yOld) { /* saved above */ }
       else if (L.actionOld === BA.MINING) {
         if (L.yOld < L.y) { cy++; save(); }
         moveH(); moveV();
@@ -729,6 +819,7 @@
           abort = this.handleTrap(L, px, py);
           if (L.action === BA.FIXING) pos[i][0] = L.x;
         }
+        if (!abort && this.hasTriggerAt(px, py, "PORTAL") && !isPostTeleportCheck) abort = this.handlePortal(L, px, py);
         if (!abort && this.hasTriggerAt(px, py, "TELEPORT") && !isPostTeleportCheck) abort = this.handleTeleport(L, px, py);
         if (!abort && this.hasTriggerAt(px, py, "NEUTRALIZER")) this.handleNeutralize(L);
         if (!abort && this.hasTriggerAt(px, py, "DENEUTRALIZER")) this.handleDeneutralize(L);
@@ -807,6 +898,35 @@
       this.setBlockerMap();
       this.gadgets[g.receiverId].holdActive = true;
       return true;
+    }
+
+    handlePortal(L, px, py) {
+      if (L.action === BA.SPLATTING) return false;
+      if (L.action === BA.FALLING && this.hasPixelAt(px, py) && L.fallen > MAX_FALLDISTANCE) return false;
+      const id = this.findGadgetId(px, py, "PORTAL");
+      if (id === NO_OBJECT || id === L.inPortal) return false;
+      this.cueSoundEffect(SFX.PORTAL, L);
+      L.portalWarpFrame = 1;
+      L.hasBlockerField = false;
+      L.dehoistPinY = -1;
+      this.setBlockerMap();
+      return true;
+    }
+
+    checkLemPortalWarping(L) {
+      L.portalWarpFrame++;
+      if (L.portalWarpFrame === 4) {
+        const id = this.findGadgetId(L.x, L.y, "PORTAL");
+        if (id === NO_OBJECT) return false;
+        const g = this.gadgets[id];
+        if (g.effect !== "PORTAL" || g.receiverId < 0) return false;
+        const dest = this.gadgets[g.receiverId];
+        L.x = dest.triggerRect.x0 + (((dest.triggerRect.x1 - dest.triggerRect.x0) + 1) >> 1) - 1;
+        L.y = dest.triggerRect.y1 - 1;
+        L.inPortal = g.receiverId;
+        this.handlePostTeleport(L);
+      } else if (L.portalWarpFrame >= 7) L.portalWarpFrame = 0;
+      return false;
     }
 
     handlePickup(L, px, py) {
@@ -1005,6 +1125,16 @@
       this.removeTerrain(L.x - 8, L.y - 10, 16, 10);
     }
 
+    applyLaserMask(px, py, L) {
+      const excl = L.dx === 1 ? (PM.STEEL | PM.ONEWAYLEFT | PM.ONEWAYDOWN) : (PM.STEEL | PM.ONEWAYRIGHT | PM.ONEWAYDOWN);
+      // the 9x9 mask around the hit point, kept to the side the beam came from
+      const tx0 = L.dx === 1 ? L.x : 0, tx1 = L.dx === 1 ? this.width : L.x + 1;
+      const x0 = Math.max(px - 4, tx0), y0 = Math.max(py - 4, 0), x1 = Math.min(px + 5, tx1), y1 = Math.min(py + 5, L.y);
+      if (x1 <= x0 || y1 <= y0) return;
+      this.applyMask(this.masks.laser, x0 - (px - 4), y0 - (py - 4), x1 - x0, y1 - y0, x0, y0, excl);
+      this.removeTerrain(x0, y0, x1 - x0, y1 - y0);
+    }
+
     applyMinerMask(L, maskFrame, adjustX, adjustY) {
       const mx = L.x + L.dx - 8 + adjustX, my = L.y + maskFrame - 12 + adjustY;
       const excl = L.dx === 1 ? (PM.STEEL | PM.ONEWAYLEFT | PM.ONEWAYUP) : (PM.STEEL | PM.ONEWAYRIGHT | PM.ONEWAYUP);
@@ -1100,7 +1230,13 @@
         case BA.GLIDING: result = this.handleGliding(L); break;
         case BA.FIXING: result = this.handleDisarming(L); break;
         case BA.FENCING: result = this.handleFencing(L); break;
-        default: this.transition(L, BA.WALKING); result = true; // actions not ported
+        case BA.REACHING: result = this.handleReaching(L); break;
+        case BA.SHIMMYING: result = this.handleShimmying(L); break;
+        case BA.JUMPING: result = this.handleJumping(L); break;
+        case BA.DEHOISTING: result = this.handleDehoisting(L); break;
+        case BA.SLIDING: result = this.handleSliding(L); break;
+        case BA.LASERING: result = this.handleLasering(L); break;
+        default: this.transition(L, BA.WALKING); result = true;
       }
       if (L.isZombie && !this.isSimulating) this.setZombieField(L);
       return result;
@@ -1118,6 +1254,11 @@
       L.walkerPositionAdjusted = false;
       L.x += L.dx;
       let dy = this.findGroundPixel(L.x, L.y);
+      if (dy > 0 && L.isSlider && this.lemCanDehoist(L, true)) {
+        L.x -= L.dx;
+        this.transition(L, BA.DEHOISTING, true);
+        return true;
+      }
       if (dy < -6) {
         if (L.isClimber) this.transition(L, BA.CLIMBING);
         else { this.turnAround(L); if (!adjusted) L.x += L.dx; }
@@ -1353,7 +1494,8 @@
       if (L.physicsFrame >= 11 && L.physicsFrame <= 15) {
         L.x += L.dx;
         const dy = this.findGroundPixel(L.x, L.y);
-        if (dy === 4) { L.y += dy; this.transition(L, BA.FALLING); }
+        if (dy > 0 && L.isSlider && this.lemCanDehoist(L, true)) { L.x -= L.dx; this.transition(L, BA.DEHOISTING, true); }
+        else if (dy === 4) { L.y += dy; this.transition(L, BA.FALLING); }
         else if (dy === 3) { L.y += dy; this.transition(L, BA.WALKING); }
         else if (dy >= 0 && dy <= 2) {
           if (indestructible(L.x, L.y + dy, L.dx)) turn(this.hasSteelAt(L.x, L.y + dy - 4));
@@ -1436,7 +1578,8 @@
         L.x += L.dx;
         let dy = this.findGroundPixel(L.x, L.y);
         if (dy === -1 && (L.physicsFrame === 11 || L.physicsFrame === 13)) { L.y -= 1; dy = 0; needUndoMoveUp = true; }
-        if (dy === 4) { L.y += dy; this.transition(L, BA.FALLING); }
+        if (dy > 0 && L.isSlider && this.lemCanDehoist(L, true)) { L.x -= L.dx; this.transition(L, BA.DEHOISTING, true); }
+        else if (dy === 4) { L.y += dy; this.transition(L, BA.FALLING); }
         else if (dy > 0) { L.y += dy; this.transition(L, BA.WALKING); }
         else if (dy === 0) { if (indestructible(L.x, L.y, L.dx)) turn(this.hasSteelAt(L.x, L.y - 4)); }
         else if (dy === -1 || dy === -2) {
@@ -1461,8 +1604,10 @@
       };
       if (L.physicsFrame === 1 || L.physicsFrame === 2) this.applyMinerMask(L, L.physicsFrame - 1, 0, 0);
       else if (L.physicsFrame === 3 || L.physicsFrame === 15) {
+        if (L.isSlider && this.lemCanDehoist(L, false)) { this.transition(L, BA.DEHOISTING, true); return true; }
         L.x += 2 * L.dx;
         L.y++;
+        if (L.isSlider && this.lemCanDehoist(L, true)) { L.x -= L.dx; this.transition(L, BA.DEHOISTING, true); return true; }
         const ind = (x, y) => this.hasIndestructibleAt(x, y, L.dx, BA.MINING);
         if (ind(L.x - L.dx, L.y - 1) && ind(L.x, L.y - 1)) { L.x -= 2 * L.dx; minerTurn(L.x + 2 * L.dx, L.y - 1); }
         else if (L.physicsFrame === 3 && ind(L.x - L.dx, L.y - 2)) { L.x -= 2 * L.dx; minerTurn(L.x + L.dx, L.y - 2); }
@@ -1473,6 +1618,196 @@
         else if (ind(L.x + L.dx, L.y - 2)) minerTurn(L.x + L.dx, L.y - 2);
         else if (ind(L.x, L.y)) minerTurn(L.x, L.y);
       }
+      return true;
+    }
+
+    lemCanDehoist(L, alreadyMovedX) {
+      let curX = L.x, nextX = L.x;
+      if (alreadyMovedX) curX -= L.dx; else nextX += L.dx;
+      if (nextX < 0 || nextX >= this.width) return false;
+      if (!this.hasPixelAt(curX, L.y) || this.hasPixelAt(nextX, L.y)) return false;
+      for (let n = 1; n <= 3; n++) {
+        if (this.hasPixelAt(nextX, L.y + n)) return false;
+        if (!this.hasPixelAt(curX, L.y + n)) break;
+      }
+      return true;
+    }
+
+    lemSliderTerrainChecks(L, maxYCheckOffset) {
+      if (maxYCheckOffset === undefined) maxYCheckOffset = 7;
+      const has = (x, y) => {
+        let r = this.hasPixelAt(x, y);
+        if (!r && x === L.x && y === L.dehoistPinY && y >= 0) r = this.hasPixelAt(x, y + 1);
+        return r;
+      };
+      if (has(L.x, L.y) && !has(L.x, L.y - 1)) { this.transition(L, BA.WALKING); return false; }
+      if (!has(L.x, L.y - Math.min(maxYCheckOffset, 7))) { this.transition(L, BA.FALLING); return false; }
+      if (has(L.x, L.y)) {
+        if (this.hasTriggerAt(L.x - L.dx, L.y, "WATER", L)) {
+          L.x -= L.dx;
+          if (L.isSwimmer) { this.transition(L, BA.SWIMMING, true); this.cueSoundEffect(SFX.SWIMMING, L); }
+          else { this.transition(L, BA.DROWNING, true); this.cueSoundEffect(SFX.DROWNING, L); }
+          return false;
+        }
+        if (has(L.x - L.dx, L.y)) { L.x -= L.dx; this.transition(L, BA.WALKING, true); return false; }
+      }
+      return true;
+    }
+
+    handleDehoisting(L) {
+      if (L.endOfAnimation) {
+        if ((L.x <= 0 && L.dx === -1) || (L.x >= this.width - 1 && L.dx === 1)) this.removeLemming(L, RM.NEUTRAL);
+        else if (this.hasPixelAt(L.x, L.y - 7)) this.transition(L, BA.SLIDING);
+        else this.transition(L, BA.FALLING);
+      } else if (L.physicsFrame >= 2) {
+        for (let n = 0; n <= 1; n++) {
+          L.y++;
+          if (!this.lemSliderTerrainChecks(L, L.physicsFrame * 2 - 3 + n)) return L.action !== BA.DROWNING;
+        }
+      }
+      return true;
+    }
+
+    handleSliding(L) {
+      if ((L.x <= 0 && L.dx === -1) || (L.x >= this.width - 1 && L.dx === 1)) this.removeLemming(L, RM.NEUTRAL);
+      for (let n = 0; n <= 1; n++) {
+        L.y++;
+        if (!this.lemSliderTerrainChecks(L)) return L.action !== BA.DROWNING;
+      }
+      return true;
+    }
+
+    handleReaching(L) {
+      const movement = [0, 3, 2, 2, 1, 1, 1, 0];
+      const H = (x, y) => this.hasPixelAt(x, y);
+      let empty;
+      if (H(L.x, L.y - 10)) empty = 0; else if (H(L.x, L.y - 11)) empty = 1; else if (H(L.x, L.y - 12)) empty = 2; else if (H(L.x, L.y - 13)) empty = 3; else empty = 4;
+      if (H(L.x, L.y - 5) || H(L.x, L.y - 6) || H(L.x, L.y - 7) || H(L.x, L.y - 8)) this.transition(L, BA.FALLING);
+      else if (L.physicsFrame === 1 && H(L.x, L.y - 9)) this.transition(L, BA.FALLING);
+      else if (empty <= movement[L.physicsFrame]) { L.y -= empty + 1; this.transition(L, BA.SHIMMYING); }
+      else { L.y -= movement[L.physicsFrame]; if (L.physicsFrame === 7) this.transition(L, BA.FALLING); }
+      return true;
+    }
+
+    handleShimmying(L) {
+      const H = (x, y) => this.hasPixelAt(x, y);
+      if (L.physicsFrame % 2 !== 0) return true;
+      for (let i = 0; i <= 2; i++) {
+        if (H(L.x + L.dx, L.y - i) && !H(L.x + L.dx, L.y - i - 1)) { L.x += L.dx; L.y -= i; this.transition(L, BA.WALKING); return true; }
+      }
+      for (let i = 3; i <= 5; i++) {
+        if (H(L.x + L.dx, L.y - i) && !H(L.x + L.dx, L.y - i - 1)) {
+          L.x += L.dx; L.y -= i - 4; L.isStartingAction = false;
+          this.transition(L, BA.HOISTING); L.frame += 2; L.physicsFrame += 2;
+          return true;
+        }
+      }
+      for (let i = 6; i <= 7; i++) {
+        if (H(L.x + L.dx, L.y - i)) {
+          if (L.isSlider) { L.x += L.dx; this.transition(L, BA.SLIDING); } else this.transition(L, BA.FALLING);
+          return true;
+        }
+      }
+      if (!(H(L.x + L.dx, L.y - 9) || H(L.x + L.dx, L.y - 10))) { this.transition(L, BA.FALLING); return true; }
+      if (H(L.x + L.dx, L.y - 8) && !H(L.x + L.dx, L.y - 9)) { this.transition(L, BA.FALLING); return true; }
+      L.x += L.dx;
+      if (H(L.x, L.y - 8)) {
+        L.y += 1;
+        if (H(L.x, L.y)) { this.transition(L, BA.WALKING); return true; }
+      }
+      if (!H(L.x, L.y - 9)) L.y -= 1;
+      if (H(L.x, L.y - 5)) { L.y -= 5; this.transition(L, BA.WALKING); return true; }
+      if (L.y >= this.height + 8) { this.removeLemming(L, RM.NEUTRAL); }
+      return true;
+    }
+
+    handleJumping(L) {
+      const H = (x, y) => this.hasPixelAt(x, y);
+      const triggerChecks = () => {
+        if (!this.hasTriggerAt(L.x, L.y, "FLIPPER")) L.inFlipper = NO_OBJECT;
+        else if (this.handleFlipper(L, L.x, L.y)) return;
+        if (this.hasTriggerAt(L.x, L.y, "ZOMBIE", L) && !L.isZombie) this.removeLemming(L, RM.ZOMBIE);
+        if (this.hasTriggerAt(L.x, L.y, "FORCELEFT", L)) this.handleForceField(L, -1);
+        else if (this.hasTriggerAt(L.x, L.y, "FORCERIGHT", L)) this.handleForceField(L, 1);
+      };
+      const makeJumpMovement = () => {
+        let patternIndex;
+        const p = L.jumpProgress;
+        if (p <= 1) patternIndex = 0; else if (p <= 3) patternIndex = 1; else if (p <= 8) patternIndex = p - 2;
+        else if (p <= 10) patternIndex = 7; else if (p <= 12) patternIndex = 8; else return false;
+        const pattern = JUMP_PATTERNS[patternIndex];
+        L.jumpPositions = [];
+        for (let i = 0; i < 6; i++) L.jumpPositions.push([-1, -1]);
+        let firstStep = L.jumpProgress === 0;
+        for (let i = 0; i < 6; i++) {
+          L.jumpPositions[i] = [L.x, L.y];
+          if (pattern[i][0] === 0 && pattern[i][1] === 0) break;
+          if (pattern[i][0] !== 0) {
+            const checkX = L.x + L.dx;
+            if (H(checkX, L.y)) {
+              for (let n = 1; n <= 8; n++) {
+                if (!H(checkX, L.y - n)) {
+                  if (n <= 2) { L.x = checkX; L.y = L.y - n + 1; this.lemNextAction = BA.WALKING; }
+                  else if (n <= 5) { L.x = checkX; L.y = L.y - n + 5; this.lemNextAction = BA.HOISTING; this.lemJumpToHoistAdvance = true; }
+                  else { L.x = checkX; L.y = L.y - n + 8; this.lemNextAction = BA.HOISTING; }
+                  return false;
+                }
+                if ((n === 5 && !L.isClimber) || n === 7) {
+                  if (L.isClimber) { L.x = checkX; this.lemNextAction = BA.CLIMBING; }
+                  else if (L.isSlider) { L.x += L.dx; this.lemNextAction = BA.SLIDING; }
+                  else { L.dx = -L.dx; this.lemNextAction = BA.FALLING; }
+                  return false;
+                }
+              }
+            }
+          }
+          if (pattern[i][1] < 0) {
+            for (let n = 1; n <= 9; n++) {
+              if (n === 1 && firstStep) continue;
+              if (H(L.x, L.y - n)) { this.lemNextAction = BA.FALLING; return false; }
+            }
+          }
+          L.x += pattern[i][0] * L.dx;
+          L.y += pattern[i][1];
+          triggerChecks();
+          if (firstStep) firstStep = false;
+          else if (H(L.x, L.y)) { this.lemNextAction = BA.WALKING; return false; }
+        }
+        return true;
+      };
+      if (makeJumpMovement()) {
+        L.jumpProgress++;
+        if (L.jumpProgress >= 8 && L.isGlider) this.lemNextAction = BA.GLIDING;
+        else if (L.jumpProgress === 13) this.lemNextAction = BA.WALKING;
+      }
+      return true;
+    }
+
+    handleLasering(L) {
+      if (!this.hasPixelAt(L.x, L.y)) { this.transition(L, BA.FALLING); return true; }
+      const OFFSETS = [[1, -1], [0, -1], [1, 0], [-1, -1], [-1, -2], [0, -2], [1, -2], [2, -1], [2, 0], [2, 2], [1, 1]];
+      let tx = L.x + L.dx * 2, ty = L.y - 5;
+      let hit = false, useful = false;
+      for (let i = 0; i < 112; i++) {
+        let kind = "none";
+        if (tx < -4 || ty < -4 || tx >= this.width + 4) kind = "out";
+        else {
+          for (const [ox, oy] of OFFSETS) {
+            const cx = tx + ox * L.dx, cy = ty + oy;
+            if (!this.hasPixelAt(cx, cy)) continue;
+            if (this.hasIndestructibleAt(cx, cy, L.dx, BA.LASERING) && kind !== "solid") kind = "indestructible";
+            else kind = "solid";
+          }
+        }
+        if (kind === "none") { tx += L.dx; ty--; continue; }
+        if (kind === "solid") { hit = true; useful = true; }
+        else if (kind === "indestructible") hit = true;
+        break;
+      }
+      L.laserHitPoint = [tx, ty];
+      if (hit) { L.laserHit = true; this.applyLaserMask(tx, ty, L); } else L.laserHit = false;
+      if (useful) L.laserRemainTime = 10;
+      else { L.laserRemainTime--; if (L.laserRemainTime <= 0) this.transition(L, BA.WALKING); }
       return true;
     }
 
@@ -1649,6 +1984,7 @@
       if (this.gameFinished || this.stateIsUnplayable) return;
       this.checkAdjustSpawnInterval();
       this.checkForQueuedAction();
+      this.checkForReplayAction();
       this.incrementIteration();
       this.checkReleaseLemming();
       this.checkLemmings();
@@ -1744,7 +2080,11 @@
       return !(this.level.spawnLocked || si < MIN_SI || si > this.level.spawnInterval);
     }
 
-    adjustSpawnInterval(si) { if (si !== this.currSpawnInterval && this.checkIfLegalSI(si)) this.currSpawnInterval = si; }
+    adjustSpawnInterval(si) {
+      if (si === this.currSpawnInterval || !this.checkIfLegalSI(si)) return;
+      this.currSpawnInterval = si;
+      if (!this.replay) this.recorded.push({ type: "spawn_interval", frame: this.currentIteration, interval: si, spawned: this.lemmings.length });
+    }
 
     checkAdjustSpawnInterval() {
       if (this.spawnIntervalModifier === 0) return;
@@ -1771,6 +2111,7 @@
         if (L.particleTimer >= 0) L.particleTimer--;
         if (L.removed) continue;
         if (L.teleporting) cont = this.checkLemTeleporting(L);
+        if (cont && L.portalWarpFrame > 0) cont = this.checkLemPortalWarping(L);
         if (cont && L.explosionTimer !== 0) cont = !this.updateExplosionTimer(L);
         if (cont) cont = this.handleLemming(L);
         if (cont) cont = this.checkLevelBoundaries(L);
@@ -1796,7 +2137,8 @@
           if ((this.hasTriggerAt(px, py, "TRAP") && this.findGadgetId(px, py, "TRAP") !== NO_OBJECT && !L.isDisarmer)
             || this.hasTriggerAt(px, py, "EXIT") || (this.hasTriggerAt(px, py, "WATER") && !L.isSwimmer)
             || this.hasTriggerAt(px, py, "FIRE") || this.hasTriggerAt(px, py, "ADDSKILL") || this.hasTriggerAt(px, py, "REMOVESKILLS")
-            || (this.hasTriggerAt(px, py, "TELEPORT") && this.findGadgetId(px, py, "TELEPORT") !== NO_OBJECT)) {
+            || (this.hasTriggerAt(px, py, "TELEPORT") && this.findGadgetId(px, py, "TELEPORT") !== NO_OBJECT)
+            || (this.hasTriggerAt(px, py, "PORTAL") && this.findGadgetId(px, py, "PORTAL") !== NO_OBJECT)) {
             L.action = BA.EXPLODING;
             this.simulationDepth--;
             return;
@@ -1982,6 +2324,7 @@
       if (this.userSetNuking) return;
       this.userSetNuking = true;
       this.exploderAssignInProgress = true;
+      if (!this.replay) this.recorded.push({ type: "nuke", frame: this.currentIteration });
     }
 
     setSpawnIntervalModifier(m) { this.spawnIntervalModifier = m; }

@@ -37,18 +37,26 @@
   const PANEL_FILES = ["skill_panels", "empty_slot", "skill_count_digits", "skill_count_erase", "skill_selected",
     "icon_rr_minus", "icon_rr_plus", "icon_pause", "icon_nuke", "icon_ff", "panel_font"];
 
-  let assetsPromise = null;
-  /** The gfx/panel bitmaps, loaded once. */
-  function loadPanelAssets(io) {
-    if (!assetsPromise) {
-      assetsPromise = (async () => {
+  const assetsByPack = new Map();
+  /**
+   * The gfx/panel bitmaps, loaded once - or, for a pack that ships its own
+   * (skill_panels.png and friends next to its levels.nxmi), that pack's.
+   */
+  function loadPanelAssets(io, packDir) {
+    const key = packDir || "";
+    if (!assetsByPack.has(key)) {
+      assetsByPack.set(key, (async () => {
         const out = {};
-        await Promise.all(PANEL_FILES.map(async (n) => { out[n] = await io.image("gfx/panel/" + n + ".png"); }));
+        await Promise.all(PANEL_FILES.map(async (n) => {
+          let bmp = packDir ? await io.image(packDir + "/" + n + ".png") : null;
+          if (!bmp) bmp = await io.image("gfx/panel/" + n + ".png");
+          out[n] = bmp;
+        }));
         for (const n of PANEL_FILES) if (!out[n]) throw new Error("missing gfx/panel/" + n + ".png - see README, Levels and assets");
         return out;
-      })();
+      })());
     }
-    return assetsPromise;
+    return assetsByPack.get(key);
   }
 
   class GamePanel {
@@ -73,7 +81,7 @@
       display.onMouseDown.on(this._onDown);
       display.onMouseUp.on(this._onUp);
       display.onDoubleClick.on(this._onDouble);
-      loadPanelAssets(Lemmix.io).then((assets) => {
+      loadPanelAssets(Lemmix.io, game.packDir || null).then((assets) => {
         if (this.disposed) return;
         this.assets = assets;
         this._buildBase();

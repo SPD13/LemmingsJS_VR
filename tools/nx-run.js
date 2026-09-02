@@ -7,6 +7,8 @@
  * sweep over every level exercises every gadget the packs use.
  *
  * Usage: node tools/nx-run.js [level-id-prefix] [--frames N] [--replay "<ticks=cmd&...>"]
+ *        node tools/nx-run.js <level-id> --nxrp <file.nxrp>      play a NeoLemmix replay
+ *        node tools/nx-run.js <level-id> ... --save-nxrp <file>  write what happened as a replay
  */
 const { Lemmix, nodeIO, findRepoRoot, listLevels } = require("./lemmix-node");
 const fs = require("fs");
@@ -18,7 +20,12 @@ async function main() {
   const frames = framesIdx >= 0 ? parseInt(args[framesIdx + 1], 10) : 1500;
   const replayIdx = args.indexOf("--replay");
   const replay = replayIdx >= 0 ? args[replayIdx + 1] : null;
-  const prefix = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--frames" && args[i - 1] !== "--replay");
+  const nxrpIdx = args.indexOf("--nxrp");
+  const nxrp = nxrpIdx >= 0 ? Lemmix.Replay.parse(fs.readFileSync(args[nxrpIdx + 1], "utf8")) : null;
+  const saveIdx = args.indexOf("--save-nxrp");
+  const saveNxrp = saveIdx >= 0 ? args[saveIdx + 1] : null;
+  const valueArgs = new Set(["--frames", "--replay", "--nxrp", "--save-nxrp"]);
+  const prefix = args.find((a, i) => !a.startsWith("--") && !valueArgs.has(args[i - 1]));
   const repoRoot = findRepoRoot();
   const io = nodeIO(repoRoot);
   const styles = new Lemmix.StyleManager(io);
@@ -34,6 +41,7 @@ async function main() {
       const level = await Lemmix.LevelBuilder.build(data, styles, { seed: entry.id });
       const game = new Lemmix.LemGame(level, masks);
       game.start();
+      if (nxrp) game.loadReplay(nxrp);
       // a replay in the DOS command string: "<tick>=l<lemming>" or "s<skill index>"
       const commands = {};
       if (replay) {
@@ -56,6 +64,7 @@ async function main() {
         if (game.stateIsUnplayable) { ended = f; break; }
       }
       const seen = Object.keys(actions).sort().join(",");
+      if (saveNxrp) fs.writeFileSync(saveNxrp, Lemmix.Replay.serialize(game, {}));
       line += JSON.stringify({ out: game.lemmingsOut, saved: game.lemmingsIn, removed: game.lemmingsRemoved,
         toRelease: game.lemmingsToRelease, ended, need: level.needCount, count: level.releaseCount, seen });
     } catch (e) {
