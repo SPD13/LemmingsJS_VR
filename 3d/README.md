@@ -72,10 +72,10 @@ below eye level, 0.9&nbsp;m in front of wherever you are actually standing
 and facing (not the room-calibration origin), focused on the level's
 intended start area.
 
-- **trigger** — the desktop click: aim the controller ray at a lemming to
-  assign the selected skill, or at the skill panel to use it as in the game
-  (whichever hand is on the board drives the highlight ring, so either
-  one can aim)
+- **right-hand trigger** — the desktop click: aim the ray at a lemming to
+  assign the selected skill, or at the skill panel to use it as in the game.
+  The right hand alone carries a beam and drives the highlight ring; the left
+  keeps its marker, its grip and its stick
 - **thumbsticks** — right pans the board, left tilts it (yaw about the
   vertical, pitch about your own horizontal): the same two moves as
   right-drag and left-drag on the desktop, at 0.8&nbsp;m/s and 60°/s at full

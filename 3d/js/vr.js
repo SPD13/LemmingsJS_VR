@@ -9,9 +9,9 @@
  *   VR_PIXEL_SCALE meters per game pixel and placed at chest height in
  *   front of the player; on exit it snaps back to desktop identity.
  * - Controller trigger = the desktop click (same pick() path: skill panel
- *   by UV, lemmings via sim coordinates through CommandManager). A ray
- *   line is drawn from each controller; whichever one is on the board
- *   drives hover.
+ *   by UV, lemmings via sim coordinates through CommandManager). The right
+ *   hand does the pointing: it alone draws a ray, drives hover, and acts
+ *   on its trigger.
  * - Grip drags the diorama; both grips scale it about the hands' midpoint.
  *   The world itself never moves, so there is nothing to feel sick about.
  */
@@ -149,11 +149,15 @@ class VRManager {
         new THREE.BoxGeometry(0.03, 0.03, 0.06), tipMat));
       scene.add(grip);
       c.userData.grip = grip;
-      c.addEventListener("connected", (e) =>
+      c.addEventListener("connected", (e) => {
+        c.userData.handedness = e.data && e.data.handedness;
         console.log("[vr] controller connected:", e.data && e.data.handedness,
-          e.data && e.data.targetRayMode));
-      c.addEventListener("disconnected", () =>
-        console.log("[vr] controller disconnected"));
+          e.data && e.data.targetRayMode);
+      });
+      c.addEventListener("disconnected", () => {
+        c.userData.handedness = null;
+        console.log("[vr] controller disconnected");
+      });
       c.addEventListener("selectstart", () => this._onSelect(c));
       c.addEventListener("squeezestart", () => { c.userData.gripping = true; this._grabBaseline(); });
       c.addEventListener("squeezeend", () => { c.userData.gripping = false; this._grabBaseline(); });
@@ -221,6 +225,17 @@ class VRManager {
     this.dioramaRoot.scale.setScalar(1);
   }
 
+  /**
+   * The hand that points. Only the right carries a beam - two of them
+   * crossing the board is noise when one does the job. A controller the
+   * runtime will not name points as well, and so does a lone left one,
+   * since otherwise nothing would.
+   */
+  _isPointer(c) {
+    if (c.userData.handedness !== "left") return true;
+    return !this.controllers.some((o) => o !== c && o.userData.handedness);
+  }
+
   _rayFrom(controller) {
     this._tempMatrix.identity().extractRotation(controller.matrixWorld);
     this.raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
@@ -229,7 +244,7 @@ class VRManager {
   }
 
   _onSelect(controller) {
-    if (!this.presenting) return;
+    if (!this.presenting || !this._isPointer(controller)) return;
     const pick = this.hooks.pickWithRaycaster(this._rayFrom(controller));
     if (pick) this.hooks.onSelectPick(pick);
   }
@@ -348,6 +363,14 @@ class VRManager {
         c.userData.dot.visible = false;
         continue;
       }
+      // only the pointing hand carries a beam; the other keeps its marker
+      // and its grip, and never aims at anything
+      const pointer = this._isPointer(c);
+      for (const b of c.userData.beams) b.visible = pointer;
+      if (!pointer) {
+        c.userData.dot.visible = false;
+        continue;
+      }
       // stretch each beam to its hit on the board/panel; park the dot there
       const hit = this.hooks.raycastHit
         ? this.hooks.raycastHit(this._rayFrom(c))
@@ -356,18 +379,18 @@ class VRManager {
       for (const b of c.userData.beams) b.scale.z = len;
       c.userData.dot.visible = !!hit;
       if (hit) c.userData.dot.position.copy(hit.point);
-      // whichever hand is actually on the board drives the highlight, the one
-      // already doing so keeping it while it still lands, so two hands on the
-      // board do not fight over it frame by frame
+      // the pointing hand drives the highlight while it is on the board; the
+      // one already doing so keeps it, so a second pointer (an unnamed hand,
+      // say) cannot take it away frame by frame
       if (!hit) continue;
       if (c === this._aiming) { aiming = c; aimingDist = -1; }
       else if (hit.distance < aimingDist) { aimingDist = hit.distance; aiming = c; }
     }
 
-    // Hover follows the aiming hand, not a fixed one. Asking controller 0 for
-    // it meant that pointing with the other hand fed a miss every frame: the
-    // beam landed on a lemming or a skill tile and neither the ring nor the
-    // tile's pop-out ever appeared.
+    // Hover comes from the hand that is aiming. Reading it from a fixed
+    // controller meant that pointing with the other hand fed a miss every
+    // frame: the beam landed on a lemming or a skill tile and neither the
+    // ring nor the tile's pop-out ever appeared.
     if (hasControllers) {
       this._aiming = aiming;
       this.hooks.onHoverPick(aiming
