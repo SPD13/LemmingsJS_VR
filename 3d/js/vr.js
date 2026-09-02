@@ -23,6 +23,11 @@ const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
 const VR_GUI_WIDTH = 0.6;
 const VR_GUI_Y = -0.3;
 const VR_GUI_Z = -0.75;
+// Thumbsticks. The deadzone is generous because a resting thumb on a stick
+// that never quite centres would otherwise drift the board all session.
+const VR_STICK_DEADZONE = 0.15;
+const VR_STICK_PAN = 0.8;   // metres per second at full deflection
+const VR_STICK_TILT = 1.0;  // radians per second at full deflection
 
 function createVRButton(renderer) {
   const button = document.createElement("button");
@@ -69,6 +74,8 @@ class VRManager {
    *  - pickWithRaycaster(raycaster) -> {panelUv}|{simX,simY}|null
    *  - onSelectPick(pick)           -> act on a trigger pull
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
+   *  - onStick(handedness, x, y, dt)-> thumbstick, y already flipped to
+   *                                    "away from the player is positive"
    *  - placeDiorama()               -> position dioramaRoot for the headset
    */
   constructor(renderer, scene, camera, dioramaRoot, hooks) {
@@ -251,8 +258,31 @@ class VRManager {
     }
   }
 
-  /** Per-frame: apply grabs, recenter button, hover from controller 0. */
-  update() {
+  /**
+   * The thumbsticks: the right one pans the board, the left one tilts it -
+   * the same two moves as right-drag and left-drag on the desktop.
+   *
+   * xr-standard puts the stick on axes 2 and 3, leaving 0 and 1 for a
+   * trackpad, but a device with no trackpad may report it at 0 and 1, so
+   * take the pair the runtime actually gives. Its y runs negative away from
+   * the player, the opposite of the arrow keys, so it is flipped to match.
+   */
+  _pollSticks(dt) {
+    const session = this.renderer.xr.getSession();
+    if (!session || !this.hooks.onStick || !dt) return;
+    for (const source of session.inputSources) {
+      const axes = source.gamepad && source.gamepad.axes;
+      if (!axes || axes.length < 2) continue;
+      const i = axes.length >= 4 ? 2 : 0;
+      const dead = (v) => (Math.abs(v) < VR_STICK_DEADZONE ? 0 : v);
+      const x = dead(axes[i] || 0), y = dead(axes[i + 1] || 0);
+      if (!x && !y) continue;
+      this.hooks.onStick(source.handedness, x, -y, dt);
+    }
+  }
+
+  /** Per-frame: grabs, recenter, thumbsticks, hover from the aiming hand. */
+  update(dt) {
     if (!this.presenting) return;
     // the authoritative head pose comes from the XR frame (the user camera
     // only receives it during render, AFTER this update - placing from it on
@@ -290,6 +320,7 @@ class VRManager {
       }
     }
     this._pollRecenter();
+    this._pollSticks(dt);
     const g = this._grab;
     if (g && g.mode === 1 && g.c.userData.gripping) {
       const cur = g.c.getWorldPosition(new THREE.Vector3());

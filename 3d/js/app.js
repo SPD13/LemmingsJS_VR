@@ -659,6 +659,33 @@
     dioramaRoot.position.sub(pivot).applyQuaternion(q).add(pivot);
   }
 
+  /** Slide the diorama across the view. The camera is the headset, so the
+   *  board shifts the opposite way to the push. */
+  function panDioramaBy(dx, dy, seconds) {
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+    const step = VR_STICK_PAN * seconds;
+    dioramaRoot.position
+      .sub(right.multiplyScalar(dx * step))
+      .sub(up.multiplyScalar(dy * step));
+  }
+
+  /** Turn the diorama about its focus: yaw about world up, pitch about the
+   *  headset's own horizontal. Same as left-drag and shift+arrows. */
+  function tiltDioramaBy(dx, dy, seconds) {
+    if (!session) return;
+    const step = VR_STICK_TILT * seconds;
+    const pivot = dioramaFocusWorld();
+    rotateDioramaAroundPivot(new THREE.Quaternion()
+      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), dx * step), pivot);
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    right.y = 0;
+    if (right.lengthSq() > 1e-4) {
+      rotateDioramaAroundPivot(new THREE.Quaternion()
+        .setFromAxisAngle(right.normalize(), dy * step), pivot);
+    }
+  }
+
   /**
    * Scale the diorama about a fixed world pivot, so whatever is under that
    * point stays under it. The position has to be moved from where it is,
@@ -897,6 +924,13 @@
       }
     },
     onHoverPick: applyHover,
+    // left stick tilts, right stick pans; a hand the runtime will not name
+    // pans, which is the safer of the two to get wrong
+    onStick: (hand, x, y, seconds) => {
+      if (!session) return;
+      if (hand === "left") tiltDioramaBy(x, y, seconds);
+      else panDioramaBy(x, y, seconds);
+    },
     placeDiorama: placeDioramaForXR,
   });
 
@@ -1072,7 +1106,8 @@
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
     }
     if (renderer.xr.isPresenting) {
-      vr.update(); // controller grabs + hover; headset pose drives the camera
+      // grabs, sticks and hover; the headset pose drives the camera
+      vr.update(dt / 1000);
       vrWarningSign.visible = vrMouseFallback();
     } else {
       controls.update();

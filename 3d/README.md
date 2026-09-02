@@ -76,6 +76,10 @@ intended start area.
   assign the selected skill, or at the skill panel to use it as in the game
   (whichever hand is on the board drives the highlight ring, so either
   one can aim)
+- **thumbsticks** — right pans the board, left tilts it (yaw about the
+  vertical, pitch about your own horizontal): the same two moves as
+  right-drag and left-drag on the desktop, at 0.8&nbsp;m/s and 60°/s at full
+  deflection
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of
