@@ -41,11 +41,6 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
   stops to ask is no longer a shortcut.
-
-Anything you have to deal with holds the clock while it is up: the catalog and
-either restart question, in both views. Only what was stopped gets restarted,
-so a game you had already paused stays paused, and two of them overlapping do
-not resume it between them.
 - "mode" switches between playing and editing. Playing is the game and is
   the default; editing is the tagging workbench — it bills itself as
   validation mode, opens the piece editor, and turns the catalog over to
@@ -75,16 +70,21 @@ not resume it between them.
   them, by averaging the pixel heights that meet at each quad corner (crisp
   at depth-class boundaries and silhouettes); it only changes anything while
   "3D terrain" is on.
-
-All three start on, as does "sound". Pressing a button remembers that choice
-in localStorage, so only the settings you actually change are stored and the
-rest follow the defaults; the `?emboss=` / `?smooth=` / `?doors=` params above
-override both for one load without disturbing what is saved.
 - `e` enters edit mode and toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
   re-meshes live. "export JSON" downloads the profile for `profiles/`; a tag
   applies to the piece id, so it covers every level of the same tileset.
+
+All three start on, as does "sound". Pressing a button remembers that choice
+in localStorage, so only the settings you actually change are stored and the
+rest follow the defaults; the `?emboss=` / `?smooth=` / `?doors=` params above
+override both for one load without disturbing what is saved.
+
+Anything you have to deal with holds the clock while it is up: the catalog and
+either restart question, in both views. Only what was stopped gets restarted,
+so a game you had already paused stays paused, and two of them overlapping do
+not resume it between them.
 
 ## VR (Phase 4)
 
