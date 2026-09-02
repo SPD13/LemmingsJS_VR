@@ -496,7 +496,8 @@
   const VR_CAT_THUMB_H = 26;              // a level is ~10:1, so it draws thin
   const VR_CAT_TILE_H = 126;              // one row of levels
   const VR_CAT_BAND_H = 48;               // a difficulty's heading
-  const VR_CAT_BAR_W = 10;                // the scrollbar down the right edge
+  const VR_CAT_BAR_W = 16;                // the scrollbar down the right edge
+  const VR_CAT_BAR_GRAB = 12;             // slack either side of it, for the ray
   const VR_CAT_SCROLL = 900;              // canvas px/second at full stick
   // The window the list scrolls behind.
   const VR_CAT_VIEW_X = VR_CAT_PAD;
@@ -549,6 +550,29 @@
     if (col < VR_CAT_COLS) y += VR_CAT_TILE_H; // the last row, left part-full
     vrCatalogHeight = y;
     vrCatalogScrollTo(vrCatalogScroll);
+  }
+
+  /**
+   * The scrollbar down the right edge: where it is, how tall its thumb is,
+   * and how far the list can travel. Painted from this, and pressed on it.
+   */
+  function vrCatalogBar() {
+    const max = Math.max(0, vrCatalogHeight - VR_CAT_VIEW_H);
+    return {
+      x: VR_CAT_W - VR_CAT_PAD - VR_CAT_BAR_W,
+      y: VR_CAT_VIEW_Y, w: VR_CAT_BAR_W, h: VR_CAT_VIEW_H, max,
+      thumb: max > 0
+        ? Math.max(40, VR_CAT_VIEW_H * VR_CAT_VIEW_H / vrCatalogHeight) : 0,
+    };
+  }
+
+  /** Where a press at this height down the bar puts the list. */
+  function vrCatalogScrollFor(canvasY) {
+    const bar = vrCatalogBar();
+    const travel = bar.h - bar.thumb;
+    if (travel <= 0) return 0;
+    // the thumb centres on the press, the way a scrollbar drag behaves
+    return ((canvasY - bar.y - bar.thumb / 2) / travel) * bar.max;
   }
 
   /** Move the list, clamped to its ends. Returns true if it actually moved. */
@@ -675,21 +699,21 @@
       }
       cx.restore();
 
-      // how far down the list we are
-      const max = Math.max(0, vrCatalogHeight - VR_CAT_VIEW_H);
-      if (max > 0) {
-        const bx = VR_CAT_W - VR_CAT_PAD - VR_CAT_BAR_W;
+      // how far down the list we are - and a handle to drag
+      const bar = vrCatalogBar();
+      if (bar.max > 0) {
+        const r = VR_CAT_BAR_W / 2;
         cx.fillStyle = "rgba(255,255,255,0.07)";
         cx.beginPath();
-        cx.roundRect ? cx.roundRect(bx, VR_CAT_VIEW_Y, VR_CAT_BAR_W, VR_CAT_VIEW_H, 5)
-                     : cx.rect(bx, VR_CAT_VIEW_Y, VR_CAT_BAR_W, VR_CAT_VIEW_H);
+        cx.roundRect ? cx.roundRect(bar.x, bar.y, bar.w, bar.h, r)
+                     : cx.rect(bar.x, bar.y, bar.w, bar.h);
         cx.fill();
-        const th = Math.max(40, VR_CAT_VIEW_H * VR_CAT_VIEW_H / vrCatalogHeight);
-        const ty = VR_CAT_VIEW_Y + (VR_CAT_VIEW_H - th) * (vrCatalogScroll / max);
-        cx.fillStyle = "#7fd6e8";
+        const ty = bar.y +
+          (bar.h - bar.thumb) * (vrCatalogScroll / bar.max);
+        cx.fillStyle = vrCatalogHover === -2 ? "#a9e6f4" : "#7fd6e8";
         cx.beginPath();
-        cx.roundRect ? cx.roundRect(bx, ty, VR_CAT_BAR_W, th, 5)
-                     : cx.rect(bx, ty, VR_CAT_BAR_W, th);
+        cx.roundRect ? cx.roundRect(bar.x, ty, bar.w, bar.thumb, r)
+                     : cx.rect(bar.x, ty, bar.w, bar.thumb);
         cx.fill();
       }
       tex.needsUpdate = true;
@@ -710,6 +734,26 @@
   vrCatalogClose.renderOrder = GUI_ORDER_MODAL_BTN;
 
   function paintVrCatalog() { vrCatalogPanel.userData.paint(); }
+
+  /**
+   * What the beam is on inside the catalog window: a tile, or the scrollbar
+   * (which carries the position it would scroll to, so a press on it jumps
+   * there and a held press keeps following the hand).
+   */
+  function vrCatalogPick(uv) {
+    const bar = vrCatalogBar();
+    const x = uv ? uv.x * VR_CAT_W : -1;
+    const y = uv ? (1 - uv.y) * VR_CAT_H : -1;
+    const onBar = !!uv && bar.max > 0 &&
+      x >= bar.x - VR_CAT_BAR_GRAB && x <= bar.x + bar.w + VR_CAT_BAR_GRAB &&
+      y >= bar.y && y <= bar.y + bar.h;
+    return {
+      barTool: "worldpanel",
+      tile: onBar ? -1 : vrCatalogTileAt(uv),
+      scrollBar: onBar,
+      scrollAt: vrCatalogScrollFor(y),
+    };
+  }
 
   /** Which tile the beam is on, from the panel's own UV. */
   function vrCatalogTileAt(uv) {
@@ -1383,8 +1427,8 @@
       return { barTool: "volume", volume: hit.uv ? hit.uv.y : audio.volume };
     }
     if (hit.object.name === "vr-worldpanel") {
-      // the grid is one plane: which tile it is comes from the UV
-      return { barTool: "worldpanel", tile: vrCatalogTileAt(hit.uv) };
+      // the grid is one plane: what is under the beam comes from the UV
+      return vrCatalogPick(hit.uv);
     }
     if (hit.object.name.startsWith("vr-")) {
       return { barTool: hit.object.name.slice(3) };
@@ -1490,7 +1534,8 @@
   function applyHover(p) {
     if (!session) return;
     setBarToolHover(p ? p.barTool : null);
-    setVrCatalogHover(p && p.barTool === "worldpanel" ? p.tile : -1);
+    setVrCatalogHover(p && p.barTool === "worldpanel"
+      ? (p.scrollBar ? -2 : p.tile) : -1);
     session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
       cursorSim = { x: p.simX, y: p.simY };
@@ -1844,10 +1889,15 @@
       } else if (p.barTool === "catclose") {
         setVrCatalog(false);
       } else if (p.barTool === "worldpanel") {
-        const item = vrCatalogItems[p.tile];
-        if (item) {
-          setVrCatalog(false);
-          library.enterWorld(item.gameType, item.group, item.level);
+        // the scrollbar, pressed or dragged, moves the list instead
+        if (p.scrollBar || p.scrubbing) {
+          if (vrCatalogScrollTo(p.scrollAt)) paintVrCatalog();
+        } else {
+          const item = vrCatalogItems[p.tile];
+          if (item) {
+            setVrCatalog(false);
+            library.enterWorld(item.gameType, item.group, item.level);
+          }
         }
       } else if (p.barTool === "yes") {
         const act = vrConfirmAction;
