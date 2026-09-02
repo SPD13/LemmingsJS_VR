@@ -399,8 +399,11 @@
     });
     game.start();
 
-    // camera: frame the level's intended start position
-    frameDesktopCamera(level);
+    // Camera: frame the level's intended start position - but never during a
+    // session, where the camera is the headset. Writing desktop coordinates
+    // into it there is read straight back as a head pose, and the next level
+    // gets placed hundreds of metres away. Leaving VR reframes anyway.
+    if (!renderer.xr.isPresenting) frameDesktopCamera(level);
 
     hud.name.textContent = level.name.trim() || "(unnamed level)";
     hud.meta.textContent =
@@ -860,8 +863,12 @@
       headPos.copy(headPose.pos);
       headQuat.copy(headPose.quat);
     } else {
-      // mid-session callers without a frame pose: the camera is valid by then
-      camera.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
+      // Mid-session callers without a frame pose: ask the XR camera, which is
+      // only ever the head. The user camera is a copy the renderer refreshes
+      // each frame, so anything on the desktop path can leave its own numbers
+      // in it between renders.
+      const eye = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+      eye.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
     }
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
     fwd.y = 0;
