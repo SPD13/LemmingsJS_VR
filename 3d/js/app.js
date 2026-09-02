@@ -45,9 +45,11 @@
     return dflt;
   };
   const state = {
-    emboss: setting("emboss", "lem3d-emboss", false), // colour-keyed relief
-    smooth: setting("smooth", "lem3d-smooth", false), // slope between heights
-    doors: setting("doors", "lem3d-doors", true),     // openings, on by default
+    // All on until told otherwise: this is what the 3D mode is for, and each
+    // one is remembered the moment its button is pressed.
+    emboss: setting("emboss", "lem3d-emboss", true), // colour-keyed relief
+    smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
+    doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     gameType: parseInt(params.get("type") || "1", 10),
     group: parseInt(params.get("group") || "0", 10),
     level: parseInt(params.get("level") || "0", 10),

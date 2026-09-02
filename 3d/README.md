@@ -43,8 +43,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   rebuilds it); miniatures render lazily as you scroll.
 - "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
-  giving rock and grass real texture. Off by default (it multiplies the
-  terrain's triangle count), persisted in localStorage; individual pieces can
+  giving rock and grass real texture. It multiplies the terrain's triangle
+  count, so turn it off if the frame rate suffers; individual pieces can
   opt out with "3D shade" in the piece editor, or flip which shades are
   raised with "invert" (some pieces are drawn with dark highlights, so
   darker pixels are the ones standing proud).
@@ -52,11 +52,16 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   sprites (see `js/portals.js`). Off, they stay the sprites the original
   draws and the terrain behind them is left uncarved. The carve happens as
   the level is built, so toggling this rebuilds the level rather than
-  swapping in place. On by default, persisted in localStorage.
+  swapping in place.
 - "smooth" slopes the relief between neighbouring heights instead of stepping
   them, by averaging the pixel heights that meet at each quad corner (crisp
-  at depth-class boundaries and silhouettes). Also off by default and
-  persisted; it only changes anything while "3D terrain" is on.
+  at depth-class boundaries and silhouettes); it only changes anything while
+  "3D terrain" is on.
+
+All three start on, as does "sound". Pressing a button remembers that choice
+in localStorage, so only the settings you actually change are stored and the
+rest follow the defaults; the `?emboss=` / `?smooth=` / `?doors=` params above
+override both for one load without disturbing what is saved.
 - `e` toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
