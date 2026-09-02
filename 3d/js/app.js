@@ -50,6 +50,9 @@
     emboss: setting("emboss", "lem3d-emboss", true), // colour-keyed relief
     smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
+    // Editing is the tagging workbench: the piece editor, the tagging marks
+    // in the catalog, the "validation mode" billing. Playing is the game.
+    edit: setting("edit", "lem3d-edit", false),
     gameType: parseInt(params.get("type") || "1", 10),
     group: parseInt(params.get("group") || "0", 10),
     level: parseInt(params.get("level") || "0", 10),
@@ -64,6 +67,9 @@
     hover: document.getElementById("hud-hover"),
     loading: document.getElementById("loading"),
     pauseBtn: document.getElementById("btn-pause"),
+    title: document.getElementById("hud-title"),
+    modeBtn: document.getElementById("btn-mode"),
+    editor: document.getElementById("hud-editor"),
   };
 
   // ---------------------------------------------------------------- renderer
@@ -256,6 +262,23 @@
     if (session) session.rebuildRelief();
   });
   renderEmbossBtn();
+
+  /** Playing or editing: the billing, the catalog's labels, and whether the
+   *  piece editor is reachable at all. */
+  function renderMode() {
+    hud.title.textContent = state.edit
+      ? "LEMMINGS 3D · VALIDATION MODE" : "LEMMINGS 3D";
+    document.title = state.edit
+      ? "Lemmings 3D — validation mode" : "Lemmings 3D";
+    hud.modeBtn.textContent = "mode: " + (state.edit ? "edit" : "play");
+    library.setEditMode(state.edit);
+    if (!state.edit && session && session.editor) session.editor.disable();
+  }
+  document.getElementById("btn-mode").addEventListener("click", () => {
+    state.edit = !state.edit;
+    try { localStorage.setItem("lem3d-edit", state.edit ? "on" : "off"); } catch (e) {}
+    renderMode();
+  });
 
   // entrances and exits as real openings rather than flat sprites. The
   // opening carves the terrain behind it as the level is built, so unlike the
@@ -518,8 +541,17 @@
     game.getGameTimer().speedFactor = state.speed;
     game.onGameEnd.on((result) => {
       const won = result.state === Lemmings.GameStateTypes.SUCCEEDED;
+      let best = "";
+      if (won) {
+        // the clock counts down; how long it took is the elapsed time
+        const seconds = game.getGameTimer().getGameTime();
+        const record = LevelProgress.record(
+          state.gameType, state.group, state.level, seconds);
+        best = " — " + LevelProgress.format(seconds) +
+          (record ? " (best)" : "");
+      }
       hud.state.textContent = won
-        ? "LEVEL COMPLETE — " + Lemmings.GameStateTypes.toString(result.state)
+        ? "LEVEL COMPLETE — " + Lemmings.GameStateTypes.toString(result.state) + best
         : "FAILED — " + Lemmings.GameStateTypes.toString(result.state);
       hud.state.className = won ? "won" : "lost";
       window.setTimeout(() => {
@@ -1132,6 +1164,12 @@
       case ",": moveLevel(-1); break;
       case ".": moveLevel(1); break;
       case "e":
+        // the piece editor is the edit mode's tool; asking for it enters it
+        if (!state.edit) {
+          state.edit = true;
+          try { localStorage.setItem("lem3d-edit", "on"); } catch (err) {}
+          renderMode();
+        }
         if (session.editor) session.editor.toggle();
         break;
       case "ArrowLeft":
@@ -1311,7 +1349,9 @@
     state.group = group;
     state.level = level;
     await loadLevel();
-    if (session && session.editor) session.editor.enable();
+    // the catalog is a way into a level in either mode; only the tagging
+    // workbench opens the editor with it
+    if (state.edit && session && session.editor) session.editor.enable();
   }, (open) => {
     // Hold the sim while the catalog is up - lemmings should not be walking
     // off ledges behind it. Only resume what we stopped: a game the player
@@ -1328,6 +1368,7 @@
     hud.pauseBtn.textContent = timer.isRunning() ? "pause" : "resume";
   });
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
+  renderMode(); // billing, catalog labels and editor availability
 
   // debug handle for the console / automated checks
   window.__lem3d = {

@@ -62,7 +62,13 @@
     display: block; width: 100%; image-rendering: pixelated;
     background: #05070c; border-radius: 3px;
   }
-  .lib-label { font-size: 12px; color: #f0f3f8; margin-top: 6px; }
+  .lib-label {
+    font-size: 12px; color: #f0f3f8; margin-top: 6px;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .lib-best { color: #6fce7e; font-variant-numeric: tabular-nums; }
+  .lib-tile.cleared { background: #16281a; border-color: #2f6b3d; }
+  .lib-tile.cleared:hover { background: #1c3522; }
   .lib-sub {
     font-size: 11px; color: #8fa1bb;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -92,7 +98,7 @@
 <div id="loading">LOADING&hellip;</div>
 
 <div id="hud-top" class="hud">
-  <h1>LEMMINGS 3D &middot; VALIDATION MODE</h1>
+  <h1 id="hud-title">LEMMINGS 3D</h1>
   <div id="level-name">&nbsp;</div>
   <div id="level-meta">&nbsp;</div>
   <div id="game-state">&nbsp;</div>
@@ -103,6 +109,7 @@
     <button id="btn-pause">pause</button>
     <button id="btn-library">worlds</button>
     <button id="btn-sound">sound: on</button>
+    <button id="btn-mode">mode: play</button>
     <button id="btn-emboss">3D terrain: on</button>
     <button id="btn-doors">3D doors: on</button>
     <button id="btn-smooth">smooth: on</button>

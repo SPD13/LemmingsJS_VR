@@ -1,8 +1,10 @@
-# Lemmings 3D — validation mode
+# Lemmings 3D
 
 Desktop 3D rendering of LemmingsJS (Phase 1–2 of the VR plan): the untouched
 2D simulation rendered as an extruded Three.js diorama in a normal browser
-tab, so the 3D port can be developed and tested without a headset. The same
+tab. It runs in two modes — **play**, the game, which is the default; and
+**edit**, the tagging workbench that bills itself as validation mode and lets
+the 3D port be developed and tested without a headset. The same
 scene graph, bridge, and input paths will back the WebXR build; only the
 camera (orbit controls vs. headset pose) and pointer (mouse ray vs. controller
 ray) differ.
@@ -18,8 +20,8 @@ npx http-server -p 8123 -c-1
 
 URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
 `?level=N`, `?speed=N`, `?replay=<string>` (from the `r` key dump), and the
-render settings `?emboss=`, `?smooth=`, `?doors=` (`1`/`on`/`true` or
-`0`/`off`/`false`). Those three are normally toggled with the buttons and
+render settings `?emboss=`, `?smooth=`, `?doors=` and `?edit=` (`1`/`on`/`true`
+or `0`/`off`/`false`). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them
 on a headset — its browser is a different machine with its own empty
 localStorage, and the buttons are DOM, so they cannot be reached from inside
@@ -35,11 +37,18 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   original panel (release rate, skills, pause, nuke, speed)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `r` dump the replay string to the console
+- "mode" switches between playing and editing. Playing is the game and is
+  the default; editing is the tagging workbench — it bills itself as
+  validation mode, opens the piece editor, and turns the catalog over to
+  tagging status. `?edit=1` selects it too, and pressing `e` enters it, since
+  the piece editor is its tool. Remembered in localStorage.
 - `w` (or the "worlds" button) opens the world library: every level of both
   games, grouped by tileset, one miniature tile per level — click any tile to
-  jump straight to that level with the piece editor already enabled. A world
-  header shows its level count and a green "✔ tagged" mark when a profile
-  file exists in `profiles/`. The catalog is cached in localStorage ("rescan"
+  jump straight to that level. Playing, a tile you have cleared is green and
+  carries your best time, and a world header counts how many of its levels
+  are done; editing, the header shows a green "✔ tagged" mark when a profile
+  file exists in `profiles/` and entering a level opens the editor. Clears
+  are per-browser, in localStorage. The catalog is cached in localStorage ("rescan"
   rebuilds it); miniatures render lazily as you scroll. The sim is held while
   it is up, and released on closing — unless the game was already paused, in
   which case it stays that way.
@@ -64,7 +73,7 @@ All three start on, as does "sound". Pressing a button remembers that choice
 in localStorage, so only the settings you actually change are stored and the
 rest follow the defaults; the `?emboss=` / `?smooth=` / `?doors=` params above
 override both for one load without disturbing what is saved.
-- `e` toggles the piece editor (pauses the sim): click a terrain piece to
+- `e` enters edit mode and toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
   re-meshes live. "export JSON" downloads the profile for `profiles/`; a tag

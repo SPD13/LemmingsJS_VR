@@ -1,9 +1,13 @@
 "use strict";
 /**
  * World library: every level of both games, grouped by tileset ("world").
- * Clicking a level tile loads that level with the piece editor enabled —
- * the entry point for tagging sessions. A green mark on a world's header
- * means a tagging file for that world exists in 3d/profiles/.
+ * Clicking a level tile loads it.
+ *
+ * What a tile says depends on the mode. Playing, it reports your own record:
+ * a cleared level is marked and carries its best time. Editing, it reports
+ * the tagging instead - a green mark on a world's header means a tagging file
+ * for that world exists in 3d/profiles/ - and entering a level turns the
+ * piece editor on.
  *
  * Discovery scans the complete level order once, recording each level's
  * ground set (VGASPEC special levels carry no piece data and are skipped);
@@ -18,6 +22,43 @@ const WORLD_NAMES = {
 };
 const GAME_LABELS = { 1: "Lemmings", 2: "Oh No! More Lemmings" };
 const LIBRARY_CACHE_KEY = "lem3d-worlds-v2";
+const PROGRESS_KEY = "lem3d-cleared";
+
+/**
+ * Which levels this browser has cleared, and how fast. Kept in localStorage,
+ * so it is per-browser and per-device - there is no account behind it.
+ */
+const LevelProgress = {
+  key(gameType, group, level) { return gameType + "/" + group + "/" + level; },
+
+  all() {
+    try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; }
+    catch (e) { return {}; }
+  },
+
+  /** Best time in seconds, or null if this one has never been cleared. */
+  best(gameType, group, level) {
+    const rec = this.all()[this.key(gameType, group, level)];
+    return rec && typeof rec.best === "number" ? rec.best : null;
+  },
+
+  /** Record a clear, keeping the fastest. Returns true if it is a new best. */
+  record(gameType, group, level, seconds) {
+    const all = this.all();
+    const k = this.key(gameType, group, level);
+    const rec = all[k] || { best: null, clears: 0 };
+    const better = rec.best === null || seconds < rec.best;
+    all[k] = { best: better ? seconds : rec.best, clears: rec.clears + 1 };
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(all)); } catch (e) {}
+    return better;
+  },
+
+  /** m:ss, the way the game's own clock reads. */
+  format(seconds) {
+    const m = Math.floor(seconds / 60), s = seconds % 60;
+    return m + ":" + String(s).padStart(2, "0");
+  },
+};
 
 class WorldLibrary {
   /**
@@ -30,6 +71,7 @@ class WorldLibrary {
     this.enterWorld = enterWorld;
     this.onVisibility = onVisibility;
     this.isOpen = false;
+    this.editMode = false;
     this.dom = {
       panel: document.getElementById("library"),
       grid: document.getElementById("lib-grid"),
@@ -54,6 +96,13 @@ class WorldLibrary {
   }
 
   toggle() { this.isOpen ? this.close() : this.open(); }
+
+  /** Playing or editing: the tiles report different things. */
+  setEditMode(on) {
+    if (this.editMode === on) return;
+    this.editMode = on;
+    if (this._populated) this._populate(false); // redraw with the other labels
+  }
 
   open() {
     if (this.isOpen) return;
@@ -158,11 +207,18 @@ class WorldLibrary {
         const mark = document.createElement("span");
         mark.className = "lib-mark";
         header.appendChild(mark);
-        fetch("profiles/" + slug + "-g" + world.set + ".json", { method: "HEAD" })
-          .then((res) => {
-            mark.textContent = res.ok ? "✔ tagged" : "not tagged";
-            if (res.ok) mark.classList.add("tagged");
-          }).catch(() => { mark.textContent = "not tagged"; });
+        if (this.editMode) {
+          fetch("profiles/" + slug + "-g" + world.set + ".json", { method: "HEAD" })
+            .then((res) => {
+              mark.textContent = res.ok ? "✔ tagged" : "not tagged";
+              if (res.ok) mark.classList.add("tagged");
+            }).catch(() => { mark.textContent = "not tagged"; });
+        } else {
+          const done = world.levels.filter(
+            (e) => LevelProgress.best(gameType, e.group, e.level) !== null).length;
+          mark.textContent = done + " / " + world.levels.length + " cleared";
+          if (done === world.levels.length) mark.classList.add("tagged");
+        }
         this.dom.grid.appendChild(header);
 
         const tiles = document.createElement("div");
@@ -193,6 +249,19 @@ class WorldLibrary {
     label.textContent =
       (groupNames[entry.group] || "Group " + entry.group) + " " + (entry.level + 1);
     tile.appendChild(label);
+
+    // playing: a cleared level is marked and wears its best time
+    if (!this.editMode) {
+      const best = LevelProgress.best(gameType, entry.group, entry.level);
+      if (best !== null) {
+        tile.classList.add("cleared");
+        const time = document.createElement("span");
+        time.className = "lib-best";
+        time.textContent = "✔ " + LevelProgress.format(best);
+        time.title = "best clearing time";
+        label.appendChild(time);
+      }
+    }
 
     const sub = document.createElement("div");
     sub.className = "lib-sub";
