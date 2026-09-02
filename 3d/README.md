@@ -47,13 +47,18 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   tagging status. `?edit=1` selects it too, and pressing `e` enters it, since
   the piece editor is its tool. Remembered in localStorage.
 - `w` (or the "worlds" button) opens the world library: every level of both
-  games, grouped by tileset, one miniature tile per level — click any tile to
-  jump straight to that level. Playing, a tile you have cleared is green and
-  carries your best time, and a world header counts how many of its levels
-  are done; editing, the header shows a green "✔ tagged" mark when a profile
-  file exists in `profiles/` and entering a level opens the editor. Clears
-  are per-browser, in localStorage. The catalog is cached in localStorage ("rescan"
-  rebuilds it); miniatures render lazily as you scroll.
+  games, one miniature tile per level — click any tile to jump straight to
+  that level. "order" lays them out either way round: by level number, the
+  order the games play them in (the default, with a heading per difficulty
+  and the world named on each tile), or by world, the tileset each level is
+  built from. The choice is remembered in localStorage. Playing, a tile you
+  have cleared is green and carries your best time, and a heading counts how
+  many of its levels are done; editing, a world header shows a green
+  "✔ tagged" mark when a profile file exists in `profiles/` (that mark is a
+  world's, so it is only in world order) and entering a level opens the
+  editor. Clears are per-browser, in localStorage. The catalog is cached in
+  localStorage ("rescan" rebuilds it); miniatures render lazily as you
+  scroll.
 - "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
