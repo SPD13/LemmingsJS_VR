@@ -322,10 +322,17 @@ function buildCeilingGeometry(frame, shutFrame) {
     doorRows.push({ y, min: rows[y].min, max: rows[y].max });
   }
 
-  const side = rows[nearY].width;                     // a square: side x side
+  const side = rows[nearY].width;      // how wide the opening is drawn
+  // How deep it runs is not the artwork's business: the hatch is a hole in
+  // the ground, so it goes back as far as the ground does. Taking its own
+  // width for a depth made it a square lying in a slab less than half as
+  // deep, sticking out of both faces of it.
+  const hatchDepth = TERRAIN_DEPTH;
   const centre = (rows[nearY].min + rows[nearY].max + 1) / 2;
   const span = farY - nearY + 1;
-  const zOf = (y) => side / 2 - ((y - nearY) / span) * side; // centred on z=0
+  // centred on z=0, so the mesh's own position decides where in the slab it
+  // sits and lemmings drop through the middle
+  const zOf = (y) => hatchDepth / 2 - ((y - nearY) / span) * hatchDepth;
 
   // --- the square: a slab a pixel thick, one strip per sprite row ---
   const panel = { positions: [], colors: [], uvs: [], indices: [] };
@@ -386,7 +393,7 @@ function buildCeilingGeometry(frame, shutFrame) {
       // meets it and an open one swings flush against the opening's edge
       y: nearY + PORTAL_PANEL_THICK,
       halfWidth: side / 2,
-      depth: side,
+      depth: hatchDepth,
       // the shut hatch's doors, row by row, so the flaps can be painted
       // from the artwork the artist drew on them
       doorRows,

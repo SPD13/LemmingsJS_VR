@@ -112,9 +112,11 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   and cached. `HeadlessStage` satisfies the Stage contract for
   `DisplayImage` without a canvas.
 - `js/portals.js` — entrances and exits as real openings (plan §5.4). The
-  entrance is a square hatch lying flat overhead with two doors hinged along
+  entrance is a hatch lying flat overhead with two doors hinged along
   its left and right edges: the trapezoid in the artwork is un-projected back
-  into a horizontal square, and the doors swing on real hinges, their angle
+  into a horizontal panel, as wide as the opening is drawn and as deep as the
+  terrain slab (its own width would stand it out of both faces of a slab less
+  than half as deep). The doors swing on real hinges, their angle
   read from how far each animation frame has the opening revealed. Where the
   opening is comes from the animation too, not the palette: shut, the doors
   cover the hole, so the colours that gain pixels as the hatch opens are the
