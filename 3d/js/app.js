@@ -658,6 +658,17 @@
     dioramaRoot.position.sub(pivot).applyQuaternion(q).add(pivot);
   }
 
+  /**
+   * Scale the diorama about a fixed world pivot, so whatever is under that
+   * point stays under it. The position has to be moved from where it is,
+   * which means never writing it before reading it.
+   */
+  function scaleDioramaAbout(next, pivot) {
+    const k = next / dioramaRoot.scale.x;
+    dioramaRoot.scale.setScalar(next);
+    dioramaRoot.position.sub(pivot).multiplyScalar(k).add(pivot);
+  }
+
   // OrbitControls suppresses the context menu only while enabled (desktop);
   // in a session the right button belongs to our pan
   renderer.domElement.addEventListener("contextmenu", (e) => {
@@ -673,13 +684,9 @@
     const next = THREE.MathUtils.clamp(
       cur * Math.pow(0.998, e.deltaY),
       VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
-    const k = next / cur;
-    const pivot = mouseCursorOnBoard
+    scaleDioramaAbout(next, mouseCursorOnBoard
       ? mouseCursor.position.clone()
-      : dioramaFocusWorld();
-    dioramaRoot.scale.setScalar(next);
-    dioramaRoot.position.copy(pivot)
-      .add(dioramaRoot.position.sub(pivot).multiplyScalar(k));
+      : dioramaFocusWorld());
   }, { passive: false });
 
   renderer.domElement.addEventListener("pointerdown", (e) => {
@@ -972,11 +979,7 @@
           const next = THREE.MathUtils.clamp(
             cur * (zoomIn ? 1.15 : 1 / 1.15),
             VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
-          const k = next / cur;
-          const pivot = dioramaFocusWorld();
-          dioramaRoot.scale.setScalar(next);
-          dioramaRoot.position.copy(pivot)
-            .add(dioramaRoot.position.sub(pivot).multiplyScalar(k));
+          scaleDioramaAbout(next, dioramaFocusWorld());
         } else {
           const dir = camera.position.clone().sub(controls.target)
             .multiplyScalar(zoomIn ? 1 / 1.15 : 1.15);
