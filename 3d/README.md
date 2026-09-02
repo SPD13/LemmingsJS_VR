@@ -17,7 +17,13 @@ npx http-server -p 8123 -c-1
 ```
 
 URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
-`?level=N`, `?speed=N`, `?replay=<string>` (from the `r` key dump).
+`?level=N`, `?speed=N`, `?replay=<string>` (from the `r` key dump), and the
+render settings `?emboss=`, `?smooth=`, `?doors=` (`1`/`on`/`true` or
+`0`/`off`/`false`). Those three are normally toggled with the buttons and
+kept in localStorage; the URL overrides both, which is how you ask for them
+on a headset — its browser is a different machine with its own empty
+localStorage, and the buttons are DOM, so they cannot be reached from inside
+a session. `?emboss=1&smooth=1` is the usual VR URL.
 
 ## Controls
 
