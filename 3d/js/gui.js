@@ -63,8 +63,15 @@ const GUI_DIGIT_COLOR = "255,255,255";
 // green letters with light highlights; those highlights get raised 1px on a
 // smoothed surface, so the lettering reads as embossed rather than printed.
 const GUI_TEXT_BOTTOM = GUI_TILE_TOP; // the strip above the buttons
-const GUI_TEXT_DEPTH = 1;
-const GUI_TEXT_COLORS = new Set(["240,208,208", "255,255,255"]);
+// The counters strip is three colours: a black ground, the green writing and
+// the white writing. They are raised by different amounts so the white reads
+// as sitting proud of the green rather than merely being a lighter shade.
+const GUI_TEXT_DEPTHS = {
+  "0,176,0": 1,       // green
+  "240,208,208": 2,   // white
+  "255,255,255": 2,
+};
+const GUI_TEXT_DEPTH_MAX = 2;
 
 class GuiPanel {
   constructor(scene, game, resources) {
@@ -212,19 +219,19 @@ class GuiPanel {
     }
   }
 
-  /** Light highlight pixels of the counters text. */
+  /** How far each pixel of the counters text stands off the panel. */
   _buildTextMask() {
     const W = this.canvas.width;
     const data = this.ctx.getImageData(0, 0, W, GUI_TEXT_BOTTOM).data;
-    const mask = new Uint8Array(W * this.canvas.height);
+    const height = new Uint8Array(W * this.canvas.height);
     for (let y = 0; y < GUI_TEXT_BOTTOM; y++) {
       for (let x = 0; x < W; x++) {
         const i = (y * W + x) * 4;
         const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
-        if (GUI_TEXT_COLORS.has(key)) mask[y * W + x] = 1;
+        height[y * W + x] = GUI_TEXT_DEPTHS[key] || 0;
       }
     }
-    return mask;
+    return height;
   }
 
   _textChecksum() {
@@ -235,36 +242,38 @@ class GuiPanel {
   }
 
   /**
-   * Smoothed 1px relief for the text: each quad corner rises with the number
-   * of highlight pixels meeting there, so strokes are beveled into the panel
-   * instead of standing on hard little walls (no walls are needed - the
-   * surface slopes back down to the panel at the edge of a stroke).
+   * Smoothed relief for the text: each quad corner rises to the mean of the
+   * heights meeting there, so strokes are beveled into the panel instead of
+   * standing on hard little walls (no walls are needed - the surface slopes
+   * back down to the panel at the edge of a stroke). Averaging heights rather
+   * than counting pixels also ramps the white down onto the green where the
+   * two meet, instead of stepping.
    */
   _buildTextGeometry() {
     const W = this.canvas.width, H = this.canvas.height;
-    const mask = this.textMask;
-    const solid = (x, y) =>
-      (x >= 0 && x < W && y >= 0 && y < H && mask[y * W + x]) ? 1 : 0;
+    const height = this.textMask;
+    const at = (x, y) =>
+      (x >= 0 && x < W && y >= 0 && y < H) ? height[y * W + x] : 0;
     const cornerZ = (x, y) =>
-      ((solid(x - 1, y - 1) + solid(x, y - 1) + solid(x - 1, y) + solid(x, y)) / 4) *
-      GUI_TEXT_DEPTH;
+      (at(x - 1, y - 1) + at(x, y - 1) + at(x - 1, y) + at(x, y)) / 4;
 
     const positions = [], colors = [], uvs = [], indices = [];
     const push = (px, py, pz, u, v) => {
       positions.push(px, py, pz);
       // shade with height so the bevel reads even head-on
-      const shade = 0.72 + 0.28 * (pz / GUI_TEXT_DEPTH);
+      const shade = 0.72 + 0.28 * (pz / GUI_TEXT_DEPTH_MAX);
       colors.push(shade, shade, shade);
       uvs.push(u, v);
     };
     for (let y = 0; y < GUI_TEXT_BOTTOM; y++) {
       for (let x = 0; x < W; x++) {
-        if (!mask[y * W + x]) continue;
-        // a centre vertex at full depth fanned out to the averaged corners:
-        // strokes reach the full 1px even where they are a single pixel wide,
-        // while the corners bevel down to the panel around them
+        const h = height[y * W + x];
+        if (!h) continue;
+        // a centre vertex at this pixel's own height fanned out to the
+        // averaged corners: a stroke reaches its full height even where it is
+        // a single pixel wide, while the corners bevel down around it
         const base = positions.length / 3;
-        push(x + 0.5, y + 0.5, GUI_TEXT_DEPTH, (x + 0.5) / W, (y + 0.5) / H);
+        push(x + 0.5, y + 0.5, h, (x + 0.5) / W, (y + 0.5) / H);
         push(x, y, cornerZ(x, y), x / W, y / H);
         push(x + 1, y, cornerZ(x + 1, y), (x + 1) / W, y / H);
         push(x + 1, y + 1, cornerZ(x + 1, y + 1), (x + 1) / W, (y + 1) / H);
