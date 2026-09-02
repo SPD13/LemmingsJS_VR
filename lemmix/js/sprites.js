@@ -114,6 +114,91 @@
     return out;
   }
 
+  // TGadgetAnimation.GeneratePickupSkills: the picture on a pickup skill is a
+  // lemming sprite placed in a 24x24 box, plus bricks for the builders
+  const PICKUP_SIZE = 24, PICKUP_MID = PICKUP_SIZE / 2 - 1, PICKUP_BASELINE = PICKUP_SIZE / 2 + 7;
+  const PICKUP_ICONS = {
+    WALKER: [["walker", 1, 1, 0, -1]], JUMPER: [["jumper", 1, 0, 0, -3]], SHIMMIER: [["shimmier", 1, 1, 0, -4]],
+    SLIDER: [["slider", -1, 0, -2, -2]], CLIMBER: [["climber", 1, 3, 3, -1]], SWIMMER: [["swimmer", 1, 2, 1, -6]],
+    FLOATER: [["floater", 1, 4, -1, 6]], GLIDER: [["glider", 1, 4, -1, 6]], DISARMER: [["disarmer", 1, 6, -2, -3]],
+    BOMBER: [["ohnoer", 1, 7, 0, -3]], STONER: [["stoner", 1, 0, 1, -1]], BLOCKER: [["blocker", 1, 0, 0, -1]],
+    PLATFORMER: [["platformer", 1, 1, 0, -4]], BUILDER: [["builder", 1, 1, 0, -3]], STACKER: [["stacker", 1, 0, 0, -2]],
+    LASERER: [["laserer", 1, 0, 1, -2]], BASHER: [["basher", 1, 0, 1, -2]], FENCER: [["fencer", 1, 1, 0, -2]],
+    MINER: [["miner", 1, 12, -3, -2]], DIGGER: [["digger", 1, 4, 1, -4]],
+    CLONER: [["walker", -1, 1, -1, -1], ["walker", 1, 1, 2, -1]],
+  };
+  const PICKUP_BRICKS = {
+    PLATFORMER: [[-5, -4], [-3, -4], [-1, -4], [1, -4], [3, -4]],
+    BUILDER: [[-3, -2], [-1, -3], [1, -4], [3, -5]],
+    STACKER: [[2, -2], [2, -3], [2, -4], [2, -5], [2, -6], [2, -7]],
+  };
+
+  /**
+   * Paint the pickup gadgets' skill pictures from the sprite set: frame
+   * 2i is the picked-up look, 2i+1 the available one, each with the style's
+   * skill_mask erased out of it (or blank when there is no mask).
+   */
+  function generatePickupIcons(level, sprites, theme) {
+    const { Pixels, SKILLS } = Lemmix;
+    let brick = Lemmix.StyleManager.themeColor(theme, "PICKUP_BRICKS");
+    if (brick === Lemmix.StyleManager.themeColor(theme, "MASK")) brick = 0xffffff;
+    const done = new Set();
+    for (const g of level.gadgets) {
+      if (g.effectBase !== "PICKUP") continue;
+      const primary = g.meta.base.primary;
+      if (!primary || primary.generated !== "pickup" || done.has(primary)) continue;
+      done.add(primary);
+      const eraser = g.meta.base.animations.find((a) => a.name === "SKILL_MASK");
+      const frames = [];
+      SKILLS.forEach((name, i) => {
+        const icon = new Bitmap(PICKUP_SIZE, PICKUP_SIZE);
+        for (const [sprite, dx, frameIndex, ox, oy] of PICKUP_ICONS[name] || []) {
+          const anim = sprites.anims[sprite];
+          if (!anim) continue;
+          const side = dx > 0 ? anim.right : anim.left;
+          const f = side.frames[Math.min(frameIndex, anim.frameCount - 1)];
+          Pixels.blit(icon, PICKUP_MID + ox - side.footX, PICKUP_BASELINE + oy - side.footY, f, 0, 0, f.width, f.height, Pixels.mergeOver);
+        }
+        for (const [bx, by] of PICKUP_BRICKS[name] || []) {
+          for (let o = 0; o < 2; o++) {
+            const x = PICKUP_MID + bx + o, y = PICKUP_BASELINE + by;
+            if (x < 0 || y < 0 || x >= PICKUP_SIZE || y >= PICKUP_SIZE) continue;
+            const p = (y * PICKUP_SIZE + x) * 4;
+            icon.data[p] = (brick >> 16) & 255; icon.data[p + 1] = (brick >> 8) & 255; icon.data[p + 2] = brick & 255; icon.data[p + 3] = 255;
+          }
+        }
+        const used = icon.clone();
+        if (eraser && eraser.frames.length >= 2) {
+          erase(used, eraser.frames[0]);
+          erase(icon, eraser.frames[1]);
+        } else used.data.fill(0);
+        frames.push(used, icon);
+      });
+      primary.setFrames(frames, PICKUP_SIZE, PICKUP_SIZE);
+      // variations already derived from the blank frames are rebuilt on demand
+      g.meta._variations.clear();
+      for (const h of level.gadgets) if (h.meta === g.meta) h.v = g.meta.variation(h.flip, h.invert, h.rotate);
+    }
+    for (const g of level.gadgets) {
+      if (g.effectBase !== "PICKUP") continue;
+      g.animations.forEach((a, i) => { a.meta = g.v.animations[i] || a.meta; });
+      g._frameCache.clear();
+      if (g.object) g.object.animation.frames = [g.render()];
+    }
+  }
+
+  /** Clear the pixels of `bmp` where `mask` has any. */
+  function erase(bmp, mask) {
+    for (let y = 0; y < Math.min(bmp.height, mask.height); y++) {
+      for (let x = 0; x < Math.min(bmp.width, mask.width); x++) {
+        if (mask.data[(y * mask.width + x) * 4 + 3] !== 0) {
+          const p = (y * bmp.width + x) * 4;
+          bmp.data[p] = bmp.data[p + 1] = bmp.data[p + 2] = bmp.data[p + 3] = 0;
+        }
+      }
+    }
+  }
+
   /** The gfx/mask bitmaps the game carves with. */
   async function loadMasks(io) {
     const names = ["bomber", "stoner", "basher", "fencer", "miner", "laser"];
@@ -126,6 +211,7 @@
   Lemmix.SpriteSet = SpriteSet;
   Lemmix.ACTION_SPRITES = ACTION_SPRITES;
   Lemmix.loadMasks = loadMasks;
+  Lemmix.generatePickupIcons = generatePickupIcons;
 
   if (typeof module !== "undefined" && module.exports) module.exports = { SpriteSet, loadMasks, ACTION_SPRITES };
 })(typeof window !== "undefined" ? window : globalThis);

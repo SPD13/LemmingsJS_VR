@@ -46,7 +46,10 @@ Everything the port adds lives in `3d/`:
   profiles/           per-tileset depth profiles (one so far)
 launcher/             Electron app that serves the repo over HTTPS for headsets
 levels/               level packs, one folder each (classic games committed, the rest drop-in)
-tools/levels-index.js writes levels/index.json, the tree the catalog browses
+lemmix/js/            the Lemmix engine: NeoLemmix levels, styles, physics, panel (§2.9)
+tools/                levels-index (the catalog tree), nx-check / nx-render / nx-run /
+                      nx-physics-test (the Lemmix engine's checks), lemmix-node (node loader)
+styles/ gfx/ sound/   NeoLemmix assets, downloaded and ignored by git (README, "Levels and assets")
 ```
 
 About 6,900 lines of JavaScript plus a 205-line page, in 136 commits on top
@@ -275,6 +278,41 @@ Lemmix engine exists; until then those tiles list but do not draw or play.
 
 Clears are recorded per browser in localStorage (`lem3d-cleared`): a cleared
 tile is green and carries the best time.
+
+### 2.9 The Lemmix engine (`lemmix/`)
+
+A second engine for NeoLemmix levels (`.nxlv` packs), kept entirely apart
+from `js/lemmings.js`, which still plays the DOS games untouched. It reuses
+the DOS engine's generic parts by reference — `DisplayImage`, `Frame`,
+`GameTimer`'s surface, `EventHandler`, the `Command*` classes and
+`CommandManager` — and reimplements what is NeoLemmix's own:
+
+| file | what |
+|---|---|
+| `parser.js` | the NeoLemmix text format (nxlv, nxmi, nxmo, nxmt, nxtm, scheme) |
+| `pixels.js` | bitmaps and LemRendering.pas's combine rules: no-overwrite, erase, the solidity/steel/one-way channels, nine-slice |
+| `styles.js` | terrain, gadget and background pieces from `styles/`, with their metadata, aliases and rotated/flipped variations |
+| `level.js` | `.nxlv` → `Lemmix.Level`: the picture, the physics map cut at NeoLemmix's alpha cutoff, one-way arrows stamped, gadgets with trigger rectangles, receivers paired, spawn order and save requirement as PrepareForUse computes them |
+| `lemgame.js` | `TLemmingGame` from LemGame.pas, method for method: every skill the packs use, the trigger areas, spawning, nuke, time, talismans; no Jumper/Shimmier/Slider/Laserer/Portal |
+| `sprites.js` | a sprite set (`styles/<set>/lemmings/`) with its scheme and state recolouring; pickup pictures; the `gfx/mask` masks |
+| `game.js` | `Lemmix.Game`: the same surface `app.js` drives for the DOS game (timer at 17 fps, lemming manager with NeoLemmix's cursor priority, skills, victory condition, command manager) |
+| `panel.js` | the NeoLemmix skill panel drawn on the DOS panel's 320×40 canvas, so `gui.js` extrudes it unchanged |
+
+The physics runs on integer maps only and has no randomness, so a run is
+reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
+NeoLemmix commit the port follows. Terrain changes go through the level's
+`setGroundAt`/`clearGroundAt`, which is why the diorama's terrain hooks
+(§2.3) need nothing new. Sound cues come out of the simulation by name
+(`game.sounds`) and are mapped onto the AdLib effects until the file-based
+audio of the plan's phase 6 exists.
+
+Checks (all under `tools/`, run with node): `nx-check` resolves every piece
+reference of every level against `styles/`; `nx-render` draws levels
+headlessly and its physics counts are kept as `tools/fixtures/nx-physics.txt`;
+`nx-run` plays every level for N frames with no input (796 levels, no
+exceptions, 12 s); `nx-physics-test` holds the fixtures of the numbers the
+packs depend on — splat height, brick counts, tunnel shapes, steel and
+one-way rules, spawn cadence.
 ---
 
 ## 3. Play mode and edit mode
@@ -422,6 +460,10 @@ which case `fetch(url, {cache: "reload"})` before reloading is the way out.
 | 4 WebXR | done, running on real hardware |
 
 ### Built
+
+- The Lemmix engine (§2.9): NeoLemmix packs parse, build from the styles,
+  and play in the diorama with NeoLemmix's physics and panel; the catalog
+  browses them like a directory of packs (§2.8).
 
 - The 2D sim rendered as an extruded diorama, destructible in 3D, with
   colour-keyed relief and optional smoothing.

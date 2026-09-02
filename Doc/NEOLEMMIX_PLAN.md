@@ -185,6 +185,21 @@ From `3d/js/app.js`, `gui.js`, `bridge.js`, `portals.js`, `depth.js`, `terrain.j
 
 ---
 
+## Status (2 September 2026)
+
+Done on branch `lemmix`: Phase 0 (assets fetched, ignored by git; README
+says where from), Phase 1 (`levels/` directory, index, directory-style
+browser, legacy URLs, progress migration), Phase 2 (parser, styles, level
+builder, node tools, miniatures), Phase 3 with most of 4 and 5 (the full
+LemGame.pas port bar Jumper/Shimmier/Slider/Laserer/Portal; gadgets
+including teleporters, pickups, buttons, updrafts, splitters, pads, force
+fields; the Game wrapper and the NeoLemmix panel; `nx-run` over all 796
+levels; 19 physics fixtures). Open: Phase 6 (file-based SFX and tracker
+music), Phase 7 (depth profiles by piece name, engine-neutral portal
+descriptors, pre/post text and talismans in the UI, per-pack panel skins),
+Phase 8 (`.nxrp` replay import, countdown digits, moving-background
+gadgets drawn to the backdrop, the remaining LemGame.pas details).
+
 ## Part 3 — Phases
 
 Each phase ends in something runnable. Verify per phase (Part 4).

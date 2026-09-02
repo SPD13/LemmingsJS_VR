@@ -106,6 +106,7 @@
       this.level = level;
       this.sim = new LemGame(level, assets.masks);
       this.sprites = assets.sprites;
+      Lemmix.generatePickupIcons(level, this.sprites, level.theme);
       this.gameTimer = new GameTimer();
       this.skills = new Skills(this.sim);
       this.gameVictoryCondition = new Victory(this.sim);
