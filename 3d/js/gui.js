@@ -32,8 +32,9 @@ const GUI_CROP_CX = (index) => index * GUI_TILE_W + GUI_CROP_W(index) / 2;
 const GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
 // The toolbar is an overlay: drawn without depth testing, after the world,
 // so it is always visible and clickable no matter what it sits in front of.
-// (Aiming marks - cursor, controller dots - are transparent and so still
-// draw on top of it.)
+// Aiming marks - the cursor, the controller dots and the hand markers - carry
+// a render order above everything here and are transparent, which puts them
+// last in three's draw order and so on top of the bar (see VR_MARK_ORDER).
 const GUI_ORDER_PANEL = 50;
 const GUI_ORDER_SOCKET = 51;  // covers the slot a raised button left behind
 const GUI_ORDER_RELIEF = 52;
