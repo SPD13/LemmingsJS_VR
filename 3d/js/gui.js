@@ -81,16 +81,16 @@ const GUI_TEXT_DEPTH_MAX = 2;
 class GuiPanel {
   constructor(scene, game, resources) {
     this.dirty = true;
-    // a Lemmix game draws its own panel: as many buttons as its skills need,
-    // on the same 16-px cells, and says which cells carry counts
+    this.game = game;
+    this.stage = new HeadlessStage(() => { this.dirty = true; });
+    this.display = new Lemmings.DisplayImage(this.stage);
+    game.setGuiDisplay(this.display);
+    // a Lemmix game draws its own panel (created just above) and states its
+    // layout: how many 16-px buttons, and which of them carry counts
     const layout = game.panelLayout || null;
     GUI_BUTTONS = layout ? layout.buttons : 13;
     GUI_LAST_BUTTON = GUI_BUTTONS - 1;
     GUI_DIGIT_BUTTONS = layout ? layout.digitButtons : 10;
-    this.bgColors = new Set([...GUI_BG_COLORS, ...((layout && layout.bgColors) || [])]);
-    this.stage = new HeadlessStage(() => { this.dirty = true; });
-    this.display = new Lemmings.DisplayImage(this.stage);
-    game.setGuiDisplay(this.display);
 
     this.canvas = document.createElement("canvas");
     this.ctx = null;
@@ -115,6 +115,10 @@ class GuiPanel {
   /** 1 where a pixel belongs to a tile's lemming picture, 0 elsewhere. */
   _buildIconMask() {
     const W = this.canvas.width, H = this.canvas.height;
+    // the button backgrounds to key the pictures out of: the DOS dither, plus
+    // whatever a Lemmix panel reports once its graphics are in
+    const layout = this.game.panelLayout || null;
+    const bg = new Set([...GUI_BG_COLORS, ...((layout && layout.bgColors) || [])]);
     const data = this.ctx.getImageData(0, 0, W, H).data;
     const mask = new Uint8Array(W * H);
     for (let x = 0; x < GUI_BUTTONS * GUI_TILE_W && x < W; x++) {
@@ -125,7 +129,7 @@ class GuiPanel {
       for (let y = top; y < GUI_ICON_BOTTOM; y++) {
         const i = (y * W + x) * 4;
         const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
-        if (!this.bgColors.has(key)) mask[y * W + x] = 1;
+        if (!bg.has(key)) mask[y * W + x] = 1;
       }
     }
     return mask;
@@ -421,14 +425,14 @@ class GuiPanel {
     return true;
   }
 
-  /** Panel-space UV -> button index (0..12), or null outside the button row. */
+  /** Panel-space UV -> button index (0..last button of this panel), or null outside the row. */
   _buttonIndexAt(uv) {
     if (!uv || !this.canvas.width) return null;
     const px = uv.x * this.canvas.width;
     const py = (1 - uv.y) * this.canvas.height;
     if (py <= GUI_TILE_TOP) return null; // the counters strip, not a button
     const index = Math.trunc(px / GUI_TILE_W);
-    return index >= 0 && index <= 12 ? index : null;
+    return index >= 0 && index <= GUI_LAST_BUTTON ? index : null;
   }
 
   /** Raise the button under the pointer (uv from a panel ray hit, or null). */
