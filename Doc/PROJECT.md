@@ -45,6 +45,8 @@ Everything the port adds lives in `3d/`:
     steel.js    114   steel areas, which the engine parses and never uses
   profiles/           per-tileset depth profiles (one so far)
 launcher/             Electron app that serves the repo over HTTPS for headsets
+levels/               level packs, one folder each (classic games committed, the rest drop-in)
+tools/levels-index.js writes levels/index.json, the tree the catalog browses
 ```
 
 About 6,900 lines of JavaScript plus a 205-line page, in 136 commits on top
@@ -241,22 +243,38 @@ starts from data rather than from nothing.
 
 ### 2.8 The catalog (`library.js`)
 
-Discovery scans the complete level order once, recording each level's ground
-set, and caches the mapping in localStorage (`lem3d-worlds-v3`; a full scan is
-about 1.6 s). VGASPEC special levels carry no piece list, so they belong to no
-tileset and are collected as a world of their own, "Special", rather than
-dropped. 220 levels across both games.
+Levels live in `levels/`, one subdirectory per pack: the two classic games
+(registered in `config.json`, whose `path` points into `levels/`) and any
+number of drop-in NeoLemmix packs, which stay out of git. Nothing here can
+list a directory, so `tools/levels-index.js` writes the tree down as
+`levels/index.json` (packs → ranks → levels, with a NeoLemmix level's title,
+theme and size pre-extracted so lists draw without fetching level files); the
+launcher serves the same tree live from the folders. A downloaded collection
+that wraps its packs in a `levels/` folder is collapsed to its packs.
 
-Tiles are laid out either way round — by level number, the order the games
-play them in (default), or by world, the tileset each is built from — with the
-choice remembered. Miniatures render lazily through an `IntersectionObserver`
-and a sequential load queue, so opening the catalog does not load 220 levels.
-`catalog()` and `thumbnail()` expose the same data and miniatures to the VR
-window, which draws its own grid.
+The browser walks that tree like a file manager: a directory shows one row
+per child — name, a **classic**/**lemmix** badge, its level count and how
+many are cleared — and a directory of levels shows their miniature tiles.
+The DOM panel and the VR window are two views of the same `WorldLibrary`
+state (`navigate`, `up`, `currentNode`), remembered in localStorage and
+opened on the directory of the level being played. A level is addressed by
+its id, its path in the tree (`lemmings/0/3`,
+`LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv`); `?level=`
+takes it, the old `?type=&group=&level=` are mapped onto classic ids, and
+prev/next walk the pack's play order. Progress records are keyed by id, with
+a one-time migration of the old `<game>/<group>/<level>` keys.
+
+Classic packs are scanned once for level names and tilesets (a VGASPEC
+special level carries no piece list, so it belongs to no tileset and is
+grouped as "Special"), cached in localStorage per pack (`lem3d-worlds-v4`,
+about 1.6 s for both games); the scan also feeds the "order: world" layout
+and the tagging marks of edit mode. Miniatures render lazily through an
+`IntersectionObserver` and a sequential load queue, through a per-engine
+loader — the classic one is built in, a NeoLemmix one is registered when the
+Lemmix engine exists; until then those tiles list but do not draw or play.
 
 Clears are recorded per browser in localStorage (`lem3d-cleared`): a cleared
 tile is green and carries the best time.
-
 ---
 
 ## 3. Play mode and edit mode
@@ -337,8 +355,8 @@ paused stays paused and two overlapping dialogs do not resume it between them.
 
 | where | what |
 |---|---|
-| URL | `?type= ?group= ?level= ?speed= ?replay=` and the render switches `?emboss= ?smooth= ?doors= ?edit=` |
-| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-doors` `lem3d-edit` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v3` `lem3d-lib-order` |
+| URL | `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?doors= ?edit=` |
+| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-doors` `lem3d-edit` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
 
 The URL overrides both for one load. This matters more than it sounds: the
 switches are DOM buttons, invisible inside a session, and the headset is

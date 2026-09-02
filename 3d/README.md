@@ -18,10 +18,13 @@ npx http-server -p 8123 -c-1
 # (the original 2D game stays at http://127.0.0.1:8123/)
 ```
 
-URL params: `?type=1|2` (Lemmings / Oh No! More Lemmings), `?group=N`,
-`?level=N`, `?speed=N`, `?replay=<string>` (from the `r` key dump), and the
-render settings `?emboss=`, `?smooth=`, `?doors=` and `?edit=` (`1`/`on`/`true`
-or `0`/`off`/`false`). Those are normally toggled with the buttons and
+URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
+`lemmings/0/3` or
+`LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv`; the old
+`?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
+`?replay=<string>` (from the `r` key dump), and the render settings
+`?emboss=`, `?smooth=`, `?doors=` and `?edit=` (`1`/`on`/`true` or
+`0`/`off`/`false`). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them
 on a headset — its browser is a different machine with its own empty
 localStorage, and the buttons are DOM, so they cannot be reached from inside
@@ -46,19 +49,24 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   validation mode, opens the piece editor, and turns the catalog over to
   tagging status. `?edit=1` selects it too, and pressing `e` enters it, since
   the piece editor is its tool. Remembered in localStorage.
-- `w` (or the "worlds" button) opens the world library: every level of both
-  games, one miniature tile per level — click any tile to jump straight to
-  that level. "order" lays them out either way round: by level number, the
-  order the games play them in (the default, with a heading per difficulty
-  and the world named on each tile), or by world, the tileset each level is
-  built from. The choice is remembered in localStorage. Playing, a tile you
-  have cleared is green and carries your best time, and a heading counts how
-  many of its levels are done; editing, a world header shows a green
-  "✔ tagged" mark when a profile file exists in `profiles/` (that mark is a
-  world's, so it is only in world order) and entering a level opens the
-  editor. Clears are per-browser, in localStorage. The catalog is cached in
-  localStorage ("rescan" rebuilds it); miniatures render lazily as you
-  scroll.
+- `w` (or the "worlds" button) opens the world library, browsed the way the
+  `levels/` directory is laid out: a row per level pack — its name, whether
+  it is **classic** (a DOS game) or **lemmix** (a NeoLemmix pack), how many
+  levels it holds and how many you have cleared — and, inside a pack, a row
+  per rank, then the miniature tiles of that rank's levels. A downloaded
+  collection of packs shows as a directory of packs. Click a row to go in, a
+  breadcrumb part or "‹ back" to come out; the library opens on the directory
+  of the level being played, and where you were is remembered. In a classic
+  rank, "order" lays the tiles out either by level number or grouped by the
+  tileset each level is built from (the choice is remembered). Playing, a
+  tile you have cleared is green and carries your best time, and a row counts
+  how many of its levels are done; editing, a world header in tileset order
+  shows a green "✔ tagged" mark when a profile file exists in `profiles/`,
+  and entering a level opens the editor. Clears are per-browser, in
+  localStorage. Classic packs are scanned once for level names and tilesets
+  ("rescan" repeats it); miniatures render lazily as you scroll. Levels of a
+  NeoLemmix pack are listed but not yet playable — the Lemmix engine is in
+  progress (`Doc/NEOLEMMIX_PLAN.md`).
 - "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
