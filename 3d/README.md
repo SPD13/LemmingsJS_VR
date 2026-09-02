@@ -102,11 +102,13 @@ intended start area.
   starts with it, and a trigger pull on the other hand takes it over — that
   pull only moves the beam, since until it had one that hand was aiming at
   nothing you could see
-- **sound, off the bar's right end** — a vertical volume slider over a
-  mute switch. The slider is one surface: point anywhere on it and pull, and
-  it takes the value from where the beam lands and keeps following while the
-  trigger is held. Both are remembered in localStorage, and the mute switch is
-  the same one the desktop "sound" button throws.
+- **sound, off the bar's right end** — a mute switch, with a volume slider
+  that appears when the beam is on either of them and fades a couple of
+  seconds after it leaves (long enough to cross the gap between the two). The
+  slider is one surface: point anywhere on it and pull, and it takes the value
+  from where the beam lands and keeps following while the trigger is held.
+  Both are remembered in localStorage, and the mute switch is the same one the
+  desktop "sound" button throws.
 - **the row above the toolbar** — six buttons riding the bar, so they keep
   station with it wherever it is dragged or unpinned to. At the left end the
   padlock unlocks the bar from your head: it stays where it is hanging in the

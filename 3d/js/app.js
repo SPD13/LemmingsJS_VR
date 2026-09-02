@@ -146,7 +146,14 @@
       vrVolumeSlider.userData.hovered = onSlider;
       vrVolumeSlider.userData.paint(audio.volume, onSlider);
     }
+    // The slider is summoned by the speaker and lingers: the beam has to
+    // cross the gap between the two to reach it, so it cannot go the instant
+    // the button is left. Riding it keeps it up for as long as it is held.
+    if (onSlider || name === "mute") {
+      soundPanelUntil = performance.now() + VR_SOUND_LINGER;
+    }
   }
+  let soundPanelUntil = 0;
 
   const barToolIcon = (cx, hovered, bg, stroke, body) => {
     cx.clearRect(0, 0, 64, 64);
@@ -892,7 +899,7 @@
       vrVolumeSlider.position.set(sx,
         vrMuteBtn.position.y + VR_BAR_TOOL_SIZE / 2 + VR_VOLUME_HEIGHT / 2 + 0.008,
         VR_GUI_Z);
-      vrVolumeSlider.visible = true;
+      vrVolumeSlider.visible = performance.now() < soundPanelUntil;
       for (const b of vrButtons) {
         // a hovered button grows and steps toward the player, the way a
         // hovered skill button does
