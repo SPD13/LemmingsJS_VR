@@ -13,6 +13,12 @@
  * where its window is (layout.minimap). Skill pictures are the lemming
  * sprites themselves, placed the way NeoLemmix places them.
  *
+ * The toolbar embosses the pictures and the counts the way it does the DOS
+ * panel's. There it keys them out of the button dither by colour; here the
+ * panel knows exactly which pixels it drew as a picture and which as a
+ * digit, so it says so (layout.reliefMasks) rather than leaving the toolbar
+ * to guess from colours that differ from pack to pack.
+ *
  * Presses come back through the display's mouse events, as they do for the
  * DOS panel, and turn into the DOS commands the replay records.
  */
@@ -85,7 +91,10 @@
       this.layout = { buttons: this.cells.length, digitButtons: 2 + SKILL_SLOTS, width: PANEL_W, height: PANEL_H,
         sharedBorder: false, // each cell is its own tile; nothing is drawn on a shared line
         minimap: { x: this.cells.length * CELL + MINIMAP.dx, y: REGION_Y + MINIMAP.dy, w: MINIMAP.w, h: MINIMAP.h,
-          scaleX: MINIMAP.scale, scaleY: MINIMAP.scale, pad: 1 } };
+          scaleX: MINIMAP.scale, scaleY: MINIMAP.scale, pad: 1 },
+        // the toolbar's relief comes from these, once the graphics are in
+        // (until then the canvas is black and there is nothing to emboss)
+        reliefFromMasks: true, reliefMasks: null };
       game.panelLayout = this.layout;
       this.rrHeld = 0;
       this.lastNukeClick = -1;
@@ -120,7 +129,18 @@
       for (let x = 0; x < n * CELL; x += blank.width) {
         Pixels.blit(base, x, BUTTON_Y, blank, 0, 0, Math.min(blank.width, n * CELL - x), blank.height, Pixels.combineGadget);
       }
-      const icon = (cell, bmp) => Pixels.blit(base, cell * CELL, BUTTON_Y, bmp, 0, 0, bmp.width, bmp.height, Pixels.combineGadget);
+      // which pixels are a picture, for the toolbar to raise: where an icon
+      // has paint - black included, the pause/nuke/speed icons are nothing else
+      const art = new Uint8Array(PANEL_W * PANEL_H);
+      const mark = (cell, bmp, value) => {
+        for (let y = 0; y < bmp.height && BUTTON_Y + y < PANEL_H; y++) for (let x = 0; x < bmp.width; x++) {
+          if (bmp.data[(y * bmp.width + x) * 4 + 3]) art[(BUTTON_Y + y) * PANEL_W + cell * CELL + x] = value;
+        }
+      };
+      const icon = (cell, bmp) => {
+        Pixels.blit(base, cell * CELL, BUTTON_Y, bmp, 0, 0, bmp.width, bmp.height, Pixels.combineGadget);
+        mark(cell, bmp, 1);
+      };
       this.cells.forEach((what, i) => {
         if (what === "rrminus") icon(i, A.icon_rr_minus);
         else if (what === "rrplus") icon(i, A.icon_rr_plus);
@@ -134,20 +154,16 @@
             base.data[p] = base.data[p + 1] = base.data[p + 2] = 0; base.data[p + 3] = 255;
           }
           icon(i, A.empty_slot);
+          mark(i, A.empty_slot, 0); // a background, not a picture
         } else icon(i, this._skillIcon(what.slice(6)));
+        // the count's box is drawn over the picture on every render
+        if (what === "rrminus" || what === "rrplus" || what.startsWith("skill:")) mark(i, A.skill_count_erase, 0);
       });
+      this.artMask = art;
       // the minimap's frame after the last cell (the map is drawn over it by the page)
       const region = A.minimap_region || this._redFrame();
       Pixels.blit(base, n * CELL, REGION_Y, region, 0, 0, region.width, region.height, Pixels.combineGadget);
       this.base = base;
-      // the button backgrounds' own colours, so the toolbar's relief keys the pictures out of them
-      const counts = new Map();
-      for (let i = 0; i < blank.data.length; i += 4) {
-        if (blank.data[i + 3] === 0) continue;
-        const k = blank.data[i] + "," + blank.data[i + 1] + "," + blank.data[i + 2];
-        counts.set(k, (counts.get(k) || 0) + 1);
-      }
-      this.layout.bgColors = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]);
     }
 
     /** minimap_region.png by hand: black, with its 1-px red frame where the
@@ -192,12 +208,19 @@
       return bmp;
     }
 
-    _drawDigits(out, cell, number) {
+    /** A cell's count, and (in `mask`) which pixels the digits painted. */
+    _drawDigits(out, cell, number, mask) {
       const A = this.assets;
       const x0 = cell * CELL, y0 = BUTTON_Y;
       Pixels.blit(out, x0, y0, A.skill_count_erase, 0, 0, A.skill_count_erase.width, A.skill_count_erase.height, Pixels.combineGadget);
       if (number <= 0) return;
-      const digit = (d, x) => Pixels.blit(out, x, y0 + 1, A.skill_count_digits, d * 4, 0, 4, 8, Pixels.combineGadget);
+      const digits = A.skill_count_digits;
+      const digit = (d, x) => {
+        Pixels.blit(out, x, y0 + 1, digits, d * 4, 0, 4, 8, Pixels.combineGadget);
+        for (let dy = 0; dy < 8; dy++) for (let dx = 0; dx < 4; dx++) {
+          if (digits.data[(dy * digits.width + d * 4 + dx) * 4 + 3]) mask[(y0 + 1 + dy) * PANEL_W + x + dx] = 1;
+        }
+      };
       if (number > 99) { digit(9, x0 + 3); digit(9, x0 + 7); return; }
       if (number < 10) digit(number, x0 + 5);
       else { digit(Math.floor(number / 10), x0 + 3); digit(number % 10, x0 + 7); }
@@ -223,11 +246,13 @@
       if (!this.assets || this.disposed) return;
       const sim = this.game.sim;
       const out = this.base.clone();
+      const digits = new Uint8Array(PANEL_W * PANEL_H);
       this.cells.forEach((what, i) => {
-        if (what === "rrminus") this._drawDigits(out, i, sim.minReleaseRate);
-        else if (what === "rrplus") this._drawDigits(out, i, sim.releaseRate);
-        else if (what.startsWith("skill:")) this._drawDigits(out, i, sim.skillCount(what.slice(6)));
+        if (what === "rrminus") this._drawDigits(out, i, sim.minReleaseRate, digits);
+        else if (what === "rrplus") this._drawDigits(out, i, sim.releaseRate, digits);
+        else if (what.startsWith("skill:")) this._drawDigits(out, i, sim.skillCount(what.slice(6)), digits);
       });
+      this.layout.reliefMasks = { art: this.artMask, digits };
       const sel = this.cells.indexOf("skill:" + sim.selectedSkill);
       if (sel >= 0) {
         const s = this.assets.skill_selected;
