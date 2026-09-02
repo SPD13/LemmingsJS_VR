@@ -318,10 +318,11 @@ class VRManager {
       return;
     }
     if (!this._isPointer(controller)) return;
-    // a press that starts on the bar's move handle drags the bar, one on the
-    // volume slider scrubs it, anything else drags the world
+    // a press that starts on the bar's move handle drags the bar, one on a
+    // scrubber - the volume slider, the catalog's scrollbar - takes hold of
+    // it, anything else drags the world
     const on = this.hooks.pickWithRaycaster(this._rayFrom(controller));
-    const slider = !!(on && on.barTool === "volume");
+    const slider = !!(on && (on.barTool === "volume" || on.scrollBar));
     const bar = !!(on && on.barTool === "move");
     this._press = {
       c: controller,
@@ -329,6 +330,7 @@ class VRManager {
       rootFrom: this.dioramaRoot.position.clone(),
       bar,
       slider,
+      scrub: slider ? on.barTool : null,
       // a press on any other control answers to the release alone: a hand
       // that wanders while a button is held should not haul the board with it
       button: !!(on && on.barTool) && !bar && !slider,
@@ -360,9 +362,13 @@ class VRManager {
     const p = this._press;
     if (!p || this._grab) return;
     if (p.slider) {
-      // follow the beam up and down the track for as long as it is held
+      // follow the beam up and down the track for as long as it is held -
+      // anywhere on the surface it started on, so a hand that wanders off the
+      // track sideways keeps its hold
       const on = this.hooks.pickWithRaycaster(this._rayFrom(p.c));
-      if (on && on.barTool === "volume") this.hooks.onSelectPick(on);
+      if (on && on.barTool === p.scrub) {
+        this.hooks.onSelectPick(Object.assign({ scrubbing: true }, on));
+      }
       return;
     }
     if (p.button) return;

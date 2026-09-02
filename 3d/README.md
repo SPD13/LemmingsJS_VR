@@ -139,7 +139,9 @@ intended start area.
 - **either thumbstick, while the catalog is up** — scrolls the list, up and
   down. Neither stick pans or tilts the board while it is open, and a press
   that lands on any button no longer drags the board if the hand wanders
-  while it is held.
+  while it is held. The scrollbar down its right edge is a handle too: press
+  it to jump there, or hold and move the hand to drag it, which keeps its
+  hold even if the beam slides off the bar sideways.
 - **trigger + move** — drag the board about: it follows the hand in all three
   axes, so pulling back toward yourself walks it in along Z and pushing away
   sends it out. A click only counts as a click if the hand stayed put, so a
