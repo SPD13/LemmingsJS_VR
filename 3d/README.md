@@ -109,7 +109,7 @@ intended start area.
   from where the beam lands and keeps following while the trigger is held.
   Both are remembered in localStorage, and the mute switch is the same one the
   desktop "sound" button throws.
-- **the row above the toolbar** — six buttons riding the bar, so they keep
+- **the row above the toolbar** — seven buttons riding the bar, so they keep
   station with it wherever it is dragged or unpinned to. At the left end the
   padlock unlocks the bar from your head: it stays where it is hanging in the
   room while you look around, and a second click hands it back to the head
@@ -122,7 +122,13 @@ intended start area.
   end, prev, restart and next, each asking before it throws the level away —
   in a panel in front of your eyes, since a DOM dialog would be invisible in
   here, and while that question is up its two answers are the only things the
-  ray can hit.
+  ray can hit. Beside them a globe opens the world catalog.
+- **the world catalog** — the headset's twin of the library, in the dialog's
+  plane: one tile per world with its miniature, how much of it you have
+  cleared, and a green ground once you have cleared all of it. Picking a tile
+  enters that world's first level; the close button in its top-right corner
+  leaves the game as it was. Like the questions, it owns the ray while it is
+  up, and it holds the clock.
 - **trigger + move** — drag the board about: it follows the hand in all three
   axes, so pulling back toward yourself walks it in along Z and pushing away
   sends it out. A click only counts as a click if the hand stayed put, so a

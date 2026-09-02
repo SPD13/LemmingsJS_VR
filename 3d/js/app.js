@@ -272,6 +272,26 @@
   const vrNextBtn = makeIconButton("vr-next", guiRoot,
     (cx, st) => navIcon(cx, st, false));
 
+  // globe: the way into the world catalog, the headset's own library button
+  const vrWorldsBtn = makeIconButton("vr-worlds", guiRoot, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#26485c" : "#152a36", "#7fd6e8", (c) => {
+      c.lineWidth = 3.5;
+      c.beginPath();
+      c.arc(32, 32, 20, 0, Math.PI * 2);            // the globe
+      c.moveTo(12, 32); c.lineTo(52, 32);           // equator
+      c.stroke();
+      c.beginPath();
+      c.ellipse(32, 32, 9.5, 20, 0, 0, Math.PI * 2); // one meridian
+      c.stroke();
+      // two parallels: their ends meet the rim, and each sags toward the
+      // equator in the middle, the way the near half of one actually reads
+      c.beginPath();
+      c.moveTo(16, 20); c.quadraticCurveTo(32, 26, 48, 20);
+      c.moveTo(16, 44); c.quadraticCurveTo(32, 38, 48, 44);
+      c.stroke();
+    });
+  });
+
   // The bar's own row of controls: the two handles at the left end, pause in
   // the middle, and the three that leave the level at the right end.
   // Sound, off the bar's right end: a column with the volume slider over a
@@ -357,7 +377,7 @@
   }
 
   const vrLeftTools = [barLockBtn, barMoveBtn];
-  const vrRightTools = [vrPrevBtn, vrRestartBtn, vrNextBtn];
+  const vrRightTools = [vrWorldsBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
   const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
   // the sound column keeps its own place, so it is not in the row above, but
   // it is pressed like the rest
@@ -455,10 +475,234 @@
         VR_MODAL_Z + (hot ? size * 0.25 : 0.001));
     }
   }
-  // Lay it out now rather than waiting for the first frame: until then these
+  // ------------------------------------------------------ world catalog (VR)
+  /**
+   * The headset's twin of the DOM library, in the dialog's plane: one tile per
+   * world, with its miniature, how much of it has been cleared, and a green
+   * ground once all of it has. Picking one enters its first level.
+   *
+   * It is one canvas rather than a mesh per tile - the tiles never move, so a
+   * single texture and a UV lookup does the whole grid - with the close button
+   * as the only separate target, so it can grow under the beam like the rest.
+   */
+  const VR_CAT_W = 1024, VR_CAT_H = 640;  // canvas pixels
+  const VR_CAT_PAD = 26;                  // margin round the grid
+  const VR_CAT_TOP = 92;                  // below the heading
+  const VR_CAT_GAP = 14;                  // between tiles
+  const VR_CAT_COLS = 3;
+  const VR_CAT_THUMB_H = 30;              // a level is ~10:1, so it draws thin
+
+  let vrCatalogWorlds = [];
+  let vrCatalogHover = -1;
+  let vrCatalogNote = "";
+
+  const vrCatalog = new THREE.Group();
+  vrCatalog.visible = false;
+  camera.add(vrCatalog);
+
+  /** Where each world's tile sits on the canvas. Painting and picking share it. */
+  function vrCatalogCells() {
+    const n = vrCatalogWorlds.length;
+    if (n === 0) return [];
+    const cols = Math.min(VR_CAT_COLS, n);
+    const rows = Math.ceil(n / cols);
+    const cw = (VR_CAT_W - 2 * VR_CAT_PAD) / cols;
+    const ch = (VR_CAT_H - VR_CAT_TOP - VR_CAT_PAD) / rows;
+    return vrCatalogWorlds.map((world, i) => ({
+      world, i,
+      x: VR_CAT_PAD + (i % cols) * cw + VR_CAT_GAP / 2,
+      y: VR_CAT_TOP + Math.floor(i / cols) * ch + VR_CAT_GAP / 2,
+      w: cw - VR_CAT_GAP,
+      h: ch - VR_CAT_GAP,
+    }));
+  }
+
+  const vrCatalogPanel = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = VR_CAT_W; cv.height = VR_CAT_H;
+    const cx = cv.getContext("2d");
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = "vr-worldpanel";
+    mesh.renderOrder = GUI_ORDER_MODAL;
+    mesh.userData.paint = () => {
+      cx.clearRect(0, 0, VR_CAT_W, VR_CAT_H);
+      cx.fillStyle = "rgba(10, 14, 22, 0.96)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, VR_CAT_W - 4, VR_CAT_H - 4, 18)
+                   : cx.rect(2, 2, VR_CAT_W - 4, VR_CAT_H - 4);
+      cx.fill();
+      cx.strokeStyle = "#ffd866";
+      cx.lineWidth = 4;
+      cx.stroke();
+
+      cx.textAlign = "left";
+      cx.fillStyle = "#f0f3f8";
+      cx.font = "bold 36px monospace";
+      cx.fillText("WORLDS", VR_CAT_PAD + 6, 58);
+      if (vrCatalogNote) {
+        cx.fillStyle = "#8fa1bb";
+        cx.font = "24px monospace";
+        cx.fillText(vrCatalogNote, VR_CAT_PAD + 190, 58);
+      }
+
+      for (const cell of vrCatalogCells()) {
+        const w = cell.world;
+        const done = w.done === w.total;
+        const hot = cell.i === vrCatalogHover;
+        cx.fillStyle = done ? (hot ? "#2c7042" : "#1d4a2b")
+                            : (hot ? "#2b3548" : "#19202c");
+        cx.beginPath();
+        cx.roundRect ? cx.roundRect(cell.x, cell.y, cell.w, cell.h, 10)
+                     : cx.rect(cell.x, cell.y, cell.w, cell.h);
+        cx.fill();
+        if (hot) {
+          cx.strokeStyle = "#ffffff";
+          cx.lineWidth = 3;
+          cx.stroke();
+        }
+        // the miniature, letterboxed across the tile's top
+        const tw = cell.w - 24;
+        if (w.thumb) {
+          cx.imageSmoothingEnabled = false;
+          cx.drawImage(w.thumb, cell.x + 12, cell.y + 14, tw, VR_CAT_THUMB_H);
+        } else {
+          cx.fillStyle = "rgba(255,255,255,0.06)";
+          cx.fillRect(cell.x + 12, cell.y + 14, tw, VR_CAT_THUMB_H);
+        }
+        cx.fillStyle = "#f0f3f8";
+        cx.font = "bold 30px monospace";
+        cx.fillText(w.name, cell.x + 12, cell.y + 84);
+        cx.fillStyle = "#8fa1bb";
+        cx.font = "20px monospace";
+        cx.fillText(w.game, cell.x + 12, cell.y + 112);
+        cx.fillStyle = done ? "#6fce7e" : "#8fa1bb";
+        cx.fillText(w.done + " / " + w.total + " cleared",
+          cell.x + 12, cell.y + 140);
+      }
+      tex.needsUpdate = true;
+    };
+    mesh.userData.paint();
+    vrCatalog.add(mesh);
+    return mesh;
+  })();
+
+  const vrCatalogClose = makeIconButton("vr-catclose", vrCatalog, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#5a2a2a" : "#33201c", "#e07a6a", (c) => {
+      c.beginPath();
+      c.moveTo(19, 19); c.lineTo(45, 45);
+      c.moveTo(45, 19); c.lineTo(19, 45);
+      c.stroke();
+    });
+  });
+  vrCatalogClose.renderOrder = GUI_ORDER_MODAL_BTN;
+
+  function paintVrCatalog() { vrCatalogPanel.userData.paint(); }
+
+  /** Which tile the beam is on, from the panel's own UV. */
+  function vrCatalogTileAt(uv) {
+    if (!uv) return -1;
+    const x = uv.x * VR_CAT_W, y = (1 - uv.y) * VR_CAT_H;
+    for (const cell of vrCatalogCells()) {
+      if (x >= cell.x && x <= cell.x + cell.w &&
+          y >= cell.y && y <= cell.y + cell.h) return cell.i;
+    }
+    return -1;
+  }
+
+  function setVrCatalogHover(index) {
+    if (vrCatalogHover === index) return;
+    vrCatalogHover = index;
+    paintVrCatalog();
+  }
+
+  /**
+   * Read the world list and each world's record. Done on every open, not
+   * cached: the scan behind it is (in localStorage), but how much of a world
+   * has been cleared changes as the player plays.
+   */
+  async function loadVrCatalog() {
+    vrCatalogNote = "scanning levels…";
+    paintVrCatalog();
+    let mapping;
+    try {
+      mapping = await library.catalog();
+    } catch (err) {
+      vrCatalogNote = "catalog unavailable";
+      paintVrCatalog();
+      console.error(err);
+      return;
+    }
+    const worlds = [];
+    for (const gameType of Object.keys(mapping).map(Number)) {
+      const names = WORLD_NAMES[gameType] || [];
+      for (const world of mapping[gameType] || []) {
+        worlds.push({
+          gameType,
+          levels: world.levels,
+          name: names[world.set] || "World " + world.set,
+          game: GAME_LABELS[gameType] || "game " + gameType,
+          done: world.levels.filter(
+            (e) => LevelProgress.best(gameType, e.group, e.level) !== null).length,
+          total: world.levels.length,
+          thumb: null,
+        });
+      }
+    }
+    vrCatalogWorlds = worlds;
+    vrCatalogNote = "";
+    paintVrCatalog();
+    // miniatures arrive as they load; each one repaints the grid
+    const width = Math.round(
+      (VR_CAT_W - 2 * VR_CAT_PAD) / Math.min(VR_CAT_COLS, worlds.length || 1)
+      - VR_CAT_GAP - 24);
+    for (const world of worlds) {
+      const first = world.levels[0];
+      if (!first) continue;
+      library.thumbnail(world.gameType, first.group, first.level,
+        width, VR_CAT_THUMB_H)
+        .then((canvas) => {
+          world.thumb = canvas;
+          if (vrCatalog.visible) paintVrCatalog();
+        })
+        .catch(() => { /* tile keeps its blank plate */ });
+    }
+  }
+
+  /** Show or hide the catalog, holding the clock while the player reads it. */
+  function setVrCatalog(open) {
+    const show = open && renderer.xr.isPresenting;
+    if (show === vrCatalog.visible) return;
+    vrCatalog.visible = show;
+    vrCatalogClose.visible = show;
+    setBarToolState(vrCatalogClose, { hovered: false });
+    setVrCatalogHover(-1);
+    if (show) { holdSim("vr-catalog"); loadVrCatalog(); }
+    else releaseSim("vr-catalog");
+  }
+
+  /** The window and its close button, in metres of camera space. */
+  function layoutVrCatalog() {
+    const w = VR_CATALOG_WIDTH, h = w * VR_CAT_H / VR_CAT_W;
+    vrCatalogPanel.scale.set(w, h, 1);
+    vrCatalogPanel.position.set(0, VR_CATALOG_Y, VR_MODAL_Z);
+    const size = VR_BAR_TOOL_SIZE;
+    const hot = vrCatalogClose.userData.state.hovered;
+    vrCatalogClose.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
+    vrCatalogClose.position.set(
+      w / 2 - size * 0.6, VR_CATALOG_Y + h / 2 - size * 0.6,
+      VR_MODAL_Z + (hot ? size * 0.25 : 0.001));
+  }
+
+  // Lay them out now rather than waiting for the first frame: until then these
   // are metre-wide planes sitting on the camera, and a ray aimed anywhere at
   // all would hit one.
   layoutVrModal();
+  layoutVrCatalog();
 
   /**
    * The toolbar rides the head by default. Unlocked, it is handed to the
@@ -974,6 +1218,13 @@
       }
       return null;
     }
+    // the catalog owns it the same way: the grid and its close button only
+    if (vrCatalog.visible) {
+      const onClose = rc.intersectObject(vrCatalogClose, false);
+      if (onClose.length) return onClose[0];
+      const onPanel = rc.intersectObject(vrCatalogPanel, false);
+      return onPanel.length ? onPanel[0] : null;
+    }
     if (vrVolumeSlider.visible) {
       const hit = rc.intersectObject(vrVolumeSlider, false);
       if (hit.length) return hit[0];
@@ -999,6 +1250,10 @@
     if (hit.object.name === "vr-volume") {
       // up the track is the value: the plane's own V, 0 at the bottom
       return { barTool: "volume", volume: hit.uv ? hit.uv.y : audio.volume };
+    }
+    if (hit.object.name === "vr-worldpanel") {
+      // the grid is one plane: which tile it is comes from the UV
+      return { barTool: "worldpanel", tile: vrCatalogTileAt(hit.uv) };
     }
     if (hit.object.name.startsWith("vr-")) {
       return { barTool: hit.object.name.slice(3) };
@@ -1104,6 +1359,7 @@
   function applyHover(p) {
     if (!session) return;
     setBarToolHover(p ? p.barTool : null);
+    setVrCatalogHover(p && p.barTool === "worldpanel" ? p.tile : -1);
     session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
       cursorSim = { x: p.simX, y: p.simY };
@@ -1417,6 +1673,9 @@
     // the session leaves the camera at the last headset pose (meter-scale,
     // near the scene origin); restore the page-load framing
     controls.enabled = true;
+    // the in-scene windows are for the headset; the DOM does this on a monitor
+    setVrModal(false);
+    setVrCatalog(false);
     // an unlocked bar is a VR notion: on the desktop it rides the camera
     resetBar();
     if (session) frameDesktopCamera(session.level);
@@ -1447,6 +1706,17 @@
         askVrConfirm("Go back a level?", () => moveLevel(-1));
       } else if (p.barTool === "next") {
         askVrConfirm("Skip to the next level?", () => moveLevel(1));
+      } else if (p.barTool === "worlds") {
+        setVrCatalog(true);
+      } else if (p.barTool === "catclose") {
+        setVrCatalog(false);
+      } else if (p.barTool === "worldpanel") {
+        const world = vrCatalogWorlds[p.tile];
+        if (world) {
+          const first = world.levels[0];
+          setVrCatalog(false);
+          library.enterWorld(world.gameType, first.group, first.level);
+        }
       } else if (p.barTool === "yes") {
         const act = vrConfirmAction;
         setVrModal(false);
@@ -1752,8 +2022,10 @@
         setBarToolState(vrPauseBtn,
           { on: !session.game.getGameTimer().isRunning() });
         layoutVrModal();
+        layoutVrCatalog();
       } else if (vrPauseBtn.visible) {
         setVrModal(false);
+        setVrCatalog(false);
       }
     }
     if (renderer.xr.isPresenting) {
