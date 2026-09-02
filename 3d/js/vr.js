@@ -175,6 +175,12 @@ class VRManager {
       ];
       for (const b of c.userData.beams) {
         b.scale.z = 4;
+        // over everything the toolbar draws, like the dot at its end: the
+        // beam is where you are pointing, and a hand pointing at a button
+        // should not have its beam swallowed by the button. The toolbar
+        // writes no depth, so the order alone settles it, and the beam keeps
+        // its depth test - terrain nearer than the beam still hides it.
+        b.renderOrder = VR_MARK_ORDER;
         c.add(b);
       }
       const tip = new THREE.Mesh(tipGeom, tipMat); // hand marker
