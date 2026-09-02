@@ -9,9 +9,10 @@
  *   VR_PIXEL_SCALE meters per game pixel and placed at chest height in
  *   front of the player; on exit it snaps back to desktop identity.
  * - Controller trigger = the desktop click (same pick() path: skill panel
- *   by UV, lemmings via sim coordinates through CommandManager). The right
- *   hand does the pointing: it alone draws a ray, drives hover, and acts
- *   on its trigger.
+ *   by UV, lemmings via sim coordinates through CommandManager). One hand
+ *   points at a time - it alone draws a ray, drives hover, and acts on its
+ *   trigger. The right starts with it; a trigger pull on the other hand
+ *   takes it over.
  * - Grip drags the diorama; both grips scale it about the hands' midpoint.
  *   The world itself never moves, so there is nothing to feel sick about.
  */
@@ -86,6 +87,8 @@ class VRManager {
     this._tempMatrix = new THREE.Matrix4();
     this._grab = null;
     this._aiming = null; // the controller currently driving hover
+    this._pointerHand = "right"; // which hand carries the beam; a trigger
+                                 // pull on the other one takes it over
 
     renderer.xr.enabled = true;
     createVRButton(renderer);
@@ -232,8 +235,12 @@ class VRManager {
    * since otherwise nothing would.
    */
   _isPointer(c) {
-    if (c.userData.handedness !== "left") return true;
-    return !this.controllers.some((o) => o !== c && o.userData.handedness);
+    const hand = c.userData.handedness;
+    if (!hand) return true;                     // unnamed by the runtime
+    if (hand === this._pointerHand) return true;
+    // the hand that should be pointing is not here, so this one does
+    return !this.controllers.some(
+      (o) => o.userData.handedness === this._pointerHand);
   }
 
   _rayFrom(controller) {
@@ -243,8 +250,22 @@ class VRManager {
     return this.raycaster;
   }
 
+  /**
+   * A trigger on the hand that is not pointing takes the pointer over: pull
+   * the left one and the beam moves to the left, the right one to bring it
+   * back. That first pull only hands it over and does not act - until it had
+   * the beam that hand was aiming at nothing the player could see, and a
+   * blind click assigns a skill to whatever happened to be under it.
+   */
   _onSelect(controller) {
-    if (!this.presenting || !this._isPointer(controller)) return;
+    if (!this.presenting) return;
+    const hand = controller.userData.handedness;
+    if (hand && hand !== this._pointerHand) {
+      this._pointerHand = hand;
+      this._aiming = null;
+      return;
+    }
+    if (!this._isPointer(controller)) return;
     const pick = this.hooks.pickWithRaycaster(this._rayFrom(controller));
     if (pick) this.hooks.onSelectPick(pick);
   }
