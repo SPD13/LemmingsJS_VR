@@ -34,7 +34,7 @@ const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
 // The restart question, head-fixed in metres of camera space.
 const VR_MODAL_WIDTH = 0.42;
 const VR_MODAL_Y = 0.02;
-const VR_MODAL_Z = -0.62;   // nearer than the toolbar, so it reads as on top
+const VR_MODAL_Z = VR_GUI_Z;  // the toolbar's plane: one surface to focus on
 // The pause/restart pair over the board, in game pixels (they ride it).
 const VR_PLAY_TOOL_SIZE = 22;
 // Aiming marks - the impact dot and the hand markers - over everything the
