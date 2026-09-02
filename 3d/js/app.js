@@ -141,6 +141,11 @@
     for (const b of iconButtons) {
       setBarToolState(b, { hovered: b.name === "vr-" + name });
     }
+    const onSlider = name === "volume";
+    if (vrVolumeSlider.userData.hovered !== onSlider) {
+      vrVolumeSlider.userData.hovered = onSlider;
+      vrVolumeSlider.userData.paint(audio.volume, onSlider);
+    }
   }
 
   const barToolIcon = (cx, hovered, bg, stroke, body) => {
@@ -262,9 +267,94 @@
 
   // The bar's own row of controls: the two handles at the left end, pause in
   // the middle, and the three that leave the level at the right end.
+  // Sound, off the bar's right end: a column with the volume slider over a
+  // mute switch. The slider is one mesh that draws its own track, fill and
+  // knob, so the ray hits a single target and the hit's UV is the value.
+  const vrVolumeSlider = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = 64; cv.height = 256;
+    const cx = cv.getContext("2d");
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = "vr-volume";
+    mesh.renderOrder = GUI_ORDER_BAR_TOOL;
+    mesh.visible = false;
+    mesh.userData.paint = (level, hovered) => {
+      cx.clearRect(0, 0, 64, 256);
+      const top = 14, bot = 242, span = bot - top;
+      cx.fillStyle = "rgba(16, 20, 28, 0.92)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, 60, 252, 14) : cx.rect(2, 2, 60, 252);
+      cx.fill();
+      if (hovered) {
+        cx.strokeStyle = "#ffffff"; cx.lineWidth = 3;
+        cx.beginPath();
+        cx.roundRect ? cx.roundRect(4, 4, 56, 248, 12) : cx.rect(4, 4, 56, 248);
+        cx.stroke();
+      }
+      cx.fillStyle = "#2a3446";                       // the groove
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(26, top, 12, span, 6) : cx.rect(26, top, 12, span);
+      cx.fill();
+      const y = bot - span * level;                   // filled from the bottom
+      cx.fillStyle = "#6fce7e";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(26, y, 12, bot - y, 6) : cx.rect(26, y, 12, bot - y);
+      cx.fill();
+      cx.fillStyle = "#f0f3f8";                       // the knob
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(12, y - 8, 40, 16, 6) : cx.rect(12, y - 8, 40, 16);
+      cx.fill();
+      tex.needsUpdate = true;
+    };
+    // painted blank for now: the audio it reads from is built further down,
+    // and paintVolume() fills both this and the mute icon in once it exists
+    mesh.userData.paint(1, false);
+    guiRoot.add(mesh);
+    return mesh;
+  })();
+
+  // speaker, with waves when it is on and a cross when it is not
+  const vrMuteBtn = makeIconButton("vr-mute", guiRoot, (cx, st) => {
+    const muted = st.on;
+    barToolIcon(cx, st.hovered,
+      muted ? (st.hovered ? "#5a2a2a" : "#33201c") : (st.hovered ? "#1d5030" : "#12331d"),
+      muted ? "#e07a6a" : "#6fce7e", (c) => {
+        c.fillStyle = muted ? "#e07a6a" : "#6fce7e";
+        c.beginPath();                                  // cone and box
+        c.moveTo(14, 26); c.lineTo(22, 26); c.lineTo(32, 16);
+        c.lineTo(32, 48); c.lineTo(22, 38); c.lineTo(14, 38);
+        c.closePath();
+        c.fill();
+        c.beginPath();
+        if (muted) {
+          c.moveTo(38, 24); c.lineTo(52, 40);
+          c.moveTo(52, 24); c.lineTo(38, 40);
+        } else {
+          c.arc(34, 32, 10, -Math.PI / 3, Math.PI / 3);
+          c.moveTo(34 + 17 * Math.cos(-Math.PI / 3), 32 + 17 * Math.sin(-Math.PI / 3));
+          c.arc(34, 32, 17, -Math.PI / 3, Math.PI / 3);
+        }
+        c.stroke();
+      });
+  });
+
+  function paintVolume() {
+    vrVolumeSlider.userData.paint(
+      audio.volume, vrVolumeSlider.userData.hovered === true);
+    setBarToolState(vrMuteBtn, { on: !audio.enabled });
+  }
+
   const vrLeftTools = [barLockBtn, barMoveBtn];
   const vrRightTools = [vrPrevBtn, vrRestartBtn, vrNextBtn];
   const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
+  // the sound column keeps its own place, so it is not in the row above, but
+  // it is pressed like the rest
+  const vrWidgets = vrButtons.concat([vrMuteBtn]);
 
   // Restart asks first. A DOM dialog is invisible in a headset, so the
   // question is in the scene, head-fixed like the toolbar and squarely in
@@ -419,6 +509,7 @@
   soundBtn.addEventListener("click", () => {
     audio.setEnabled(!audio.enabled);
     renderSoundBtn();
+  paintVolume();  // now that audio exists, show its real level and switch
     if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
   });
   renderSoundBtn();
@@ -788,6 +879,20 @@
       vrRightTools.forEach((b, i) => {
         b.position.x = end - (vrRightTools.length - 1 - i) * step;
       });
+      // the sound column stands off the bar's right end
+      const sx = VR_GUI_WIDTH / 2 + VR_BAR_TOOL_SIZE * 0.85;
+      const barBottom = VR_GUI_Y - session.gui.mesh.scale.y / 2;
+      const muteHot = vrMuteBtn.userData.state.hovered;
+      vrMuteBtn.scale.setScalar(
+        VR_BAR_TOOL_SIZE * (muteHot ? VR_BAR_TOOL_HOVER : 1));
+      vrMuteBtn.position.set(sx, barBottom + VR_BAR_TOOL_SIZE / 2,
+        VR_GUI_Z + (muteHot ? VR_BAR_TOOL_SIZE * 0.25 : 0));
+      vrMuteBtn.visible = true;
+      vrVolumeSlider.scale.set(VR_BAR_TOOL_SIZE * 0.62, VR_VOLUME_HEIGHT, 1);
+      vrVolumeSlider.position.set(sx,
+        vrMuteBtn.position.y + VR_BAR_TOOL_SIZE / 2 + VR_VOLUME_HEIGHT / 2 + 0.008,
+        VR_GUI_Z);
+      vrVolumeSlider.visible = true;
       for (const b of vrButtons) {
         // a hovered button grows and steps toward the player, the way a
         // hovered skill button does
@@ -798,7 +903,8 @@
         b.visible = true;
       }
     } else {
-      for (const b of vrButtons) b.visible = false;
+      for (const b of vrWidgets) b.visible = false;
+      vrVolumeSlider.visible = false;
       session.gui.setReliefDepth(1);
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -861,8 +967,12 @@
       }
       return null;
     }
+    if (vrVolumeSlider.visible) {
+      const hit = rc.intersectObject(vrVolumeSlider, false);
+      if (hit.length) return hit[0];
+    }
     // the icon buttons sit over the bar and the board and take the ray first
-    for (const b of vrButtons) {
+    for (const b of vrWidgets) {
       if (!b.visible) continue;
       const hit = rc.intersectObject(b, false);
       if (hit.length) return hit[0];
@@ -879,6 +989,10 @@
   function pickWithRaycaster(rc) {
     const hit = raycastHit(rc);
     if (!hit) return null;
+    if (hit.object.name === "vr-volume") {
+      // up the track is the value: the plane's own V, 0 at the bottom
+      return { barTool: "volume", volume: hit.uv ? hit.uv.y : audio.volume };
+    }
     if (hit.object.name.startsWith("vr-")) {
       return { barTool: hit.object.name.slice(3) };
     }
@@ -1310,6 +1424,14 @@
         setBarLocked(!barLocked);
       } else if (p.barTool === "move") {
         // nothing on a tap; it is the drag that moves the bar
+      } else if (p.barTool === "volume") {
+        audio.setVolume(p.volume);
+        paintVolume();
+      } else if (p.barTool === "mute") {
+        audio.setEnabled(!audio.enabled);
+        renderSoundBtn();
+        if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
+        paintVolume();
       } else if (p.barTool === "pause") {
         togglePause();
       } else if (p.barTool === "restart") {

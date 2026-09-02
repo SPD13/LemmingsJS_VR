@@ -31,6 +31,7 @@ const VR_GUI_Z = -0.75;
 const GUI_VR_RELIEF_DEPTH = 1;
 const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
 const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
+const VR_VOLUME_HEIGHT = 0.15;  // the volume slider, standing off the bar's end
 // The restart question, head-fixed in metres of camera space.
 const VR_MODAL_WIDTH = 0.42;
 const VR_MODAL_Y = 0.02;
@@ -313,16 +314,22 @@ class VRManager {
       return;
     }
     if (!this._isPointer(controller)) return;
-    // a press that starts on the bar's move handle drags the bar; anything
-    // else drags the world
+    // a press that starts on the bar's move handle drags the bar, one on the
+    // volume slider scrubs it, anything else drags the world
     const on = this.hooks.pickWithRaycaster(this._rayFrom(controller));
+    const slider = !!(on && on.barTool === "volume");
     this._press = {
       c: controller,
       from: controller.getWorldPosition(new THREE.Vector3()),
       rootFrom: this.dioramaRoot.position.clone(),
       bar: !!(on && on.barTool === "move"),
-      dragging: false,
+      slider,
+      // a slider answers to the press itself and keeps answering as the hand
+      // moves; counting it as a drag from the outset stops the release firing
+      // it a second time
+      dragging: slider,
     };
+    if (slider) this.hooks.onSelectPick(on);
   }
 
   /** Release: a press that never turned into a drag is the click. */
@@ -344,6 +351,12 @@ class VRManager {
   _updateDrag() {
     const p = this._press;
     if (!p || this._grab) return;
+    if (p.slider) {
+      // follow the beam up and down the track for as long as it is held
+      const on = this.hooks.pickWithRaycaster(this._rayFrom(p.c));
+      if (on && on.barTool === "volume") this.hooks.onSelectPick(on);
+      return;
+    }
     const cur = p.c.getWorldPosition(new THREE.Vector3());
     const delta = cur.sub(p.from);
     if (!p.dragging && delta.length() < VR_DRAG_THRESHOLD) return;
