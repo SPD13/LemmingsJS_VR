@@ -924,11 +924,10 @@
       }
     },
     onHoverPick: applyHover,
-    // left stick tilts, right stick pans; a hand the runtime will not name
-    // pans, which is the safer of the two to get wrong
-    onStick: (hand, x, y, seconds) => {
+    // the pointing hand's stick pans, the other tilts (vr.js decides which)
+    onStick: (role, x, y, seconds) => {
       if (!session) return;
-      if (hand === "left") tiltDioramaBy(x, y, seconds);
+      if (role === "tilt") tiltDioramaBy(x, y, seconds);
       else panDioramaBy(x, y, seconds);
     },
     placeDiorama: placeDioramaForXR,

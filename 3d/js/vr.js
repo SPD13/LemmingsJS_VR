@@ -75,8 +75,8 @@ class VRManager {
    *  - pickWithRaycaster(raycaster) -> {panelUv}|{simX,simY}|null
    *  - onSelectPick(pick)           -> act on a trigger pull
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
-   *  - onStick(handedness, x, y, dt)-> thumbstick, y already flipped to
-   *                                    "away from the player is positive"
+   *  - onStick("pan"|"tilt", x, y, dt) -> thumbstick, already resolved to a
+   *                                    role, y flipped to "away is positive"
    *  - placeDiorama()               -> position dioramaRoot for the headset
    */
   constructor(renderer, scene, camera, dioramaRoot, hooks) {
@@ -234,13 +234,16 @@ class VRManager {
    * runtime will not name points as well, and so does a lone left one,
    * since otherwise nothing would.
    */
-  _isPointer(c) {
-    const hand = c.userData.handedness;
+  _handPoints(hand) {
     if (!hand) return true;                     // unnamed by the runtime
     if (hand === this._pointerHand) return true;
     // the hand that should be pointing is not here, so this one does
     return !this.controllers.some(
       (o) => o.userData.handedness === this._pointerHand);
+  }
+
+  _isPointer(c) {
+    return this._handPoints(c.userData.handedness);
   }
 
   _rayFrom(controller) {
@@ -295,8 +298,10 @@ class VRManager {
   }
 
   /**
-   * The thumbsticks: the right one pans the board, the left one tilts it -
-   * the same two moves as right-drag and left-drag on the desktop.
+   * The thumbsticks: the pointing hand's pans the board, the other tilts it -
+   * the same two moves as right-drag and left-drag on the desktop. They
+   * follow the beam, so handing it to the left hand brings pan with it and
+   * sends tilt to the right, and the pointing thumb keeps the same job.
    *
    * xr-standard puts the stick on axes 2 and 3, leaving 0 and 1 for a
    * trackpad, but a device with no trackpad may report it at 0 and 1, so
@@ -313,7 +318,8 @@ class VRManager {
       const dead = (v) => (Math.abs(v) < VR_STICK_DEADZONE ? 0 : v);
       const x = dead(axes[i] || 0), y = dead(axes[i + 1] || 0);
       if (!x && !y) continue;
-      this.hooks.onStick(source.handedness, x, -y, dt);
+      this.hooks.onStick(
+        this._handPoints(source.handedness) ? "pan" : "tilt", x, -y, dt);
     }
   }
 
