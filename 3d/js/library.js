@@ -134,6 +134,34 @@ class WorldLibrary {
     try { localStorage.setItem(LIBRARY_CACHE_KEY, JSON.stringify(mapping)); } catch (e) {}
   }
 
+  /**
+   * The world map, scanned once and cached: the same data the DOM catalog is
+   * built from, for callers that draw their own (the VR window).
+   */
+  async catalog() {
+    let mapping = this._readCache();
+    if (!mapping) {
+      mapping = await this._discover();
+      this._writeCache(mapping);
+    }
+    return mapping;
+  }
+
+  /** A miniature of one level at the given size, loaded once and kept. */
+  thumbnail(gameType, group, level, w, h) {
+    if (!this._thumbs) this._thumbs = new Map();
+    const key = [gameType, group, level, w, h].join("/");
+    if (this._thumbs.has(key)) return this._thumbs.get(key);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const pending = this.factory.getGameResources(gameType)
+      .then((res) => res.getLevel(group, level))
+      .then((lvl) => { this._drawMiniature(canvas, lvl); return canvas; });
+    this._thumbs.set(key, pending);
+    return pending;
+  }
+
   async _populate(force) {
     this._populated = true;
     this.dom.grid.innerHTML = "";
