@@ -102,20 +102,20 @@ intended start area.
   starts with it, and a trigger pull on the other hand takes it over — that
   pull only moves the beam, since until it had one that hand was aiming at
   nothing you could see
-- **pause, prev, restart, next — above the play area** — drawn like the
-  toolbar's handles and pressed the same way. Pause becomes a play triangle
-  once the game is stopped, and tracks the clock however it was stopped: this
-  button, the panel, the space bar or the catalog. The other three each ask
-  before throwing the level away, in a panel in front of your eyes — a DOM
-  dialog would be invisible in here — and while that question is up its two
-  answers are the only things the ray can hit. They ride the board, so they
-  pan and scale with it.
-- **the two handles above the toolbar** — the padlock unlocks the bar from
-  your head: it stays where it is hanging in the room while you look around,
-  and a second click hands it back to the head from wherever it has ended up
-  (it never jumps at the click, either way). The four-way arrows are a grab
-  handle: hold the trigger on them and move your hand to carry the bar,
-  locked or not. Leaving VR puts it back on the head, square in front.
+- **the row above the toolbar** — six buttons riding the bar, so they keep
+  station with it wherever it is dragged or unpinned to. At the left end the
+  padlock unlocks the bar from your head: it stays where it is hanging in the
+  room while you look around, and a second click hands it back to the head
+  from wherever it has ended up (it never jumps at the click, either way);
+  beside it the four-way arrows are a grab handle — hold the trigger on them
+  and move your hand to carry the bar, locked or not. Leaving VR puts it back
+  on the head, square in front. In the middle, pause, which becomes a play
+  triangle once the game is stopped and tracks the clock however it was
+  stopped: this button, the panel, the space bar or the catalog. At the right
+  end, prev, restart and next, each asking before it throws the level away —
+  in a panel in front of your eyes, since a DOM dialog would be invisible in
+  here, and while that question is up its two answers are the only things the
+  ray can hit.
 - **trigger + move** — drag the board about: it follows the hand in all three
   axes, so pulling back toward yourself walks it in along Z and pushing away
   sends it out. A click only counts as a click if the hand stayed put, so a
