@@ -18,12 +18,12 @@ const GUI_TILE_GROW = 1.08;
 // lines (x = 16i+16, y = 39), so a raised copy must crop one pixel wider and
 // taller or those two edges are left behind.
 const GUI_CROP_H = GUI_TILE_H + 1;
-const GUI_BUTTONS = 13;
+let GUI_BUTTONS = 13;         // the DOS panel; a Lemmix game states its own (panelLayout)
 // ...but the last button (speed) has no next tile: the status box's red
 // border starts at x=207, so that button's cell is only 15 columns wide.
 // Crop it short and don't grow it, or the raised copy lifts the box's border
 // along with it.
-const GUI_LAST_BUTTON = GUI_BUTTONS - 1;
+let GUI_LAST_BUTTON = GUI_BUTTONS - 1;
 const GUI_CROP_W = (index) =>
   index >= GUI_LAST_BUTTON ? GUI_TILE_W - 1 : GUI_TILE_W + 1;
 const GUI_GROW_FOR = (index) =>
@@ -56,13 +56,13 @@ const GUI_ICON_DEPTH = 1;    // panel pixels of relief on the artwork
 // Buttons 0..9 carry a count drawn at y17..25 (it changes as skills are
 // spent, so it must stay flat); 10..12 have no digits and their art runs
 // the full tile height.
-const guiIconTop = (index) => (index <= 9 ? 26 : 17);
+const guiIconTop = (index) => (index < GUI_DIGIT_BUTTONS ? 26 : 17);
 // The counts themselves (white digits on their black box) are raised too,
 // but they change as skills are spent, so their geometry is rebuilt whenever
 // the digit strip's pixels change.
 const GUI_DIGIT_TOP = 17;
 const GUI_DIGIT_BOTTOM = 26;
-const GUI_DIGIT_BUTTONS = 10; // 0..9 carry counts; 10..12 do not
+let GUI_DIGIT_BUTTONS = 10; // 0..9 carry counts; 10..12 do not
 const GUI_DIGIT_COLOR = "255,255,255";
 // The counters strip along the top ("Out 5  In 0%  Time 4-57") is drawn as
 // green letters with light highlights; those highlights get raised 1px on a
@@ -81,6 +81,13 @@ const GUI_TEXT_DEPTH_MAX = 2;
 class GuiPanel {
   constructor(scene, game, resources) {
     this.dirty = true;
+    // a Lemmix game draws its own panel: as many buttons as its skills need,
+    // on the same 16-px cells, and says which cells carry counts
+    const layout = game.panelLayout || null;
+    GUI_BUTTONS = layout ? layout.buttons : 13;
+    GUI_LAST_BUTTON = GUI_BUTTONS - 1;
+    GUI_DIGIT_BUTTONS = layout ? layout.digitButtons : 10;
+    this.bgColors = new Set([...GUI_BG_COLORS, ...((layout && layout.bgColors) || [])]);
     this.stage = new HeadlessStage(() => { this.dirty = true; });
     this.display = new Lemmings.DisplayImage(this.stage);
     game.setGuiDisplay(this.display);
@@ -118,7 +125,7 @@ class GuiPanel {
       for (let y = top; y < GUI_ICON_BOTTOM; y++) {
         const i = (y * W + x) * 4;
         const key = data[i] + "," + data[i + 1] + "," + data[i + 2];
-        if (!GUI_BG_COLORS.has(key)) mask[y * W + x] = 1;
+        if (!this.bgColors.has(key)) mask[y * W + x] = 1;
       }
     }
     return mask;

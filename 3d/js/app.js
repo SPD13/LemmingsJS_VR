@@ -69,6 +69,17 @@
     replay: params.get("replay"),
   };
 
+  /** A lemming's action name, from either engine. */
+  const actionName = (lem) => typeof lem.getActionName === "function"
+    ? lem.getActionName() : (lem.action ? lem.action.getActionName() : null);
+  // NeoLemmix sound cue -> the AdLib effect that stands in for it (file
+  // sounds are a later phase)
+  const SFX_BY_CUE = {
+    assign: SFX.ASSIGN, chink: SFX.STEEL, letsgo: SFX.LETSGO, door: SFX.DOOR, yippee: SFX.YIPPEE,
+    ohno: SFX.OHNO, explode: SFX.EXPLODE, splat: SFX.SPLAT, glug: SFX.DROWN, ting: SFX.TING,
+    pickup: SFX.CLICK, exitopen: SFX.CLICK, fire: SFX.TRAP, thud: SFX.TRAP, electric: SFX.CLICK,
+  };
+
   const hud = {
     name: document.getElementById("level-name"),
     meta: document.getElementById("level-meta"),
@@ -1342,10 +1353,17 @@
 
     window.__lem3dGroundData = null; // cleared so a VGASPEC level can't reuse a stale piece list
     const where = await resolveLevel();
-    if (state.engine !== "classic") { showUnplayable(where); return; }
-    const game = await factory.getGame(state.gameType);
-    await game.loadLevel(state.group, state.level);
+    let game;
+    if (state.engine === "lemmix") {
+      game = await lemmixEngine.createGame(where);
+    } else if (state.engine === "classic") {
+      game = await factory.getGame(state.gameType);
+      await game.loadLevel(state.group, state.level);
+    } else { showUnplayable(where); return; }
     const level = game.level;
+    // the doors and water need the objects' trigger boxes; the DOS engine
+    // stashes them as the level builds, a Lemmix level describes its own
+    if (state.engine === "lemmix") window.__lem3dObjectData = lemmixEngine.objectData(level);
 
     // depth compositing (plan §5.1): per-tileset profile + per-pixel classes
     const config = await factory.getConfig(state.gameType);
@@ -1375,7 +1393,9 @@
       audioResources[state.gameType] = await factory.getGameResources(state.gameType);
     }
     audio.setResources(audioResources[state.gameType], config);
-    const musicTrack = state.group * 30 + state.level;
+    const musicTrack = state.engine === "lemmix"
+      ? Array.from(state.levelId).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 1000
+      : state.group * 30 + state.level;
     audio.playMusic(musicTrack);
 
     const resources = new SessionResources();
@@ -1528,13 +1548,21 @@
 
       lemCapture.begin();
       const lems = game.getLemmingManager().lemmings;
+      if (game.sounds) {
+        for (const cue of game.sounds) {
+          const sfx = SFX_BY_CUE[cue.name];
+          if (sfx == null) continue;
+          if (cue.x != null) audio.playSfx(sfx, sfxPos(cue.x, cue.y)); else audio.playSfx(sfx);
+        }
+      }
       let tickSfx = null; // at most one effect per tick (nuke-proofing)
       for (let i = 0; i < lems.length; i++) {
         const lem = lems[i];
-        const action = lem.removed || !lem.action ? null : lem.action.getActionName();
+        const action = lem.removed || !lem.action ? null : actionName(lem);
         if (action !== prevActions.get(lem.id)) {
           prevActions.set(lem.id, action);
-          if (action && SFX_BY_ACTION[action] != null) {
+          // a Lemmix game cues its own sounds (below); the DOS one is read off its states
+          if (action && !game.sounds && SFX_BY_ACTION[action] != null) {
             tickSfx = { sfx: SFX_BY_ACTION[action], x: lem.x, y: lem.y };
           }
         }
@@ -1576,16 +1604,17 @@
 
     // Steel areas, which the engine parses and then ignores entirely: the
     // three destructive skills are stopped at them here (js/steel.js).
-    const steel = installSteel(
+    // (a Lemmix game handles steel and its entrances itself)
+    const steel = state.engine === "classic" ? installSteel(
       game,
       new SteelMap(steelRangesFrom(groundData && groundData.lr, level)),
-      (lem) => audio.playSfx(SFX.STEEL, sfxPos(lem.x, lem.y)));
+      (lem) => audio.playSfx(SFX.STEEL, sfxPos(lem.x, lem.y))) : null;
 
     // Multiple entrances: the engine releases every lemming from the first
     // one, where the original takes them in turn. The release is small enough
     // to restate here, on the manager's own instance.
     const lemmingManager = game.getLemmingManager();
-    if (lemmingManager && level.entrances.length > 1) {
+    if (state.engine === "classic" && lemmingManager && level.entrances.length > 1) {
       let nextEntrance = 0;
       lemmingManager.addNewLemmings = function () {
         if (this.gameVictoryCondition.getLeftCount() <= 0) return;
@@ -2011,7 +2040,7 @@
       session.ring.visible = true;
       session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
       hud.hover.textContent =
-        "lemming " + lem.id + " — " + lem.action.getActionName();
+        "lemming " + lem.id + " — " + actionName(lem);
     } else {
       session.ring.visible = false;
       hud.hover.innerHTML = "&nbsp;";
@@ -2742,7 +2771,39 @@
   });
   // NeoLemmix levels: parsed and built from the styles on disk. Until the
   // Lemmix engine plays them, this is how their miniatures are drawn.
-  const lemmixStyles = new Lemmix.StyleManager(Lemmix.StyleManager.browserIO("../"));
+  Lemmix.io = Lemmix.StyleManager.browserIO("../");
+  const lemmixStyles = new Lemmix.StyleManager(Lemmix.io);
+  // the Lemmix engine: a level built from the styles, the sprite set its
+  // theme names, the physics masks, and a Game the page drives like the DOS one
+  const lemmixEngine = {
+    masks: null,
+    spriteSets: new Map(),
+    async createGame(where) {
+      const level = await library.loadLevel(where.level.id);
+      if (!this.masks) this.masks = await Lemmix.loadMasks(Lemmix.io);
+      const setName = (level.theme && level.theme.lemmings) || "default";
+      if (!this.spriteSets.has(setName)) this.spriteSets.set(setName, new Lemmix.SpriteSet(Lemmix.io).load(setName));
+      const sprites = await this.spriteSets.get(setName);
+      return new Lemmix.Game(level, { masks: this.masks, sprites });
+    },
+    /** What portals.js reads: an id per object and its trigger box, in DOS terms. */
+    objectData(level) {
+      const T = Lemmings.TriggerTypes;
+      const objects = level.objects.map((o, i) => ({ id: o.gadget.effectBase === "WINDOW" ? 1 : 100 + i }));
+      const objectImg = {};
+      level.objects.forEach((o, i) => {
+        const g = o.gadget, r = g.triggerRect;
+        const effect = g.effect === "EXIT" || g.effect === "LOCKEXIT" ? T.EXIT_LEVEL
+          : g.effect === "WATER" ? T.DROWN : g.effect === "FIRE" ? T.KILL
+          : g.effect === "TRAP" || g.effect === "TRAPONCE" ? T.TRAP : T.NO_TRIGGER;
+        objectImg[objects[i].id] = {
+          trigger_effect_id: effect, trigger_left: r.x0 - g.x, trigger_top: r.y0 - g.y,
+          trigger_width: r.x1 - r.x0, trigger_height: r.y1 - r.y0,
+        };
+      });
+      return { objects, objectImg };
+    },
+  };
   library.registerLoader("lemmix", async (level) => {
     const res = await fetch("../" + level.url.split("/").map(encodeURIComponent).join("/"));
     if (!res.ok) throw new Error("level file: HTTP " + res.status);
