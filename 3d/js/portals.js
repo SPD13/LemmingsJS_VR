@@ -50,17 +50,18 @@ const PORTAL_FLAP_THICK = 1;       // and so are the doors hinged under it
 function portalConfigFor(objectId, info, profile) {
   const byId = ((profile && profile.objects) || {}).byId || {};
   const entry = byId[objectId];
+  // a null depth means "however deep it needs to be", filled in by buildPortals
   if (entry && entry.shape) {
     if (entry.shape === "flat") return null;
-    return { shape: entry.shape, depth: entry.depth ||
-      (entry.shape === "ceiling" ? PORTAL_DEFAULT_DEPTH : PORTAL_EXIT_DEPTH) };
+    return { shape: entry.shape, depth: entry.depth != null ? entry.depth
+      : (entry.shape === "ceiling" ? PORTAL_DEFAULT_DEPTH : null) };
   }
   // the entrance hatch lies flat overhead; an exit tunnels into the scenery
   if (objectId === PORTAL_ENTRANCE_ID) {
     return { shape: "ceiling", depth: PORTAL_DEFAULT_DEPTH };
   }
   if (info && info.trigger_effect_id === Lemmings.TriggerTypes.EXIT_LEVEL) {
-    return { shape: "portal", depth: PORTAL_EXIT_DEPTH };
+    return { shape: "portal", depth: null };
   }
   return null;
 }
@@ -544,7 +545,10 @@ function buildPortalGeometry(frame, depth, sky) {
   // transform, diagonals costing their real length. The height field it feeds
   // varies pixel to pixel, the way the terrain's relief does, which is what
   // the corner averaging needs to have something smooth to average.
-  const rings = depth > 0 ? PORTAL_FUNNEL_RINGS : 0;
+  // As many rings as the door is deep, so the mouth stays about a 45 degree
+  // cone however deep the tunnel is. Fixing the count would make a deeper
+  // tunnel a steeper one, and put the pixel step back at the frame's edge.
+  const rings = depth > 0 ? Math.max(PORTAL_FUNNEL_RINGS, Math.round(thick)) : 0;
   const DIAG = Math.SQRT2, FAR = 1e6;
   const dist = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
@@ -696,17 +700,27 @@ function portalObjectRect(mapObject) {
   return { x0: x, y0: y, x1: x + frame.width, y1: y + frame.height };
 }
 
-/** Every object that should be rendered as an opening, with its geometry. */
-function buildPortals(level, profile, depthMap) {
+/**
+ * Every object that should be rendered as an opening, with its geometry.
+ * `objectZ` is the plane objects sit on, which is where a door's face goes.
+ */
+function buildPortals(level, profile, depthMap, objectZ) {
   const data = window.__lem3dObjectData;
   const portals = [];
   if (!data || !Array.isArray(data.objects)) return portals;
+
+  // An exit is set into the terrain, so its slab reaches from the face all
+  // the way back to the slab's own back: stopping short leaves the door
+  // floating in the middle of the ground it is cut into.
+  const exitDepth = Math.max(PORTAL_EXIT_DEPTH,
+    objectZ - DEPTH_BANDS[DepthClass.TERRAIN].back - PORTAL_FRAME_THICK);
 
   const count = Math.min(level.objects.length, data.objects.length);
   const configs = [];
   for (let i = 0; i < count; i++) {
     configs[i] = portalConfigFor(data.objects[i].id,
       data.objectImg ? data.objectImg[data.objects[i].id] : null, profile);
+    if (configs[i] && configs[i].depth == null) configs[i].depth = exitDepth;
   }
 
   // A door is not always one object. The tilesets build them in pieces - an
