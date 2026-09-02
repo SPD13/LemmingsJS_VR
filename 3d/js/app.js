@@ -1287,6 +1287,13 @@
     library.setEditMode(state.edit);
     if (!state.edit && session && session.editor) session.editor.disable();
   }
+  // the view back to where a level starts: the same as Home or a double
+  // right-click (in a headset, the board is re-placed in front of the player)
+  document.getElementById("btn-view").addEventListener("click", () => {
+    if (renderer.xr.isPresenting) vr.recenterNow();
+    else if (session) frameDesktopCamera(session.level);
+  });
+
   document.getElementById("btn-mode").addEventListener("click", () => {
     state.edit = !state.edit;
     try { localStorage.setItem("lem3d-edit", state.edit ? "on" : "off"); } catch (e) {}

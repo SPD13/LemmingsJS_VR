@@ -38,7 +38,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
 ## Controls
 
 - drag or shift+arrows = orbit, right-drag or arrows = pan, wheel or
-  PgUp/PgDn = zoom, Home or double right-click = reset view (all of these
+  PgUp/PgDn = zoom, Home, double right-click or the "reset view" button =
+  reset view (all of these
   also work inside a controller-less VR session, moving the diorama instead
   of the camera)
 - click a lemming = assign the selected skill; click the panel = exactly the
