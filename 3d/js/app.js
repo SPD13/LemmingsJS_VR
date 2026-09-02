@@ -2938,6 +2938,33 @@
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
   renderMode(); // billing, catalog labels and editor availability
 
+  // The key hints are wide, so they fold to a "controls" button. Pressed, it
+  // unfolds into the panel, which stays as long as the mouse is on it and
+  // folds back a couple of seconds after the mouse has left - or at once
+  // from its own close.
+  const keysPanel = document.getElementById("hud-keys");
+  const KEYS_FOLD_MS = 2000;
+  let keysFoldTimer = null;
+  const cancelKeysFold = () => { clearTimeout(keysFoldTimer); keysFoldTimer = null; };
+  const foldKeys = () => { cancelKeysFold(); keysPanel.classList.add("folded"); };
+  const armKeysFold = () => {
+    cancelKeysFold();
+    keysFoldTimer = window.setTimeout(() => {
+      keysFoldTimer = null;
+      if (!keysPanel.matches(":hover")) foldKeys();
+    }, KEYS_FOLD_MS);
+  };
+  document.getElementById("keys-open").addEventListener("click", () => {
+    keysPanel.classList.remove("folded");
+    // the button was where the panel now is, so the mouse is usually on it;
+    // when it is not (a touch, say), the panel folds on its own
+    window.setTimeout(() => { if (!keysPanel.matches(":hover")) armKeysFold(); }, 0);
+  });
+  document.getElementById("keys-close").addEventListener("click", foldKeys);
+  keysPanel.addEventListener("mouseenter", cancelKeysFold);
+  keysPanel.addEventListener("mouseleave", () => {
+    if (!keysPanel.classList.contains("folded")) armKeysFold();
+  });
 
   // debug handle for the console / automated checks
   window.__lem3d = {
