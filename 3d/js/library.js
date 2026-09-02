@@ -13,7 +13,9 @@
  * from. The choice is remembered in localStorage.
  *
  * Discovery scans the complete level order once, recording each level's
- * ground set (VGASPEC special levels carry no piece data and are skipped);
+ * ground set. A VGASPEC special level is one painted picture with no piece
+ * list, so it belongs to no tileset: those are collected as a world of their
+ * own rather than dropped, which used to make them unreachable from here;
  * the mapping is cached in localStorage. Tile miniatures are rendered
  * lazily (IntersectionObserver + a sequential load queue) so opening the
  * library doesn't load ~220 levels up front.
@@ -24,7 +26,15 @@ const WORLD_NAMES = {
   2: ["Brick", "Rock", "Snow", "Bubble"],
 };
 const GAME_LABELS = { 1: "Lemmings", 2: "Oh No! More Lemmings" };
-const LIBRARY_CACHE_KEY = "lem3d-worlds-v2";
+const SPECIAL_SET = -1; // the VGASPEC levels: one picture, no tileset
+
+/** What to call a world, tileset or not. */
+function worldName(gameType, world) {
+  if (world.special) return "Special";
+  const names = WORLD_NAMES[gameType] || [];
+  return names[world.set] || "World " + world.set;
+}
+const LIBRARY_CACHE_KEY = "lem3d-worlds-v3";
 const PROGRESS_KEY = "lem3d-cleared";
 const ORDER_KEY = "lem3d-lib-order";
 
@@ -230,14 +240,18 @@ class WorldLibrary {
             window.__lem3dGroundData = null;
             const level = await resources.getLevel(g, l);
             const gd = window.__lem3dGroundData;
-            if (!gd || !gd.lr) continue; // special level, no piece data
-            const set = gd.lr.graphicSet1 != null ? gd.lr.graphicSet1 : 0;
-            if (!bySet.has(set)) bySet.set(set, { set, levels: [] });
+            // no piece data = a VGASPEC special: its own world, not a gap
+            const special = !gd || !gd.lr;
+            const set = special ? SPECIAL_SET
+              : (gd.lr.graphicSet1 != null ? gd.lr.graphicSet1 : 0);
+            if (!bySet.has(set)) bySet.set(set, special ? { set, special: true, levels: [] } : { set, levels: [] });
             bySet.get(set).levels.push({ group: g, level: l, name: level.name.trim() });
           } catch (e) { /* unreadable level: skip */ }
         }
       }
-      mapping[gameType] = Array.from(bySet.values()).sort((a, b) => a.set - b.set);
+      // specials last: they are a footnote to the tilesets, not one of them
+      mapping[gameType] = Array.from(bySet.values()).sort(
+        (a, b) => (a.special ? 1 : 0) - (b.special ? 1 : 0) || a.set - b.set);
     }
     return mapping;
   }
@@ -253,20 +267,22 @@ class WorldLibrary {
 
       const config = await this.factory.getConfig(gameType);
       const slug = (config.path || "game").replace(/[^a-z0-9]/gi, "").toLowerCase();
-      const names = WORLD_NAMES[gameType] || [];
       const groupNames = config.level.groups || [];
 
       for (const world of worlds) {
         const header = document.createElement("div");
         header.className = "lib-world";
         const title = document.createElement("span");
-        title.textContent = (names[world.set] || "World") + " · set " + world.set +
+        title.textContent = worldName(gameType, world) +
+          (world.special ? "" : " · set " + world.set) +
           " · " + world.levels.length + " levels";
         header.appendChild(title);
         const mark = document.createElement("span");
         mark.className = "lib-mark";
         header.appendChild(mark);
-        if (this.editMode) {
+        if (this.editMode && world.special) {
+          mark.textContent = "no pieces to tag";
+        } else if (this.editMode) {
           fetch("profiles/" + slug + "-g" + world.set + ".json", { method: "HEAD" })
             .then((res) => {
               mark.textContent = res.ok ? "✔ tagged" : "not tagged";
@@ -305,12 +321,11 @@ class WorldLibrary {
       this.dom.grid.appendChild(gameHeader);
 
       const config = await this.factory.getConfig(gameType);
-      const names = WORLD_NAMES[gameType] || [];
       const groupNames = config.level.groups || [];
       const levels = [];
       for (const world of worlds) {
         for (const entry of world.levels) {
-          levels.push({ entry, set: names[world.set] || "set " + world.set });
+          levels.push({ entry, set: worldName(gameType, world) });
         }
       }
       // the scan walks a game tileset by tileset; play order is by group

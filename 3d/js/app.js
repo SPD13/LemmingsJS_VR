@@ -839,11 +839,10 @@
       const config = await factory.getConfig(gameType).catch(() => null);
       const groupNames = (config && config.level.groups) || [];
       const gameLabel = GAME_LABELS[gameType] || "game " + gameType;
-      const setNames = WORLD_NAMES[gameType] || [];
       const levels = [];
       for (const world of mapping[gameType] || []) {
         for (const entry of world.levels) {
-          levels.push({ entry, set: setNames[world.set] });
+          levels.push({ entry, set: worldName(gameType, world) });
         }
       }
       // the scan walks the games tileset by tileset; play order is by group
