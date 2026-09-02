@@ -1405,6 +1405,8 @@
     // after the sim step and GameGui render
     let lastTickTime = performance.now();
     const prevActions = new Map(); // lemming id -> action name, for SFX cues
+    const prevBricks = new Map();  // lemming id -> bricks laid, for the warning
+    let doorSfxPlayed = false;     // the hatches open together; one sound
     game.getGameTimer().onGameTick.on(() => {
       lastTickTime = performance.now();
 
@@ -1430,6 +1432,12 @@
           const frames = portal.animation.frames;
           const idx = Math.max(0, frames.indexOf(frame));
           const angle = (portal.openness[idx] || 0) * Math.PI / 2;
+          if (angle > 0 && !doorSfxPlayed) {
+            // once for the level, not once per hatch: they all swing on the
+            // same tick, and the engine plays one effect at a time anyway
+            doorSfxPlayed = true;
+            audio.playSfx(SFX.DOOR, sfxPos(portal.sfxX, portal.sfxY));
+          }
           for (const flap of portal.flaps) {
             flap.mesh.rotation.z = flap.sign * angle;
           }
@@ -1450,9 +1458,25 @@
             tickSfx = { sfx: SFX_BY_ACTION[action], x: lem.x, y: lem.y };
           }
         }
+        // a builder counts bricks in lem.state and shrugs at 12; the original
+        // warns when three are left, which is the sound you actually play by
+        if (action === "building") {
+          if (lem.state !== prevBricks.get(lem.id)) {
+            prevBricks.set(lem.id, lem.state);
+            if (lem.state === BUILDER_WARN_AT) {
+              tickSfx = { sfx: SFX.TING, x: lem.x, y: lem.y };
+            }
+          }
+        } else if (prevBricks.has(lem.id)) {
+          prevBricks.delete(lem.id);
+        }
         if (lem.removed) continue;
         lemCapture.tag = lem.id;
         lem.render(lemCapture);
+      }
+      if (trapSfxAt) {
+        tickSfx = { sfx: SFX.TRAP, x: trapSfxAt.x, y: trapSfxAt.y };
+        trapSfxAt = null;
       }
       if (tickSfx != null) audio.playSfx(tickSfx.sfx, sfxPos(tickSfx.x, tickSfx.y));
       lemmingPool.sync(lemCapture.items, () => LEMMING_Z, true);
@@ -1469,6 +1493,25 @@
     timer.suspend();
     timer.continue = function () { this.gameTimerHandler = 1; };
     timer.suspend = function () { this.gameTimerHandler = 0; };
+
+    // A trap fires through the trigger manager, and the state it puts a
+    // lemming into is shared with climbing, so the trigger is where it can be
+    // told apart. Instance wrapper, like every other hook here.
+    let trapSfxAt = null;
+    const triggerAt = game.triggerManager.trigger.bind(game.triggerManager);
+    game.triggerManager.trigger = (x, y) => {
+      const type = triggerAt(x, y);
+      if (type === Lemmings.TriggerTypes.TRAP) trapSfxAt = { x, y };
+      return type;
+    };
+
+    // The nuke is issued by the panel itself, so it is caught where every
+    // command passes: an instance wrapper, like every other hook here.
+    const queueCommand = game.queueCmmand.bind(game);
+    game.queueCmmand = (cmd) => {
+      if (cmd instanceof Lemmings.CommandNuke) audio.playSfx(SFX.NUKE);
+      return queueCommand(cmd);
+    };
 
     game.getGameTimer().speedFactor = state.speed;
     game.onGameEnd.on((result) => {
@@ -1968,7 +2011,10 @@
                   pivot: dioramaFocusWorld(), active: false };
     }
     const p = pick(e);
-    if (p && p.panelUv) session.gui.onMouseDown(p.panelUv);
+    if (p && p.panelUv) {
+      audio.playSfx(SFX.CLICK);
+      session.gui.onMouseDown(p.panelUv);
+    }
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
     if (e.button === 2) {
@@ -2208,6 +2254,7 @@
     } else if (p.barTool === "no") {
       setVrModal(false);
     } else if (p.panelUv && session) {
+      audio.playSfx(SFX.CLICK);
       session.gui.onMouseDown(p.panelUv);
       session.gui.onMouseUp(p.panelUv);
     } else if (p.simX !== undefined) {

@@ -797,6 +797,8 @@ function buildPortals(level, profile, depthMap, objectZ) {
     }
     portals.push({
       index: i, objectId, geometry, originX, originY, shape: config.shape,
+      // where it sounds from: the middle of the sprite, in sim coordinates
+      sfxX: originX + frame.width / 2, sfxY: originY + frame.height / 2,
       hatch, openness, closedFrame: mapObject.animation.frames[1] || frame,
       animation: mapObject.animation,
       // Both need the slab cleared from behind them. An object sits inside
