@@ -25,6 +25,11 @@ const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
 const VR_GUI_WIDTH = 0.6;
 const VR_GUI_Y = -0.3;
 const VR_GUI_Z = -0.75;
+// The toolbar draws with no depth testing, so on a monitor its relief is sold
+// by shading alone and one canvas pixel of extrusion is enough. Stereo asks
+// for parallax as well, and one pixel of a 0.6m panel is under 2mm at this
+// distance - too shallow for the eyes to call it raised.
+const GUI_VR_RELIEF_DEPTH = 6;
 // Thumbsticks. The deadzone is generous because a resting thumb on a stick
 // that never quite centres would otherwise drift the board all session.
 const VR_STICK_DEADZONE = 0.15;
