@@ -95,9 +95,14 @@
   const guiRoot = new THREE.Group();
   camera.add(guiRoot);
 
-  // ------------------------------------------------- toolbar handles (VR)
-  /** A small square with a drawn icon, sitting above the toolbar. */
-  function makeBarTool(name, draw) {
+  // -------------------------------------------------- icon buttons (VR)
+  // Small drawn squares the controller ray can press: the toolbar's own two
+  // handles, the pause and restart pair over the play area, and the restart
+  // dialog's answers. All hidden outside a session, where the DOM does this.
+  const iconButtons = [];
+
+  /** A small square with a drawn icon. `draw(ctx, state)` paints 64x64. */
+  function makeIconButton(name, parent, draw) {
     const cv = document.createElement("canvas");
     cv.width = cv.height = 64;
     const cx = cv.getContext("2d");
@@ -116,11 +121,12 @@
       tex.needsUpdate = true;
     };
     mesh.userData.repaint();
-    guiRoot.add(mesh);
+    parent.add(mesh);
+    iconButtons.push(mesh);
     return mesh;
   }
 
-  /** Change a handle's state, repainting only when something actually moved. */
+  /** Change a button's state, repainting only when something actually moved. */
   function setBarToolState(mesh, patch) {
     const st = mesh.userData.state;
     let changed = false;
@@ -130,10 +136,11 @@
     if (changed) mesh.userData.repaint();
   }
 
-  /** The beam is on a handle (or has left them all). */
+  /** The beam is on one of them (or has left them all). */
   function setBarToolHover(name) {
-    setBarToolState(barLockBtn, { hovered: name === "lock" });
-    setBarToolState(barMoveBtn, { hovered: name === "move" });
+    for (const b of iconButtons) {
+      setBarToolState(b, { hovered: b.name === "vr-" + name });
+    }
   }
 
   const barToolIcon = (cx, hovered, bg, stroke, body) => {
@@ -159,7 +166,7 @@
 
   // padlock: shackle up and open when the bar floats free, closed when it
   // rides the head
-  const barLockBtn = makeBarTool("bar-lock", (cx, st) => {
+  const barLockBtn = makeIconButton("vr-lock", guiRoot, (cx, st) => {
     const unlocked = st.on;
     barToolIcon(cx, st.hovered,
       unlocked ? (st.hovered ? "#6b6036" : "#4a4326")
@@ -174,7 +181,7 @@
   });
 
   // four-way arrows: grab here to move the bar
-  const barMoveBtn = makeBarTool("bar-move", (cx, st) => {
+  const barMoveBtn = makeIconButton("vr-move", guiRoot, (cx, st) => {
     barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
       c.beginPath();
       c.moveTo(32, 14); c.lineTo(32, 50);
@@ -189,6 +196,117 @@
     });
   });
   const barTools = [barLockBtn, barMoveBtn];
+
+  // Over the play area: pause (which becomes play once it is paused) and
+  // restart. They ride the diorama, so they pan and scale with the board they
+  // belong to, and they are sized in game pixels like everything under it.
+  const vrPauseBtn = makeIconButton("vr-pause", dioramaRoot, (cx, st) => {
+    const paused = st.on;
+    barToolIcon(cx, st.hovered, st.hovered ? "#1d5030" : "#12331d", "#6fce7e", (c) => {
+      c.fillStyle = "#6fce7e";
+      if (paused) {                       // a play triangle: press to resume
+        c.beginPath();
+        c.moveTo(24, 16); c.lineTo(48, 32); c.lineTo(24, 48);
+        c.closePath();
+        c.fill();
+      } else {                            // two bars: press to pause
+        c.fillRect(22, 17, 8, 30);
+        c.fillRect(34, 17, 8, 30);
+      }
+    });
+  });
+
+  const vrRestartBtn = makeIconButton("vr-restart", dioramaRoot, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#4a4326" : "#33301c", "#ffd866", (c) => {
+      c.beginPath();                      // a circling arrow
+      c.arc(32, 33, 14, Math.PI * 0.55, Math.PI * 2.25);
+      c.stroke();
+      c.fillStyle = "#ffd866";            // its head
+      c.beginPath();
+      c.moveTo(38, 10); c.lineTo(50, 20); c.lineTo(35, 25);
+      c.closePath();
+      c.fill();
+    });
+  });
+  const playTools = [vrPauseBtn, vrRestartBtn];
+
+  // Restart asks first. A DOM dialog is invisible in a headset, so the
+  // question is in the scene, head-fixed like the toolbar and squarely in
+  // front: while it is up it takes the ray and nothing behind it can be hit.
+  const vrModal = new THREE.Group();
+  vrModal.visible = false;
+  camera.add(vrModal);
+  const vrModalPanel = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = 512; cv.height = 192;
+    const cx = cv.getContext("2d");
+    cx.fillStyle = "rgba(10, 14, 22, 0.95)";
+    cx.beginPath();
+    cx.roundRect ? cx.roundRect(2, 2, 508, 188, 16) : cx.rect(2, 2, 508, 188);
+    cx.fill();
+    cx.strokeStyle = "#ffd866";
+    cx.lineWidth = 4;
+    cx.stroke();
+    cx.fillStyle = "#f0f3f8";
+    cx.font = "bold 40px monospace";
+    cx.textAlign = "center";
+    cx.fillText("Restart level?", 256, 74);
+    cx.fillStyle = "#8fa1bb";
+    cx.font = "24px monospace";
+    cx.fillText("all progress on it is lost", 256, 112);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: new THREE.CanvasTexture(cv), transparent: true,
+        depthTest: false, depthWrite: false,
+      }));
+    mesh.renderOrder = GUI_ORDER_BAR_TOOL;
+    vrModal.add(mesh);
+    return mesh;
+  })();
+
+  const vrYesBtn = makeIconButton("vr-yes", vrModal, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#1d5030" : "#12331d", "#6fce7e", (c) => {
+      c.beginPath();
+      c.moveTo(16, 33); c.lineTo(28, 45); c.lineTo(49, 20);
+      c.stroke();
+    });
+  });
+  const vrNoBtn = makeIconButton("vr-no", vrModal, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#5a2a2a" : "#33201c", "#e07a6a", (c) => {
+      c.beginPath();
+      c.moveTo(19, 19); c.lineTo(45, 45);
+      c.moveTo(45, 19); c.lineTo(19, 45);
+      c.stroke();
+    });
+  });
+
+  /** Show or hide the restart question. */
+  function setVrModal(open) {
+    vrModal.visible = open && renderer.xr.isPresenting;
+    for (const b of [vrYesBtn, vrNoBtn]) {
+      b.visible = vrModal.visible;
+      setBarToolState(b, { hovered: false });
+    }
+  }
+
+  /** Lay the dialog out in front of the eyes, in metres of camera space. */
+  function layoutVrModal() {
+    const w = VR_MODAL_WIDTH, h = w * 192 / 512;
+    vrModalPanel.scale.set(w, h, 1);
+    vrModalPanel.position.set(0, VR_MODAL_Y, VR_MODAL_Z);
+    const size = VR_BAR_TOOL_SIZE * 1.3;
+    for (const [b, side] of [[vrYesBtn, -1], [vrNoBtn, 1]]) {
+      const hot = b.userData.state.hovered;
+      b.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
+      b.position.set(side * w * 0.22, VR_MODAL_Y - h * 0.62,
+        VR_MODAL_Z + (hot ? size * 0.25 : 0.001));
+    }
+  }
+  // Lay it out now rather than waiting for the first frame: until then these
+  // are metre-wide planes sitting on the camera, and a ray aimed anywhere at
+  // all would hit one.
+  layoutVrModal();
 
   /**
    * The toolbar rides the head by default. Unlocked, it is handed to the
@@ -672,8 +790,17 @@
    *  priority over the play area behind it regardless of distance. */
   function raycastHit(rc) {
     if (!session) return null;
-    // the handles sit above the bar and take the ray before it does
-    for (const b of barTools) {
+    // A question on screen owns the ray: its two answers are the only things
+    // that can be hit, so nothing behind it can be pressed by accident.
+    if (vrModal.visible) {
+      for (const b of [vrYesBtn, vrNoBtn]) {
+        const hit = rc.intersectObject(b, false);
+        if (hit.length) return hit[0];
+      }
+      return null;
+    }
+    // the icon buttons sit over the bar and the board and take the ray first
+    for (const b of barTools.concat(playTools)) {
       if (!b.visible) continue;
       const hit = rc.intersectObject(b, false);
       if (hit.length) return hit[0];
@@ -690,8 +817,9 @@
   function pickWithRaycaster(rc) {
     const hit = raycastHit(rc);
     if (!hit) return null;
-    if (hit.object.name === "bar-lock") return { barTool: "lock" };
-    if (hit.object.name === "bar-move") return { barTool: "move" };
+    if (hit.object.name.startsWith("vr-")) {
+      return { barTool: hit.object.name.slice(3) };
+    }
     if (hit.object.name === "gui-panel") return { panelUv: hit.uv };
     const local = session.worldGroup.worldToLocal(hit.point.clone());
     return { simX: Math.round(local.x), simY: Math.round(local.y) };
@@ -1083,7 +1211,21 @@
     vrWarningSign.scale.set(signW, signH, 1);
     vrWarningSign.position.set(
       startX, session.level.height + signH / 2 + 30, 40);
+    layoutPlayTools();
     return true;
+  }
+
+  /** Pause and restart, in a row above the play area's start position. */
+  function layoutPlayTools() {
+    if (!session) return;
+    const startX = session.level.screenPositionX + 200;
+    const y = session.level.height + VR_PLAY_TOOL_SIZE;
+    for (const [b, side] of [[vrPauseBtn, -1], [vrRestartBtn, 1]]) {
+      const hot = b.userData.state.hovered;
+      b.scale.setScalar(VR_PLAY_TOOL_SIZE * (hot ? VR_BAR_TOOL_HOVER : 1));
+      b.position.set(startX + side * VR_PLAY_TOOL_SIZE * 0.75, y,
+        40 + (hot ? VR_PLAY_TOOL_SIZE * 0.25 : 0));
+    }
   }
 
   // desktop clip planes are in pixel units; in VR they are METERS, and the
@@ -1120,6 +1262,15 @@
         setBarLocked(!barLocked);
       } else if (p.barTool === "move") {
         // nothing on a tap; it is the drag that moves the bar
+      } else if (p.barTool === "pause") {
+        togglePause();
+      } else if (p.barTool === "restart") {
+        setVrModal(true);
+      } else if (p.barTool === "yes") {
+        setVrModal(false);
+        moveLevel(0);
+      } else if (p.barTool === "no") {
+        setVrModal(false);
       } else if (p.panelUv && session) {
         session.gui.onMouseDown(p.panelUv);
         session.gui.onMouseUp(p.panelUv);
@@ -1325,6 +1476,18 @@
       updateHoverRing(); // ring keeps following the hovered lemming
       session.gui.update();
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
+      if (renderer.xr.isPresenting) {
+        // the pause icon tracks the clock however it was stopped - this
+        // button, the panel, the space bar or the catalog
+        setBarToolState(vrPauseBtn,
+          { on: !session.game.getGameTimer().isRunning() });
+        for (const b of playTools) b.visible = true;
+        layoutPlayTools();
+        layoutVrModal();
+      } else if (vrPauseBtn.visible) {
+        for (const b of playTools) b.visible = false;
+        setVrModal(false);
+      }
     }
     if (renderer.xr.isPresenting) {
       // grabs, sticks and hover; the headset pose drives the camera

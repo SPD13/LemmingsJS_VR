@@ -95,6 +95,13 @@ intended start area.
   starts with it, and a trigger pull on the other hand takes it over — that
   pull only moves the beam, since until it had one that hand was aiming at
   nothing you could see
+- **pause and restart, above the play area** — drawn like the toolbar's
+  handles and pressed the same way. Pause becomes a play triangle once the
+  game is stopped, and tracks the clock however it was stopped: this button,
+  the panel, the space bar or the catalog. Restart asks first, in a panel in
+  front of your eyes — a DOM dialog would be invisible in here — and while
+  that question is up its two answers are the only things the ray can hit.
+  They ride the board, so they pan and scale with it.
 - **the two handles above the toolbar** — the padlock unlocks the bar from
   your head: it stays where it is hanging in the room while you look around,
   and a second click hands it back to the head from wherever it has ended up
