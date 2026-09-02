@@ -240,7 +240,26 @@
       c.fill();
     });
   });
-  const playTools = [vrPauseBtn, vrRestartBtn];
+  // Skip-track arrows, flanking restart. Deliberately not bare triangles:
+  // a lone right-pointing triangle is the play icon two buttons along.
+  const navIcon = (cx, st, back) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
+      c.fillStyle = "#cdd6e4";
+      c.fillRect(back ? 18 : 40, 18, 6, 28);   // the bar it stops against
+      c.beginPath();
+      if (back) { c.moveTo(46, 18); c.lineTo(46, 46); c.lineTo(27, 32); }
+      else { c.moveTo(18, 18); c.lineTo(18, 46); c.lineTo(37, 32); }
+      c.closePath();
+      c.fill();
+    });
+  };
+  const vrPrevBtn = makeIconButton("vr-prev", dioramaRoot,
+    (cx, st) => navIcon(cx, st, true));
+  const vrNextBtn = makeIconButton("vr-next", dioramaRoot,
+    (cx, st) => navIcon(cx, st, false));
+
+  // pause set aside on the left, then the three that leave the level
+  const playTools = [vrPauseBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
 
   // Restart asks first. A DOM dialog is invisible in a headset, so the
   // question is in the scene, head-fixed like the toolbar and squarely in
@@ -252,27 +271,32 @@
     const cv = document.createElement("canvas");
     cv.width = 512; cv.height = 192;
     const cx = cv.getContext("2d");
-    cx.fillStyle = "rgba(10, 14, 22, 0.95)";
-    cx.beginPath();
-    cx.roundRect ? cx.roundRect(2, 2, 508, 188, 16) : cx.rect(2, 2, 508, 188);
-    cx.fill();
-    cx.strokeStyle = "#ffd866";
-    cx.lineWidth = 4;
-    cx.stroke();
-    cx.fillStyle = "#f0f3f8";
-    cx.font = "bold 40px monospace";
-    cx.textAlign = "center";
-    cx.fillText("Restart level?", 256, 74);
-    cx.fillStyle = "#8fa1bb";
-    cx.font = "24px monospace";
-    cx.fillText("all progress on it is lost", 256, 112);
+    const tex = new THREE.CanvasTexture(cv);
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
-        map: new THREE.CanvasTexture(cv), transparent: true,
-        depthTest: false, depthWrite: false,
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
       }));
     mesh.renderOrder = GUI_ORDER_MODAL;
+    mesh.userData.ask = (title) => {
+      cx.clearRect(0, 0, 512, 192);
+      cx.fillStyle = "rgba(10, 14, 22, 0.95)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, 508, 188, 16) : cx.rect(2, 2, 508, 188);
+      cx.fill();
+      cx.strokeStyle = "#ffd866";
+      cx.lineWidth = 4;
+      cx.stroke();
+      cx.fillStyle = "#f0f3f8";
+      cx.font = "bold 38px monospace";
+      cx.textAlign = "center";
+      cx.fillText(title, 256, 76);
+      cx.fillStyle = "#8fa1bb";
+      cx.font = "24px monospace";
+      cx.fillText("progress on this level is lost", 256, 114);
+      tex.needsUpdate = true;
+    };
+    mesh.userData.ask("Restart level?");
     vrModal.add(mesh);
     return mesh;
   })();
@@ -305,7 +329,15 @@
       setBarToolState(b, { hovered: false });
     }
     if (vrModal.visible) holdSim("vr-modal");
-    else releaseSim("vr-modal");
+    else { vrConfirmAction = null; releaseSim("vr-modal"); }
+  }
+
+  let vrConfirmAction = null;
+  /** The in-scene twin of askConfirm: the same three questions, in a headset. */
+  function askVrConfirm(title, action) {
+    vrModalPanel.userData.ask(title);
+    setVrModal(true);
+    vrConfirmAction = action; // after setVrModal, which clears it on close
   }
 
   /** Lay the dialog out in front of the eyes, in metres of camera space. */
@@ -1233,17 +1265,19 @@
     return true;
   }
 
-  /** Pause and restart, in a row above the play area's start position. */
+  /** The row above the play area's start position, centred on it. */
   function layoutPlayTools() {
     if (!session) return;
     const startX = session.level.screenPositionX + 200;
     const y = session.level.height + VR_PLAY_TOOL_SIZE;
-    for (const [b, side] of [[vrPauseBtn, -1], [vrRestartBtn, 1]]) {
+    const step = VR_PLAY_TOOL_SIZE * 1.15;
+    const first = -(playTools.length - 1) / 2;
+    playTools.forEach((b, i) => {
       const hot = b.userData.state.hovered;
       b.scale.setScalar(VR_PLAY_TOOL_SIZE * (hot ? VR_BAR_TOOL_HOVER : 1));
-      b.position.set(startX + side * VR_PLAY_TOOL_SIZE * 0.75, y,
+      b.position.set(startX + (first + i) * step, y,
         40 + (hot ? VR_PLAY_TOOL_SIZE * 0.25 : 0));
-    }
+    });
   }
 
   // desktop clip planes are in pixel units; in VR they are METERS, and the
@@ -1283,10 +1317,15 @@
       } else if (p.barTool === "pause") {
         togglePause();
       } else if (p.barTool === "restart") {
-        setVrModal(true);
+        askVrConfirm("Restart level?", () => moveLevel(0));
+      } else if (p.barTool === "prev") {
+        askVrConfirm("Go back a level?", () => moveLevel(-1));
+      } else if (p.barTool === "next") {
+        askVrConfirm("Skip to the next level?", () => moveLevel(1));
       } else if (p.barTool === "yes") {
+        const act = vrConfirmAction;
         setVrModal(false);
-        moveLevel(0);
+        if (act) act();
       } else if (p.barTool === "no") {
         setVrModal(false);
       } else if (p.panelUv && session) {
