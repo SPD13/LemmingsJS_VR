@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { createStaticServer } = require("./server");
+const { reclaimPort } = require("./port");
 const selfsigned = require("selfsigned");
 
 const WEB_ROOT = path.join(__dirname, "..");
@@ -21,6 +22,7 @@ let win = null;
 let server = null;
 let config = { port: DEFAULT_PORT, https: true };
 let lastError = null;
+let notice = null;   // something worth saying that is not a failure
 
 function configPath() {
   return path.join(app.getPath("userData"), "launcher-config.json");
@@ -109,6 +111,7 @@ function status() {
     internalUrl: scheme + "://localhost:" + config.port + "/3d/",
     externalUrl: ip ? scheme + "://" + ip + ":" + config.port + "/3d/" : null,
     error: lastError,
+    notice,
   };
 }
 
@@ -119,20 +122,47 @@ function broadcast() {
 async function startServer() {
   if (server) return;
   lastError = null;
+  notice = null;
+  let tls = null;
   try {
-    const tls = config.https ? await ensureCert() : null;
+    tls = config.https ? await ensureCert() : null;
     server = await createStaticServer(WEB_ROOT, config.port, tls);
   } catch (e) {
     server = null;
-    lastError = e.code === "EADDRINUSE"
-      ? "port " + config.port + " is already in use"
-      : e.message;
+    if (e.code !== "EADDRINUSE") {
+      lastError = e.message;
+      broadcast();
+      return;
+    }
+    // Ours from a previous run, most likely: a crash or a hard quit leaves the
+    // server holding the port, and the only way out was a terminal. Clear it
+    // and start again - but only if it really is ours. Anything else on the
+    // port is left strictly alone and named in the error.
+    const taken = await reclaimPort(config.port, __dirname);
+    if (taken.killed.length > 0 && taken.free) {
+      try {
+        server = await createStaticServer(WEB_ROOT, config.port, tls);
+        notice = "port " + config.port + " was still held by a previous " +
+          "launcher (pid " + taken.killed.join(", ") + ") — stopped it and " +
+          "started fresh";
+      } catch (e2) {
+        server = null;
+        lastError = e2.message;
+      }
+    } else if (taken.skipped.length > 0) {
+      const other = taken.skipped[0];
+      lastError = "port " + config.port + " is in use by " + other.name +
+        " (pid " + other.pid + "), which is not this launcher — left alone";
+    } else {
+      lastError = "port " + config.port + " is already in use";
+    }
   }
   broadcast();
 }
 
 async function stopServer() {
   if (!server) return;
+  notice = null;
   const s = server;
   server = null;
   await s.close();
