@@ -65,8 +65,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   and entering a level opens the editor. Clears are per-browser, in
   localStorage. Classic packs are scanned once for level names and tilesets
   ("rescan" repeats it); miniatures render lazily as you scroll. Levels of a
-  NeoLemmix pack are listed but not yet playable — the Lemmix engine is in
-  progress (`Doc/NEOLEMMIX_PLAN.md`).
+  NeoLemmix pack play through the Lemmix engine (`lemmix/`), a port of
+  NeoLemmix's own mechanics, with NeoLemmix's skill panel in place of the
+  DOS one; they need the styles and player assets described in the root
+  README under "Levels and assets".
 - "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
