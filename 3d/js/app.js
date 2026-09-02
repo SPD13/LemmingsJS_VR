@@ -477,22 +477,38 @@
   }
   // ------------------------------------------------------ world catalog (VR)
   /**
-   * The headset's twin of the DOM library, in the dialog's plane: one tile per
-   * world, with its miniature, how much of it has been cleared, and a green
-   * ground once all of it has. Picking one enters its first level.
+   * The headset's twin of the DOM library, in the dialog's plane: every level
+   * of both games in the order they are played, under a heading per
+   * difficulty, each tile carrying its miniature and - once it has been
+   * cleared - a green ground and the best time. Picking one enters it.
    *
-   * It is one canvas rather than a mesh per tile - the tiles never move, so a
-   * single texture and a UV lookup does the whole grid - with the close button
-   * as the only separate target, so it can grow under the beam like the rest.
+   * The list is far taller than the window, so it scrolls: either thumbstick
+   * drives it while the catalog is up, and neither one moves the board behind
+   * it. It is one canvas rather than a mesh per tile - a single texture, a
+   * scroll offset and a UV lookup do the whole grid - with the close button as
+   * the only separate target, so it can grow under the beam like the rest.
    */
   const VR_CAT_W = 1024, VR_CAT_H = 640;  // canvas pixels
-  const VR_CAT_PAD = 26;                  // margin round the grid
+  const VR_CAT_PAD = 26;                  // margin round the list
   const VR_CAT_TOP = 92;                  // below the heading
   const VR_CAT_GAP = 14;                  // between tiles
-  const VR_CAT_COLS = 3;
-  const VR_CAT_THUMB_H = 30;              // a level is ~10:1, so it draws thin
+  const VR_CAT_COLS = 4;
+  const VR_CAT_THUMB_H = 26;              // a level is ~10:1, so it draws thin
+  const VR_CAT_TILE_H = 126;              // one row of levels
+  const VR_CAT_BAND_H = 48;               // a difficulty's heading
+  const VR_CAT_BAR_W = 10;                // the scrollbar down the right edge
+  const VR_CAT_SCROLL = 900;              // canvas px/second at full stick
+  // The window the list scrolls behind.
+  const VR_CAT_VIEW_X = VR_CAT_PAD;
+  const VR_CAT_VIEW_Y = VR_CAT_TOP;
+  const VR_CAT_VIEW_W = VR_CAT_W - 2 * VR_CAT_PAD - VR_CAT_BAR_W - 8;
+  const VR_CAT_VIEW_H = VR_CAT_H - VR_CAT_TOP - VR_CAT_PAD;
 
-  let vrCatalogWorlds = [];
+  let vrCatalogItems = [];   // every level, in the order the games play them
+  let vrCatalogCells = [];   // one per item, in the list's own coordinates
+  let vrCatalogBands = [];   // the difficulty headings between them
+  let vrCatalogHeight = 0;   // how tall the whole list is
+  let vrCatalogScroll = 0;   // how far down it we are
   let vrCatalogHover = -1;
   let vrCatalogNote = "";
 
@@ -500,21 +516,60 @@
   vrCatalog.visible = false;
   camera.add(vrCatalog);
 
-  /** Where each world's tile sits on the canvas. Painting and picking share it. */
-  function vrCatalogCells() {
-    const n = vrCatalogWorlds.length;
-    if (n === 0) return [];
-    const cols = Math.min(VR_CAT_COLS, n);
-    const rows = Math.ceil(n / cols);
-    const cw = (VR_CAT_W - 2 * VR_CAT_PAD) / cols;
-    const ch = (VR_CAT_H - VR_CAT_TOP - VR_CAT_PAD) / rows;
-    return vrCatalogWorlds.map((world, i) => ({
-      world, i,
-      x: VR_CAT_PAD + (i % cols) * cw + VR_CAT_GAP / 2,
-      y: VR_CAT_TOP + Math.floor(i / cols) * ch + VR_CAT_GAP / 2,
-      w: cw - VR_CAT_GAP,
-      h: ch - VR_CAT_GAP,
-    }));
+  /**
+   * Lay the whole list out once, in its own coordinates: a heading wherever
+   * the difficulty changes, then rows of level tiles under it. Painting and
+   * picking both work from this, offset by the scroll.
+   */
+  function layoutVrCatalogList() {
+    vrCatalogCells = [];
+    vrCatalogBands = [];
+    const colW = VR_CAT_VIEW_W / VR_CAT_COLS;
+    let y = 0;              // the top of whatever is placed next
+    let col = VR_CAT_COLS;  // == VR_CAT_COLS: no row is open
+    let band = null;
+    vrCatalogItems.forEach((item, i) => {
+      const key = item.gameType + "/" + item.group;
+      if (key !== band) {
+        band = key;
+        if (col < VR_CAT_COLS) { y += VR_CAT_TILE_H; col = VR_CAT_COLS; }
+        vrCatalogBands.push({ label: item.band, y, h: VR_CAT_BAND_H });
+        y += VR_CAT_BAND_H;
+      }
+      if (col >= VR_CAT_COLS) col = 0; // this item opens a row at y
+      vrCatalogCells.push({
+        item, i,
+        x: VR_CAT_VIEW_X + col * colW + VR_CAT_GAP / 2,
+        y: y + VR_CAT_GAP / 2,
+        w: colW - VR_CAT_GAP,
+        h: VR_CAT_TILE_H - VR_CAT_GAP,
+      });
+      if (++col >= VR_CAT_COLS) { y += VR_CAT_TILE_H; col = VR_CAT_COLS; }
+    });
+    if (col < VR_CAT_COLS) y += VR_CAT_TILE_H; // the last row, left part-full
+    vrCatalogHeight = y;
+    vrCatalogScrollTo(vrCatalogScroll);
+  }
+
+  /** Move the list, clamped to its ends. Returns true if it actually moved. */
+  function vrCatalogScrollTo(next) {
+    const max = Math.max(0, vrCatalogHeight - VR_CAT_VIEW_H);
+    const clamped = Math.max(0, Math.min(max, next));
+    if (clamped === vrCatalogScroll) return false;
+    vrCatalogScroll = clamped;
+    return true;
+  }
+
+  /** Scroll by a number of canvas pixels, repainting if anything moved. */
+  function scrollVrCatalog(delta) {
+    if (vrCatalogScrollTo(vrCatalogScroll + delta)) paintVrCatalog();
+  }
+
+  /** Put a level in view, roughly a third of the way down. */
+  function vrCatalogRevealItem(index) {
+    const cell = vrCatalogCells[index];
+    if (!cell) return;
+    vrCatalogScrollTo(cell.y - VR_CAT_VIEW_H / 3);
   }
 
   const vrCatalogPanel = (() => {
@@ -529,6 +584,15 @@
       }));
     mesh.name = "vr-worldpanel";
     mesh.renderOrder = GUI_ORDER_MODAL;
+    /** Trim a label to the width it has, with an ellipsis when it is cut. */
+    const fit = (text, maxW) => {
+      if (cx.measureText(text).width <= maxW) return text;
+      let cut = text;
+      while (cut.length > 1 && cx.measureText(cut + "…").width > maxW) {
+        cut = cut.slice(0, -1);
+      }
+      return cut + "…";
+    };
     mesh.userData.paint = () => {
       cx.clearRect(0, 0, VR_CAT_W, VR_CAT_H);
       cx.fillStyle = "rgba(10, 14, 22, 0.96)";
@@ -544,15 +608,37 @@
       cx.fillStyle = "#f0f3f8";
       cx.font = "bold 36px monospace";
       cx.fillText("WORLDS", VR_CAT_PAD + 6, 58);
-      if (vrCatalogNote) {
-        cx.fillStyle = "#8fa1bb";
-        cx.font = "24px monospace";
-        cx.fillText(vrCatalogNote, VR_CAT_PAD + 190, 58);
+      cx.fillStyle = "#8fa1bb";
+      cx.font = "22px monospace";
+      cx.fillText(vrCatalogNote || "stick up / down to scroll",
+        VR_CAT_PAD + 190, 56);
+
+      // the list itself, clipped to its window and slid by the scroll
+      cx.save();
+      cx.beginPath();
+      cx.rect(VR_CAT_VIEW_X - 4, VR_CAT_VIEW_Y,
+        VR_CAT_VIEW_W + 8, VR_CAT_VIEW_H);
+      cx.clip();
+      cx.translate(0, VR_CAT_VIEW_Y - vrCatalogScroll);
+      const top = vrCatalogScroll, bottom = top + VR_CAT_VIEW_H;
+
+      for (const band of vrCatalogBands) {
+        if (band.y + band.h < top || band.y > bottom) continue;
+        cx.fillStyle = "#7fd6e8";
+        cx.font = "bold 24px monospace";
+        cx.fillText(band.label, VR_CAT_VIEW_X + VR_CAT_GAP / 2, band.y + 32);
+        cx.strokeStyle = "rgba(127, 214, 232, 0.35)";
+        cx.lineWidth = 2;
+        cx.beginPath();
+        cx.moveTo(VR_CAT_VIEW_X + VR_CAT_GAP / 2, band.y + 42);
+        cx.lineTo(VR_CAT_VIEW_X + VR_CAT_VIEW_W - VR_CAT_GAP / 2, band.y + 42);
+        cx.stroke();
       }
 
-      for (const cell of vrCatalogCells()) {
-        const w = cell.world;
-        const done = w.done === w.total;
+      for (const cell of vrCatalogCells) {
+        if (cell.y + cell.h < top || cell.y > bottom) continue;
+        const it = cell.item;
+        const done = it.best !== null;
         const hot = cell.i === vrCatalogHover;
         cx.fillStyle = done ? (hot ? "#2c7042" : "#1d4a2b")
                             : (hot ? "#2b3548" : "#19202c");
@@ -560,29 +646,51 @@
         cx.roundRect ? cx.roundRect(cell.x, cell.y, cell.w, cell.h, 10)
                      : cx.rect(cell.x, cell.y, cell.w, cell.h);
         cx.fill();
-        if (hot) {
-          cx.strokeStyle = "#ffffff";
+        if (hot || it.current) {
+          cx.strokeStyle = hot ? "#ffffff" : "#ffd866";
           cx.lineWidth = 3;
           cx.stroke();
         }
         // the miniature, letterboxed across the tile's top
-        const tw = cell.w - 24;
-        if (w.thumb) {
+        const tw = cell.w - 20;
+        if (it.thumb) {
           cx.imageSmoothingEnabled = false;
-          cx.drawImage(w.thumb, cell.x + 12, cell.y + 14, tw, VR_CAT_THUMB_H);
+          cx.drawImage(it.thumb, cell.x + 10, cell.y + 10, tw, VR_CAT_THUMB_H);
         } else {
           cx.fillStyle = "rgba(255,255,255,0.06)";
-          cx.fillRect(cell.x + 12, cell.y + 14, tw, VR_CAT_THUMB_H);
+          cx.fillRect(cell.x + 10, cell.y + 10, tw, VR_CAT_THUMB_H);
+          vrCatalogWantsThumb(it, Math.round(tw));
         }
         cx.fillStyle = "#f0f3f8";
-        cx.font = "bold 30px monospace";
-        cx.fillText(w.name, cell.x + 12, cell.y + 84);
-        cx.fillStyle = "#8fa1bb";
-        cx.font = "20px monospace";
-        cx.fillText(w.game, cell.x + 12, cell.y + 112);
+        cx.font = "bold 24px monospace";
+        cx.fillText(fit(it.label, tw), cell.x + 10, cell.y + 62);
+        cx.fillStyle = "#c3ccda";
+        cx.font = "17px monospace";
+        cx.fillText(fit(it.name, tw), cell.x + 10, cell.y + 84);
+        // the world it is built from, and the record if there is one
         cx.fillStyle = done ? "#6fce7e" : "#8fa1bb";
-        cx.fillText(w.done + " / " + w.total + " cleared",
-          cell.x + 12, cell.y + 140);
+        cx.fillText(fit(
+          (done ? "✔ " + LevelProgress.format(it.best) + " · " : "") + it.set,
+          tw), cell.x + 10, cell.y + 104);
+      }
+      cx.restore();
+
+      // how far down the list we are
+      const max = Math.max(0, vrCatalogHeight - VR_CAT_VIEW_H);
+      if (max > 0) {
+        const bx = VR_CAT_W - VR_CAT_PAD - VR_CAT_BAR_W;
+        cx.fillStyle = "rgba(255,255,255,0.07)";
+        cx.beginPath();
+        cx.roundRect ? cx.roundRect(bx, VR_CAT_VIEW_Y, VR_CAT_BAR_W, VR_CAT_VIEW_H, 5)
+                     : cx.rect(bx, VR_CAT_VIEW_Y, VR_CAT_BAR_W, VR_CAT_VIEW_H);
+        cx.fill();
+        const th = Math.max(40, VR_CAT_VIEW_H * VR_CAT_VIEW_H / vrCatalogHeight);
+        const ty = VR_CAT_VIEW_Y + (VR_CAT_VIEW_H - th) * (vrCatalogScroll / max);
+        cx.fillStyle = "#7fd6e8";
+        cx.beginPath();
+        cx.roundRect ? cx.roundRect(bx, ty, VR_CAT_BAR_W, th, 5)
+                     : cx.rect(bx, ty, VR_CAT_BAR_W, th);
+        cx.fill();
       }
       tex.needsUpdate = true;
     };
@@ -606,12 +714,31 @@
   /** Which tile the beam is on, from the panel's own UV. */
   function vrCatalogTileAt(uv) {
     if (!uv) return -1;
-    const x = uv.x * VR_CAT_W, y = (1 - uv.y) * VR_CAT_H;
-    for (const cell of vrCatalogCells()) {
+    const x = uv.x * VR_CAT_W, py = (1 - uv.y) * VR_CAT_H;
+    if (py < VR_CAT_VIEW_Y || py > VR_CAT_VIEW_Y + VR_CAT_VIEW_H) return -1;
+    const y = py - VR_CAT_VIEW_Y + vrCatalogScroll; // into the list's own space
+    for (const cell of vrCatalogCells) {
       if (x >= cell.x && x <= cell.x + cell.w &&
           y >= cell.y && y <= cell.y + cell.h) return cell.i;
     }
     return -1;
+  }
+
+  /**
+   * Ask for a tile's miniature the first time it is drawn. Levels are loaded
+   * to make one, so the list only pays for what has actually been looked at -
+   * there are a couple of hundred of them.
+   */
+  function vrCatalogWantsThumb(item, width) {
+    if (item.thumbReq) return;
+    item.thumbReq = true;
+    library.thumbnail(item.gameType, item.group, item.level,
+      width, VR_CAT_THUMB_H)
+      .then((canvas) => {
+        item.thumb = canvas;
+        if (vrCatalog.visible) paintVrCatalog();
+      })
+      .catch(() => { /* the tile keeps its blank plate */ });
   }
 
   function setVrCatalogHover(index) {
@@ -621,9 +748,10 @@
   }
 
   /**
-   * Read the world list and each world's record. Done on every open, not
-   * cached: the scan behind it is (in localStorage), but how much of a world
-   * has been cleared changes as the player plays.
+   * Every level of both games, in the order they are played: game, then
+   * difficulty, then level. The scan behind it is cached; which levels have
+   * been cleared is re-read on each open, since that changes as the player
+   * plays.
    */
   async function loadVrCatalog() {
     vrCatalogNote = "scanning levels…";
@@ -637,40 +765,43 @@
       console.error(err);
       return;
     }
-    const worlds = [];
+    const items = [];
     for (const gameType of Object.keys(mapping).map(Number)) {
-      const names = WORLD_NAMES[gameType] || [];
+      const config = await factory.getConfig(gameType).catch(() => null);
+      const groupNames = (config && config.level.groups) || [];
+      const gameLabel = GAME_LABELS[gameType] || "game " + gameType;
+      const setNames = WORLD_NAMES[gameType] || [];
+      const levels = [];
       for (const world of mapping[gameType] || []) {
-        worlds.push({
-          gameType,
-          levels: world.levels,
-          name: names[world.set] || "World " + world.set,
-          game: GAME_LABELS[gameType] || "game " + gameType,
-          done: world.levels.filter(
-            (e) => LevelProgress.best(gameType, e.group, e.level) !== null).length,
-          total: world.levels.length,
-          thumb: null,
+        for (const entry of world.levels) {
+          levels.push({ entry, set: setNames[world.set] });
+        }
+      }
+      // the scan walks the games tileset by tileset; play order is by group
+      levels.sort((a, b) =>
+        a.entry.group - b.entry.group || a.entry.level - b.entry.level);
+      for (const { entry, set } of levels) {
+        const group = groupNames[entry.group] || "Group " + (entry.group + 1);
+        items.push({
+          gameType, group: entry.group, level: entry.level,
+          band: gameLabel + " · " + group,
+          label: group + " " + (entry.level + 1),
+          name: entry.name || "",
+          set: set || "",
+          best: LevelProgress.best(gameType, entry.group, entry.level),
+          current: gameType === state.gameType && entry.group === state.group &&
+            entry.level === state.level,
+          thumb: null, thumbReq: false,
         });
       }
     }
-    vrCatalogWorlds = worlds;
+    vrCatalogItems = items;
     vrCatalogNote = "";
+    layoutVrCatalogList();
+    // open on the level being played, so the list starts where the player is
+    const here = items.findIndex((it) => it.current);
+    if (here >= 0) vrCatalogRevealItem(here);
     paintVrCatalog();
-    // miniatures arrive as they load; each one repaints the grid
-    const width = Math.round(
-      (VR_CAT_W - 2 * VR_CAT_PAD) / Math.min(VR_CAT_COLS, worlds.length || 1)
-      - VR_CAT_GAP - 24);
-    for (const world of worlds) {
-      const first = world.levels[0];
-      if (!first) continue;
-      library.thumbnail(world.gameType, first.group, first.level,
-        width, VR_CAT_THUMB_H)
-        .then((canvas) => {
-          world.thumb = canvas;
-          if (vrCatalog.visible) paintVrCatalog();
-        })
-        .catch(() => { /* tile keeps its blank plate */ });
-    }
   }
 
   /** Show or hide the catalog, holding the clock while the player reads it. */
@@ -1468,6 +1599,8 @@
   renderer.domElement.addEventListener("wheel", (e) => {
     if (!vrMouseFallback() || !session) return;
     e.preventDefault();
+    // the catalog scrolls instead, the way the sticks scroll it in a headset
+    if (vrCatalog.visible) { scrollVrCatalog(e.deltaY); return; }
     const cur = dioramaRoot.scale.x;
     const next = THREE.MathUtils.clamp(
       cur * Math.pow(0.998, e.deltaY),
@@ -1711,11 +1844,10 @@
       } else if (p.barTool === "catclose") {
         setVrCatalog(false);
       } else if (p.barTool === "worldpanel") {
-        const world = vrCatalogWorlds[p.tile];
-        if (world) {
-          const first = world.levels[0];
+        const item = vrCatalogItems[p.tile];
+        if (item) {
           setVrCatalog(false);
-          library.enterWorld(world.gameType, first.group, first.level);
+          library.enterWorld(item.gameType, item.group, item.level);
         }
       } else if (p.barTool === "yes") {
         const act = vrConfirmAction;
@@ -1740,9 +1872,15 @@
       guiRoot.position.copy(barDragFrom)
         .add(worldDelta.clone().applyQuaternion(q.invert()));
     },
-    // the pointing hand's stick pans, the other tilts (vr.js decides which)
+    // the pointing hand's stick pans, the other tilts (vr.js decides which) -
+    // except while the catalog is up, when either stick scrolls its list and
+    // neither one moves the board behind it
     onStick: (role, x, y, seconds) => {
       if (!session) return;
+      if (vrCatalog.visible) {
+        scrollVrCatalog(-y * VR_CAT_SCROLL * seconds);
+        return;
+      }
       if (role === "tilt") tiltDioramaBy(x, y, seconds);
       else panDioramaBy(x, y, seconds);
     },

@@ -124,11 +124,17 @@ intended start area.
   here, and while that question is up its two answers are the only things the
   ray can hit. Beside them a globe opens the world catalog.
 - **the world catalog** — the headset's twin of the library, in the dialog's
-  plane: one tile per world with its miniature, how much of it you have
-  cleared, and a green ground once you have cleared all of it. Picking a tile
-  enters that world's first level; the close button in its top-right corner
-  leaves the game as it was. Like the questions, it owns the ray while it is
-  up, and it holds the clock.
+  plane: every level of both games in the order they are played, under a
+  heading per difficulty, each tile carrying its miniature, the world it is
+  built from and — once you have cleared it — a green ground and your best
+  time. It opens on the level you are playing, outlined in yellow. Picking a
+  tile enters that level; the close button in its top-right corner leaves the
+  game as it was. Like the questions, it owns the ray while it is up, and it
+  holds the clock.
+- **either thumbstick, while the catalog is up** — scrolls the list, up and
+  down. Neither stick pans or tilts the board while it is open, and a press
+  that lands on any button no longer drags the board if the hand wanders
+  while it is held.
 - **trigger + move** — drag the board about: it follows the hand in all three
   axes, so pulling back toward yourself walks it in along Z and pushing away
   sends it out. A click only counts as a click if the hand stayed put, so a
@@ -137,7 +143,7 @@ intended start area.
   (yaw about the vertical, pitch about your own horizontal): the same two
   moves as right-drag and left-drag on the desktop, at 0.8&nbsp;m/s and 60°/s
   at full deflection. They swap with the beam, so the pointing thumb always
-  pans
+  pans. With the catalog up, both of them scroll it instead
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of

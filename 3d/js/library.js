@@ -155,9 +155,15 @@ class WorldLibrary {
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
-    const pending = this.factory.getGameResources(gameType)
-      .then((res) => res.getLevel(group, level))
-      .then((lvl) => { this._drawMiniature(canvas, lvl); return canvas; });
+    // on the same queue the tile miniatures use: a caller that reveals a
+    // screenful at once should load them one after another, not all at once
+    const pending = this._loadChain.then(async () => {
+      const resources = await this.factory.getGameResources(gameType);
+      const level_ = await resources.getLevel(group, level);
+      this._drawMiniature(canvas, level_);
+      return canvas;
+    });
+    this._loadChain = pending.catch(() => {}); // a failure must not stall it
     this._thumbs.set(key, pending);
     return pending;
   }
