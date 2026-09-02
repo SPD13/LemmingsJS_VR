@@ -1388,6 +1388,23 @@
         });
       }
     }
+    // water: a translucent body under the wave sprites, which keep animating
+    // on top of it. Deep enough to fill the slab, so a drowning lemming is
+    // seen through it rather than in front of it.
+    for (const pool of state.doors ? waterObjectsFrom(level, profile, OBJECT_Z) : []) {
+      const w = pool.x1 - pool.x0, h = pool.y1 - pool.y0, d = pool.z1 - pool.z0;
+      if (w <= 0 || h <= 0 || d <= 0) continue;
+      const mesh = new THREE.Mesh(
+        resources.track(new THREE.BoxGeometry(w, h, d)),
+        resources.track(new THREE.MeshBasicMaterial({
+          color: pool.colour, transparent: true, opacity: WATER_OPACITY,
+          depthWrite: false,
+        })));
+      mesh.position.set(pool.x0 + w / 2, pool.y0 + h / 2, pool.z0 + d / 2);
+      mesh.renderOrder = 1; // after the terrain, so it tints what is behind it
+      worldGroup.add(mesh);
+    }
+
     const lemmingPool = new BillboardPool(worldGroup, materialCache);
     const objectPool = new BillboardPool(worldGroup, materialCache);
     const particles = new ParticleCloud(worldGroup, LEMMING_Z + 1);
