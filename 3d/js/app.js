@@ -288,6 +288,8 @@
       b.visible = vrModal.visible;
       setBarToolState(b, { hovered: false });
     }
+    if (vrModal.visible) holdSim("vr-modal");
+    else releaseSim("vr-modal");
   }
 
   /** Lay the dialog out in front of the eyes, in metres of camera space. */
@@ -1304,6 +1306,44 @@
     hud.pauseBtn.textContent = timer.isRunning() ? "pause" : "resume";
   }
 
+  // ------------------------------------------------------- holding the sim
+  /**
+   * Anything on screen that the player has to deal with holds the clock: the
+   * catalog, and either restart question. Lemmings should not be walking off
+   * ledges behind a dialog.
+   *
+   * Only what was stopped gets restarted. The first holder remembers whether
+   * the clock was running, and the last one to leave puts it back the way it
+   * found it - so a game the player had already paused stays paused, and two
+   * overlapping holders do not resume it between them.
+   */
+  const simHolders = new Set();
+  let simWasRunning = false;
+
+  function syncPauseLabel() {
+    if (!session) return;
+    hud.pauseBtn.textContent =
+      session.game.getGameTimer().isRunning() ? "pause" : "resume";
+  }
+
+  function holdSim(who) {
+    if (!session || simHolders.has(who)) return;
+    const timer = session.game.getGameTimer();
+    if (simHolders.size === 0) {
+      simWasRunning = timer.isRunning();
+      if (simWasRunning) timer.suspend();
+    }
+    simHolders.add(who);
+    syncPauseLabel();
+  }
+
+  function releaseSim(who) {
+    if (!simHolders.delete(who) || simHolders.size > 0) return;
+    if (session && simWasRunning) session.game.getGameTimer().continue();
+    simWasRunning = false;
+    syncPauseLabel();
+  }
+
   // -------------------------------------------------- confirmation dialog
   // The desktop twin of the in-scene question the VR restart asks.
   const confirmDom = {
@@ -1323,10 +1363,12 @@
     confirmAction = action;
     confirmDom.panel.hidden = false;
     confirmDom.yes.focus();
+    holdSim("confirm");
   }
   function closeConfirm() {
     confirmAction = null;
     confirmDom.panel.hidden = true;
+    releaseSim("confirm");
   }
   confirmDom.yes.addEventListener("click", () => {
     const act = confirmAction;
@@ -1554,7 +1596,6 @@
   }
 
   // world library: catalog of tilesets, click-to-enter for tagging sessions
-  let libraryHeldSim = false; // true while the catalog is the reason it stopped
   const library = new WorldLibrary(factory, async (gameType, group, level) => {
     state.gameType = gameType;
     state.group = group;
@@ -1564,19 +1605,8 @@
     // workbench opens the editor with it
     if (state.edit && session && session.editor) session.editor.enable();
   }, (open) => {
-    // Hold the sim while the catalog is up - lemmings should not be walking
-    // off ledges behind it. Only resume what we stopped: a game the player
-    // had already paused stays paused when the catalog closes.
-    if (!session) return;
-    const timer = session.game.getGameTimer();
-    if (open) {
-      libraryHeldSim = timer.isRunning();
-      if (libraryHeldSim) timer.suspend();
-    } else if (libraryHeldSim) {
-      libraryHeldSim = false;
-      timer.continue();
-    }
-    hud.pauseBtn.textContent = timer.isRunning() ? "pause" : "resume";
+    if (open) holdSim("library");
+    else releaseSim("library");
   });
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
   renderMode(); // billing, catalog labels and editor availability
