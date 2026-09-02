@@ -218,12 +218,24 @@
 
   const vrRestartBtn = makeIconButton("vr-restart", dioramaRoot, (cx, st) => {
     barToolIcon(cx, st.hovered, st.hovered ? "#4a4326" : "#33301c", "#ffd866", (c) => {
-      c.beginPath();                      // a circling arrow
-      c.arc(32, 33, 14, Math.PI * 0.55, Math.PI * 2.25);
-      c.stroke();
-      c.fillStyle = "#ffd866";            // its head
+      // An arrow curving right round: five sixths of a circle, with the head
+      // filling the gap. Both ends come from the same angles, so the head
+      // always sits on the arc's tip and points the way it was travelling -
+      // spelling the triangle out by hand is what left it adrift before.
+      const mx = 32, my = 32, r = 13;
+      const from = Math.PI / 6, to = from + Math.PI * 5 / 3;
       c.beginPath();
-      c.moveTo(38, 10); c.lineTo(50, 20); c.lineTo(35, 25);
+      c.arc(mx, my, r, from, to);
+      c.stroke();
+      const ex = mx + r * Math.cos(to), ey = my + r * Math.sin(to);
+      const tx = -Math.sin(to), ty = Math.cos(to);   // the way it is going
+      const nx = Math.cos(to), ny = Math.sin(to);    // across the stroke
+      const head = 9, half = 6.5;
+      c.fillStyle = "#ffd866";
+      c.beginPath();
+      c.moveTo(ex + tx * head, ey + ty * head);      // the point
+      c.lineTo(ex + nx * half, ey + ny * half);
+      c.lineTo(ex - nx * half, ey - ny * half);
       c.closePath();
       c.fill();
     });
