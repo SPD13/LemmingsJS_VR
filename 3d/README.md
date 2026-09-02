@@ -121,8 +121,13 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   behind the doors. Each door is a slab one pixel thick, laid down as one
   strip per sprite row so the perspective is undone and the artist's own
   door artwork lands square on a panel that stays flat.
-  An exit is built the same way in miniature: a slab deep enough to hold its
-  own tunnel — a face on the background and a back `PORTAL_FRAME_THICK + depth`
+  An exit is built the same way in miniature. The sprites are drawn with gaps
+  inside their outline — a skull's sockets, the hollows of an arch — which on
+  a flat sprite just let the scenery through; a door is solid, so a gap the
+  door encloses is filled and painted from the nearest pixel that was drawn
+  (its own texel is blank, and the material's alpha test would cut it away).
+  Gaps that reach the outside are real background and stay open. What is left
+  is a slab deep enough to hold its own tunnel — a face on the background and a back `PORTAL_FRAME_THICK + depth`
   behind it — so the opening is sunk into the door's thickness rather than
   pushed out behind it as a lump, and the tunnel's floor is simply that back.
   The pixels of frame around the opening fall away into it over

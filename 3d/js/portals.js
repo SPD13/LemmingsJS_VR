@@ -485,8 +485,51 @@ function buildPortalGeometry(frame, depth, sky) {
   if (!sky) sky = new Uint8Array(w * h); // all frame: a slab with no opening
   const thick = PORTAL_FRAME_THICK + depth;
 
+  // The sprites are drawn with gaps inside their outline - a skull's eye
+  // sockets, the hollows of an arch - which on a flat sprite simply let the
+  // scenery behind show through. A door is a solid thing, so a gap the door
+  // encloses is door: filled here, and painted from the nearest pixel that
+  // was drawn, since its own texel is blank and would be cut away by the
+  // material's alpha test. Gaps reaching the outside are real background and
+  // stay open.
+  const solid = new Uint8Array(w * h);
+  const source = new Int32Array(w * h).fill(-1);
+  {
+    const outside = new Uint8Array(w * h), stack = [];
+    const open = (i) => { if (!mask[i] && !outside[i]) { outside[i] = 1; stack.push(i); } };
+    for (let x = 0; x < w; x++) { open(x); open((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { open(y * w); open(y * w + w - 1); }
+    while (stack.length) {
+      const i = stack.pop(), x = i % w, y = (i / w) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (outside[j] || mask[j]) continue;
+        outside[j] = 1;
+        stack.push(j);
+      }
+    }
+    const fringe = [];
+    for (let i = 0; i < w * h; i++) {
+      if (mask[i]) { solid[i] = 1; source[i] = i; fringe.push(i); }
+      else if (!outside[i]) solid[i] = 1;
+    }
+    for (let k = 0; k < fringe.length; k++) {   // nearest drawn pixel, breadth first
+      const i = fringe[k], x = i % w, y = (i / w) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (!solid[j] || source[j] !== -1) continue;
+        source[j] = source[i];
+        fringe.push(j);
+      }
+    }
+  }
+
   const isFrame = (x, y) => x >= 0 && x < w && y >= 0 && y < h &&
-    mask[y * w + x] !== 0 && !sky[y * w + x];
+    solid[y * w + x] !== 0 && !sky[y * w + x];
 
   // How far each pixel of frame lies from the opening. Counting whole rings
   // would terrace the funnel - every pixel in a ring at one height, and the
@@ -498,7 +541,7 @@ function buildPortalGeometry(frame, depth, sky) {
   const DIAG = Math.SQRT2, FAR = 1e6;
   const dist = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    dist[i] = mask[i] && sky[i] ? 0 : FAR;
+    dist[i] = solid[i] && sky[i] ? 0 : FAR;
   }
   const relax = (i, j, cost) => {
     const d = dist[j] + cost;
@@ -507,7 +550,7 @@ function buildPortalGeometry(frame, depth, sky) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      if (!mask[i] || dist[i] === 0) continue;
+      if (!solid[i] || dist[i] === 0) continue;
       if (x > 0) relax(i, i - 1, 1);
       if (y > 0) relax(i, i - w, 1);
       if (x > 0 && y > 0) relax(i, i - w - 1, DIAG);
@@ -517,7 +560,7 @@ function buildPortalGeometry(frame, depth, sky) {
   for (let y = h - 1; y >= 0; y--) {
     for (let x = w - 1; x >= 0; x--) {
       const i = y * w + x;
-      if (!mask[i] || dist[i] === 0) continue;
+      if (!solid[i] || dist[i] === 0) continue;
       if (x < w - 1) relax(i, i + 1, 1);
       if (y < h - 1) relax(i, i + w, 1);
       if (x < w - 1 && y < h - 1) relax(i, i + w + 1, DIAG);
@@ -534,7 +577,7 @@ function buildPortalGeometry(frame, depth, sky) {
   const faceAt = (x, y) => {
     if (x < 0 || x >= w || y < 0 || y >= h) return 0;
     const i = y * w + x;
-    if (!mask[i]) return 0;
+    if (!solid[i]) return 0;
     if (sky[i]) return thick;
     const t = dist[i] / (rings + 1);
     if (t >= 1) return 0;
@@ -561,11 +604,16 @@ function buildPortalGeometry(frame, depth, sky) {
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (!mask[y * w + x]) continue;
-      const u0 = x / w, u1 = (x + 1) / w, v0 = y / h, v1 = (y + 1) / h;
-      // pixel-centre UV for the walls: a wall on a texel boundary samples the
-      // empty neighbour and comes out black
-      const uc = (x + 0.5) / w, vc = (y + 0.5) / h;
+      const here = y * w + x;
+      if (!solid[here]) continue;
+      // a filled gap has no paint of its own, so it wears its nearest
+      // neighbour's, flat across the pixel
+      const src = source[here] < 0 ? here : source[here];
+      const sx = src % w, sy = (src / w) | 0;
+      const uc = (sx + 0.5) / w, vc = (sy + 0.5) / h;
+      const drawn = mask[here] !== 0;
+      const u0 = drawn ? x / w : uc, u1 = drawn ? (x + 1) / w : uc;
+      const v0 = drawn ? y / h : vc, v1 = drawn ? (y + 1) / h : vc;
 
       // the back of the slab, which under the opening is the tunnel's floor
       quad([[x, y, -thick, u0, v0], [x + 1, y, -thick, u1, v0],
