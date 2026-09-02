@@ -25,16 +25,29 @@
   });
 
   const params = new URLSearchParams(location.search);
-  let embossStored = null, smoothStored = null, doorsStored = null;
-  try {
-    embossStored = localStorage.getItem("lem3d-emboss");
-    smoothStored = localStorage.getItem("lem3d-smooth");
-    doorsStored = localStorage.getItem("lem3d-doors");
-  } catch (e) {}
+  /**
+   * A render setting: the URL first, then what was last toggled here.
+   *
+   * These are toggled with DOM buttons, which are invisible inside a headset,
+   * and the headset is usually not the machine they were toggled on - its
+   * browser has its own empty localStorage. Without the URL there is no way
+   * to ask the VR build for smoothed terrain at all.
+   */
+  const setting = (name, key, dflt) => {
+    if (params.has(name)) {
+      const v = params.get(name).toLowerCase();
+      return v === "" || v === "1" || v === "on" || v === "true" || v === "yes";
+    }
+    let stored = null;
+    try { stored = localStorage.getItem(key); } catch (e) {}
+    if (stored === "on") return true;
+    if (stored === "off") return false;
+    return dflt;
+  };
   const state = {
-    emboss: embossStored === "on", // colour-keyed terrain relief, off by default
-    smooth: smoothStored === "on", // slope between relief heights, off by default
-    doors: doorsStored !== "off",  // entrances/exits as openings, on by default
+    emboss: setting("emboss", "lem3d-emboss", false), // colour-keyed relief
+    smooth: setting("smooth", "lem3d-smooth", false), // slope between heights
+    doors: setting("doors", "lem3d-doors", true),     // openings, on by default
     gameType: parseInt(params.get("type") || "1", 10),
     group: parseInt(params.get("group") || "0", 10),
     level: parseInt(params.get("level") || "0", 10),
