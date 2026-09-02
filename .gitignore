@@ -10,3 +10,6 @@
 # package managers
 bower_components/
 node_modules/
+
+# third-party level packs (33MB of assets, referenced by nothing here)
+LemmingsPlus_All_20201114/
