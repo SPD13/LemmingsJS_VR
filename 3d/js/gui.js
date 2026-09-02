@@ -41,6 +41,10 @@ const GUI_ORDER_RELIEF = 52;
 const GUI_ORDER_HOVER = 53;
 const GUI_ORDER_HOVER_RELIEF = 54;
 const GUI_ORDER_BAR_TOOL = 55;  // the VR lock/move handles above the bar
+// A question interrupting the bar draws over all of it, whatever plane it
+// shares with it and wherever the bar has been dragged to.
+const GUI_ORDER_MODAL = 56;
+const GUI_ORDER_MODAL_BTN = 57;
 
 // The panel ships as one composited bitmap - the button pictures are baked
 // into their tiles - but every tile's background is just the yellow/gray

@@ -260,7 +260,7 @@
         map: new THREE.CanvasTexture(cv), transparent: true,
         depthTest: false, depthWrite: false,
       }));
-    mesh.renderOrder = GUI_ORDER_BAR_TOOL;
+    mesh.renderOrder = GUI_ORDER_MODAL;
     vrModal.add(mesh);
     return mesh;
   })();
@@ -280,6 +280,10 @@
       c.stroke();
     });
   });
+
+  // over the question's own panel, and both over everything the bar draws
+  vrYesBtn.renderOrder = GUI_ORDER_MODAL_BTN;
+  vrNoBtn.renderOrder = GUI_ORDER_MODAL_BTN;
 
   /** Show or hide the restart question. */
   function setVrModal(open) {
