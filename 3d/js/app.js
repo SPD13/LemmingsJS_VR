@@ -195,12 +195,14 @@
       c.stroke();
     });
   });
-  const barTools = [barLockBtn, barMoveBtn];
+  // Over the play area: pause (which becomes play once it is paused) and
+  // restart. They ride the toolbar, so they keep station with the bar
+  // wherever it is dragged or unpinned to.
 
   // Over the play area: pause (which becomes play once it is paused) and
   // restart. They ride the diorama, so they pan and scale with the board they
   // belong to, and they are sized in game pixels like everything under it.
-  const vrPauseBtn = makeIconButton("vr-pause", dioramaRoot, (cx, st) => {
+  const vrPauseBtn = makeIconButton("vr-pause", guiRoot, (cx, st) => {
     const paused = st.on;
     barToolIcon(cx, st.hovered, st.hovered ? "#1d5030" : "#12331d", "#6fce7e", (c) => {
       c.fillStyle = "#6fce7e";
@@ -216,7 +218,7 @@
     });
   });
 
-  const vrRestartBtn = makeIconButton("vr-restart", dioramaRoot, (cx, st) => {
+  const vrRestartBtn = makeIconButton("vr-restart", guiRoot, (cx, st) => {
     barToolIcon(cx, st.hovered, st.hovered ? "#4a4326" : "#33301c", "#ffd866", (c) => {
       // An arrow curving right round: five sixths of a circle, with the head
       // filling the gap. Both ends come from the same angles, so the head
@@ -253,13 +255,16 @@
       c.fill();
     });
   };
-  const vrPrevBtn = makeIconButton("vr-prev", dioramaRoot,
+  const vrPrevBtn = makeIconButton("vr-prev", guiRoot,
     (cx, st) => navIcon(cx, st, true));
-  const vrNextBtn = makeIconButton("vr-next", dioramaRoot,
+  const vrNextBtn = makeIconButton("vr-next", guiRoot,
     (cx, st) => navIcon(cx, st, false));
 
-  // pause set aside on the left, then the three that leave the level
-  const playTools = [vrPauseBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
+  // The bar's own row of controls: the two handles at the left end, pause in
+  // the middle, and the three that leave the level at the right end.
+  const vrLeftTools = [barLockBtn, barMoveBtn];
+  const vrRightTools = [vrPrevBtn, vrRestartBtn, vrNextBtn];
+  const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
 
   // Restart asks first. A DOM dialog is invisible in a headset, so the
   // question is in the scene, head-fixed like the toolbar and squarely in
@@ -770,14 +775,21 @@
       // its shading, but stereo wants parallax to go with it
       session.gui.setReliefDepth(GUI_VR_RELIEF_DEPTH);
       session.gui.place(VR_GUI_WIDTH, VR_GUI_Y, VR_GUI_Z); // metres
-      // the handles ride just above the bar's top edge, in its own space so
-      // dragging or unlocking carries them along
+      // The row of controls rides just above the bar's top edge, in the bar's
+      // own space, so dragging or unpinning it carries them along: the two
+      // handles at the left end, pause in the middle, the three that leave
+      // the level at the right end.
       const barTop = VR_GUI_Y + session.gui.mesh.scale.y / 2;
       const y = barTop + VR_BAR_TOOL_SIZE * 0.8;
-      barLockBtn.position.x = -VR_BAR_TOOL_SIZE * 0.7;
-      barMoveBtn.position.x = VR_BAR_TOOL_SIZE * 0.7;
-      for (const b of barTools) {
-        // a hovered handle grows and steps toward the player, the way a
+      const step = VR_BAR_TOOL_SIZE * 1.15;
+      const end = VR_GUI_WIDTH / 2 - VR_BAR_TOOL_SIZE * 0.6;
+      vrLeftTools.forEach((b, i) => { b.position.x = -end + i * step; });
+      vrPauseBtn.position.x = 0;
+      vrRightTools.forEach((b, i) => {
+        b.position.x = end - (vrRightTools.length - 1 - i) * step;
+      });
+      for (const b of vrButtons) {
+        // a hovered button grows and steps toward the player, the way a
         // hovered skill button does
         const hot = b.userData.state.hovered;
         b.scale.setScalar(VR_BAR_TOOL_SIZE * (hot ? VR_BAR_TOOL_HOVER : 1));
@@ -786,7 +798,7 @@
         b.visible = true;
       }
     } else {
-      for (const b of barTools) b.visible = false;
+      for (const b of vrButtons) b.visible = false;
       session.gui.setReliefDepth(1);
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -850,7 +862,7 @@
       return null;
     }
     // the icon buttons sit over the bar and the board and take the ray first
-    for (const b of barTools.concat(playTools)) {
+    for (const b of vrButtons) {
       if (!b.visible) continue;
       const hit = rc.intersectObject(b, false);
       if (hit.length) return hit[0];
@@ -1261,23 +1273,7 @@
     vrWarningSign.scale.set(signW, signH, 1);
     vrWarningSign.position.set(
       startX, session.level.height + signH / 2 + 30, 40);
-    layoutPlayTools();
     return true;
-  }
-
-  /** The row above the play area's start position, centred on it. */
-  function layoutPlayTools() {
-    if (!session) return;
-    const startX = session.level.screenPositionX + 200;
-    const y = session.level.height + VR_PLAY_TOOL_SIZE;
-    const step = VR_PLAY_TOOL_SIZE * 1.15;
-    const first = -(playTools.length - 1) / 2;
-    playTools.forEach((b, i) => {
-      const hot = b.userData.state.hovered;
-      b.scale.setScalar(VR_PLAY_TOOL_SIZE * (hot ? VR_BAR_TOOL_HOVER : 1));
-      b.position.set(startX + (first + i) * step, y,
-        40 + (hot ? VR_PLAY_TOOL_SIZE * 0.25 : 0));
-    });
   }
 
   // desktop clip planes are in pixel units; in VR they are METERS, and the
@@ -1626,11 +1622,8 @@
         // button, the panel, the space bar or the catalog
         setBarToolState(vrPauseBtn,
           { on: !session.game.getGameTimer().isRunning() });
-        for (const b of playTools) b.visible = true;
-        layoutPlayTools();
         layoutVrModal();
       } else if (vrPauseBtn.visible) {
-        for (const b of playTools) b.visible = false;
         setVrModal(false);
       }
     }
