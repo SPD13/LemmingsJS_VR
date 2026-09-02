@@ -1,13 +1,17 @@
 "use strict";
 /**
  * The skill panel of a Lemmix game, drawn into the DisplayImage the page
- * hands over (GameBaseSkillPanel.pas, on the DOS panel's 320x40 canvas so
- * the 3D toolbar can pick it up unchanged): an info strip along the top in
- * the 8x16 panel font, then 16-px buttons from x = 0 - release rate down
- * and up, ten skill slots (the level's skills with their counts in the 4x8
- * skill digits, the rest empty slots, as NeoLemmix always shows ten),
- * pause, nuke and speed. Skill pictures are the lemming sprites themselves,
- * placed the way NeoLemmix places them.
+ * hands over (GameBaseSkillPanel.pas, on a canvas the shape of the DOS
+ * panel's so the 3D toolbar can pick it up unchanged): an info strip along
+ * the top in the 8x16 panel font, then 16-px buttons from x = 0 - release
+ * rate down and up, ten skill slots (the level's skills with their counts
+ * in the 4x8 skill digits, the rest empty slots, as NeoLemmix always shows
+ * ten), pause, nuke and speed, and after them NeoLemmix's minimap frame
+ * (minimap_region.png, 111x38 around a 104x34 window) - which is why the
+ * canvas is 352 wide rather than the DOS 320: fifteen cells and the frame.
+ * The map itself is the page's (3d/js/minimap.js); the panel only says
+ * where its window is (layout.minimap). Skill pictures are the lemming
+ * sprites themselves, placed the way NeoLemmix places them.
  *
  * Presses come back through the display's mouse events, as they do for the
  * DOS panel, and turn into the DOS commands the replay records.
@@ -17,8 +21,12 @@
   const Lemmings = root.Lemmings;
   const { Bitmap, Pixels, SKILL_TO_ACTION } = Lemmix;
 
-  const PANEL_W = 320, PANEL_H = 40;
+  const PANEL_W = 352, PANEL_H = 40;
   const BUTTON_Y = 16, CELL = 16;
+  // the minimap frame's picture and the window inside it (MinimapRect is
+  // drawn at Left - 3, Top - 2 of the frame; the window is 104x34)
+  const REGION_W = 111, REGION_H = 38, REGION_Y = 1;
+  const MINIMAP = { dx: 3, dy: 2, w: 104, h: 34, scale: 8 };
   const SKILL_SLOTS = 10;   // MAX_SKILL_TYPES_PER_LEVEL: the panel always shows this many
   // sprite frame, and where its feet go inside the 16x23 button (SetSkillIcons)
   const SKILL_ICONS = {
@@ -37,7 +45,8 @@
   };
   const BRICK_COLOR = 0xf0d0d0;
   const PANEL_FILES = ["skill_panels", "empty_slot", "skill_count_digits", "skill_count_erase", "skill_selected",
-    "icon_rr_minus", "icon_rr_plus", "icon_pause", "icon_nuke", "icon_ff", "panel_font"];
+    "icon_rr_minus", "icon_rr_plus", "icon_pause", "icon_nuke", "icon_ff", "panel_font", "minimap_region"];
+  const OPTIONAL_FILES = new Set(["minimap_region"]); // drawn by hand when the picture is missing
 
   const assetsByPack = new Map();
   /**
@@ -54,7 +63,9 @@
           if (!bmp) bmp = await io.image("gfx/panel/" + n + ".png");
           out[n] = bmp;
         }));
-        for (const n of PANEL_FILES) if (!out[n]) throw new Error("missing gfx/panel/" + n + ".png - see README, Levels and assets");
+        for (const n of PANEL_FILES) {
+          if (!out[n] && !OPTIONAL_FILES.has(n)) throw new Error("missing gfx/panel/" + n + ".png - see README, Levels and assets");
+        }
         return out;
       })());
     }
@@ -72,7 +83,9 @@
       while (slots.length < SKILL_SLOTS) slots.push("empty");
       this.cells = ["rrminus", "rrplus"].concat(slots).concat(["pause", "nuke", "speed"]);
       this.layout = { buttons: this.cells.length, digitButtons: 2 + SKILL_SLOTS, width: PANEL_W, height: PANEL_H,
-        sharedBorder: false }; // each cell is its own tile; nothing is drawn on a shared line
+        sharedBorder: false, // each cell is its own tile; nothing is drawn on a shared line
+        minimap: { x: this.cells.length * CELL + MINIMAP.dx, y: REGION_Y + MINIMAP.dy, w: MINIMAP.w, h: MINIMAP.h,
+          scaleX: MINIMAP.scale, scaleY: MINIMAP.scale, pad: 1 } };
       game.panelLayout = this.layout;
       this.rrHeld = 0;
       this.lastNukeClick = -1;
@@ -123,6 +136,9 @@
           icon(i, A.empty_slot);
         } else icon(i, this._skillIcon(what.slice(6)));
       });
+      // the minimap's frame after the last cell (the map is drawn over it by the page)
+      const region = A.minimap_region || this._redFrame();
+      Pixels.blit(base, n * CELL, REGION_Y, region, 0, 0, region.width, region.height, Pixels.combineGadget);
       this.base = base;
       // the button backgrounds' own colours, so the toolbar's relief keys the pictures out of them
       const counts = new Map();
@@ -132,6 +148,22 @@
         counts.set(k, (counts.get(k) || 0) + 1);
       }
       this.layout.bgColors = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map((e) => e[0]);
+    }
+
+    /** minimap_region.png by hand: black, with its 1-px red frame where the
+     *  picture has it - around the window, x 2..107 and y 1..36 - so the
+     *  window (MINIMAP.dx/dy in) lands in the same place either way. */
+    _redFrame() {
+      const bmp = new Bitmap(REGION_W, REGION_H);
+      bmp.words().fill(0xff000000);
+      const x0 = MINIMAP.dx - 1, x1 = MINIMAP.dx + MINIMAP.w, y0 = MINIMAP.dy - 1, y1 = MINIMAP.dy + MINIMAP.h;
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        if (x === x0 || y === y0 || x === x1 || y === y1) {
+          const p = (y * REGION_W + x) * 4;
+          bmp.data[p] = 240; bmp.data[p + 1] = 32; bmp.data[p + 2] = 32; bmp.data[p + 3] = 255;
+        }
+      }
+      return bmp;
     }
 
     /** A skill's picture: the lemming sprite NeoLemmix puts on the button. */
@@ -173,7 +205,8 @@
 
     _drawText(out, text) {
       const font = this.assets.panel_font;
-      for (let i = 0; i < text.length && i * 8 < PANEL_W; i++) {
+      const limit = this.cells.length * CELL; // the strip stops where the minimap frame starts
+      for (let i = 0; i < text.length && i * 8 < limit; i++) {
         const ch = text[i];
         let id = -1;
         if (ch === "%") id = 0;
@@ -221,7 +254,7 @@
     }
 
     handleMouseDown(x, y) {
-      if (y < BUTTON_Y) return;
+      if (y < BUTTON_Y || x >= this.cells.length * CELL) return; // the minimap is the page's
       const cell = Math.trunc(x / CELL);
       const what = this.cells[cell];
       if (!what) return;
@@ -243,7 +276,7 @@
     }
 
     handleDoubleClick(x, y) {
-      if (y < BUTTON_Y) return;
+      if (y < BUTTON_Y || x >= this.cells.length * CELL) return;
       if (this.cells[Math.trunc(x / CELL)] === "nuke") { this.game.queueCmmand(new Lemmings.CommandNuke()); this.game.nukePrepared = false; }
     }
   }

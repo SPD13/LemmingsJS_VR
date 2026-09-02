@@ -56,6 +56,7 @@
     emboss: setting("emboss", "lem3d-emboss", true), // colour-keyed relief
     smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
+    skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
     // Editing is the tagging workbench: the piece editor, the tagging marks
     // in the catalog, the "validation mode" billing. Playing is the game.
     edit: setting("edit", "lem3d-edit", false),
@@ -960,7 +961,7 @@
    * calls exactly what the buttons call, so the two stay in step, and it
    * carries the recentre that is otherwise only on the A/X button.
    */
-  const VR_SET_W = 640, VR_SET_H = 400;   // canvas pixels
+  const VR_SET_W = 640, VR_SET_H = 468;   // canvas pixels
   const VR_SET_TOP = 96;                  // first row
   const VR_SET_ROW = 68;
 
@@ -968,6 +969,7 @@
     { label: "3D terrain", get: () => state.emboss, act: () => toggleEmboss() },
     { label: "3D doors", get: () => state.doors, act: () => toggleDoors() },
     { label: "smooth", get: () => state.smooth, act: () => toggleSmooth() },
+    { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
     { label: "recentre the board", act: () => vr.recenterNow() },
   ];
   let vrSettingsHover = -1;
@@ -1323,6 +1325,22 @@
   smoothBtn.addEventListener("click", toggleSmooth);
   renderSmoothBtn();
 
+  // the skill bar's own relief: its artwork and counters extruded off the
+  // panel. Off, the bar is the flat original.
+  const skillBarBtn = document.getElementById("btn-skillbar");
+  const renderSkillBarBtn = () => {
+    skillBarBtn.textContent = "3D skills bar: " + (state.skillBar ? "on" : "off");
+  };
+  function toggleSkillBar() {
+    state.skillBar = !state.skillBar;
+    try { localStorage.setItem("lem3d-skillbar", state.skillBar ? "on" : "off"); } catch (e) {}
+    renderSkillBarBtn();
+    if (session) session.gui.setRelief(state.skillBar);
+    paintVrSettings();
+  }
+  skillBarBtn.addEventListener("click", toggleSkillBar);
+  renderSkillBarBtn();
+
   audio.configureSpatial({
     isActive: () => renderer.xr.isPresenting,
     getListenerMatrix: () => camera.matrixWorld,
@@ -1517,6 +1535,8 @@
     const objCapture = new SpriteCapture();
 
     const gui = new GuiPanel(guiRoot, game, resources);
+    gui.setRelief(state.skillBar);
+    gui.onMinimapCenter = (p) => centerViewOn(p.x, p.y);
 
     if (state.replay) {
       game.getCommandManager().loadReplay(state.replay);
@@ -1764,7 +1784,11 @@
       // deeper relief in a headset: on a flat screen the emboss is carried by
       // its shading, but stereo wants parallax to go with it
       session.gui.setReliefDepth(GUI_VR_RELIEF_DEPTH);
-      session.gui.place(VR_GUI_WIDTH, VR_GUI_Y, VR_GUI_Z); // metres
+      // a Lemmix panel is wider than the DOS one (its minimap frame comes
+      // after the buttons): the bar grows with it so a panel pixel stays
+      // the same size, and the bar's row and sound column follow its ends
+      const guiW = VR_GUI_WIDTH * panelWidthScale();
+      session.gui.place(guiW, VR_GUI_Y, VR_GUI_Z); // metres
       // The row of controls rides just above the bar's top edge, in the bar's
       // own space, so dragging or unpinning it carries them along: the two
       // handles at the left end, pause in the middle, the three that leave
@@ -1772,20 +1796,20 @@
       const barTop = VR_GUI_Y + session.gui.mesh.scale.y / 2;
       const y = barTop + VR_BAR_TOOL_SIZE * 0.8;
       // the status strip sits over the row, as wide as the bar itself
-      const statusH = VR_GUI_WIDTH * VR_STATUS_H / VR_STATUS_W;
-      vrStatusPanel.scale.set(VR_GUI_WIDTH, statusH, 1);
+      const statusH = guiW * VR_STATUS_H / VR_STATUS_W;
+      vrStatusPanel.scale.set(guiW, statusH, 1);
       vrStatusPanel.position.set(
         0, y + VR_BAR_TOOL_SIZE * 0.75 + statusH / 2, VR_GUI_Z);
       vrStatusPanel.visible = true;
       const step = VR_BAR_TOOL_SIZE * 1.15;
-      const end = VR_GUI_WIDTH / 2 - VR_BAR_TOOL_SIZE * 0.6;
+      const end = guiW / 2 - VR_BAR_TOOL_SIZE * 0.6;
       vrLeftTools.forEach((b, i) => { b.position.x = -end + i * step; });
       vrPauseBtn.position.x = 0;
       vrRightTools.forEach((b, i) => {
         b.position.x = end - (vrRightTools.length - 1 - i) * step;
       });
       // the sound column stands off the bar's right end
-      const sx = VR_GUI_WIDTH / 2 + VR_BAR_TOOL_SIZE * 0.85;
+      const sx = guiW / 2 + VR_BAR_TOOL_SIZE * 0.85;
       const barBottom = VR_GUI_Y - session.gui.mesh.scale.y / 2;
       const muteHot = vrMuteBtn.userData.state.hovered;
       vrMuteBtn.scale.setScalar(
@@ -1815,7 +1839,7 @@
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const viewH = 2 * dist * tanHalf;
-      const width = viewH * camera.aspect * 0.55;
+      const width = viewH * camera.aspect * 0.55 * panelWidthScale();
       const height = width * session.gui.canvas.height / session.gui.canvas.width;
       // A hovered button is grown and moved toward the camera, so it reaches
       // lower on screen than the panel does: sit the panel high enough that
@@ -1834,6 +1858,105 @@
     controls.target.set(startX, targetY, TERRAIN_DEPTH / 2);
     camera.position.set(startX, targetY + 120, 420);
     controls.update();
+  }
+
+  /** How much wider than the DOS panel this session's panel is (a Lemmix
+   *  panel carries its minimap frame after the buttons): the bar scales with
+   *  it so a panel pixel keeps its size on screen and in the headset. */
+  function panelWidthScale() {
+    return session && session.gui.mesh ? session.gui.canvas.width / 320 : 1;
+  }
+
+  // ------------------------------------------------- the view as a rectangle
+  // The minimap wants "the part of the level on screen" and, on a press,
+  // "put this level point in the middle". In 2D those are the scroll
+  // offset; here the level is a board in front of a camera - or a headset -
+  // so both are worked out on the lemmings' plane: where the rays through
+  // the corners of the view land on it (the rectangle), and where the ray
+  // through the middle lands (the centre). Centring is then a translation
+  // between two board points, which keeps zoom, tilt and scale: the camera
+  // moves on the desktop, the board in the headset (the world never moves).
+
+  /** The eye whose view the rectangle describes: the headset's combined
+   *  camera in a session (its projection covers both eyes), the desktop one otherwise. */
+  function viewEye() {
+    if (renderer.xr.isPresenting) return renderer.xr.getCamera();
+    camera.updateMatrixWorld();
+    return camera;
+  }
+
+  /** The lemmings' plane of the board, in world space. */
+  function levelPlane() {
+    session.worldGroup.updateWorldMatrix(true, false);
+    const p0 = session.worldGroup.localToWorld(new THREE.Vector3(0, 0, LEMMING_Z));
+    const p1 = session.worldGroup.localToWorld(new THREE.Vector3(0, 0, LEMMING_Z + 1));
+    return new THREE.Plane().setFromNormalAndCoplanarPoint(p1.sub(p0).normalize(), p0);
+  }
+
+  /** Where the ray through view point (nx, ny) (NDC) lands on the board, in
+   *  level px; {hit:false} with the far point along the ray when it misses -
+   *  a corner looking past the board still bounds the rectangle on that side. */
+  function levelPointAt(eye, plane, nx, ny) {
+    const projInv = new THREE.Matrix4().copy(eye.projectionMatrix).invert();
+    const origin = new THREE.Vector3().setFromMatrixPosition(eye.matrixWorld);
+    const target = new THREE.Vector3(nx, ny, 0.5).applyMatrix4(projInv).applyMatrix4(eye.matrixWorld);
+    const ray = new THREE.Ray(origin, target.sub(origin).normalize());
+    const p = new THREE.Vector3();
+    const hit = !!ray.intersectPlane(plane, p);
+    if (!hit) plane.projectPoint(ray.at(1e6, p), p);
+    const local = session.worldGroup.worldToLocal(p);
+    return { x: local.x, y: local.y, hit };
+  }
+
+  /** The level-space box the view covers, clamped to the level; null when
+   *  none of the view's corners reaches the board (the last box stands). */
+  function visibleLevelRect() {
+    if (!session) return null;
+    const eye = viewEye(), plane = levelPlane();
+    const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([nx, ny]) => levelPointAt(eye, plane, nx, ny));
+    if (!corners.some((c) => c.hit)) return null;
+    const { width, height } = session.level;
+    const clampX = (v) => Math.max(0, Math.min(width, v));
+    const clampY = (v) => Math.max(0, Math.min(height, v));
+    return {
+      x0: clampX(Math.min(...corners.map((c) => c.x))), x1: clampX(Math.max(...corners.map((c) => c.x))),
+      y0: clampY(Math.min(...corners.map((c) => c.y))), y1: clampY(Math.max(...corners.map((c) => c.y))),
+    };
+  }
+
+  /** The level point in the middle of the view. */
+  function currentViewCentre() {
+    if (!session) return null;
+    const c = levelPointAt(viewEye(), levelPlane(), 0, 0);
+    if (c.hit) return { x: c.x, y: c.y };
+    const r = visibleLevelRect();
+    return r ? { x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 } : null;
+  }
+
+  /** Put level point (simX, simY) in the middle of the view - as far as the
+   *  level allows: NeoLemmix stops the screen at the level's edges, so the
+   *  centre is held back by half the view where the view is narrower than
+   *  the level, and a view wider than the level just sees it whole. */
+  function centerViewOn(simX, simY) {
+    if (!session) return;
+    const { width, height } = session.level;
+    const r = visibleLevelRect();
+    const rw = r ? r.x1 - r.x0 : 0, rh = r ? r.y1 - r.y0 : 0;
+    const cx = rw >= width ? width / 2 : THREE.MathUtils.clamp(simX, rw / 2, width - rw / 2);
+    const cy = rh >= height ? height / 2 : THREE.MathUtils.clamp(simY, rh / 2, height - rh / 2);
+    const cur = currentViewCentre();
+    if (!cur) return;
+    session.worldGroup.updateWorldMatrix(true, false);
+    const from = session.worldGroup.localToWorld(new THREE.Vector3(cur.x, cur.y, LEMMING_Z));
+    const to = session.worldGroup.localToWorld(new THREE.Vector3(cx, cy, LEMMING_Z));
+    const delta = to.sub(from);
+    if (renderer.xr.isPresenting) {
+      dioramaRoot.position.sub(delta);
+    } else {
+      camera.position.add(delta);
+      controls.target.add(delta);
+      controls.update();
+    }
   }
 
   /** Prev/next: the neighbouring level in the pack's play order, wrapping. */
@@ -1962,7 +2085,11 @@
     if (hit.object.name.startsWith("vr-")) {
       return { barTool: hit.object.name.slice(3) };
     }
-    if (hit.object.name === "gui-panel") return { panelUv: hit.uv };
+    if (hit.object.name === "gui-panel") {
+      // the minimap answers to a hold as a scrubber does (vr.js), the buttons to a press
+      if (session.gui.isMinimap(hit.uv)) return { panelUv: hit.uv, barTool: "minimap", minimap: true };
+      return { panelUv: hit.uv };
+    }
     const local = session.worldGroup.worldToLocal(hit.point.clone());
     return { simX: Math.round(local.x), simY: Math.round(local.y) };
   }
@@ -2187,6 +2314,7 @@
 
   // a volume slider or catalog scrollbar held down by the mouse
   let mouseScrub = null;
+  let minimapHeldControls = false; // orbiting switched off for a hold on the minimap
 
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
@@ -2215,7 +2343,7 @@
       // in the scene, not the DOM.
       const p0 = pick(e);
       if (p0 && p0.barTool) {
-        if (p0.barTool === "volume" || p0.scrollBar) {
+        if (p0.barTool === "volume" || p0.scrollBar || p0.minimap) {
           // a scrubber follows the cursor until the button comes back up
           mouseScrub = p0.barTool;
           actOnPick(p0);
@@ -2229,8 +2357,13 @@
     }
     const p = pick(e);
     if (p && p.panelUv) {
-      audio.playSfx(SFX.CLICK);
+      if (!p.minimap) audio.playSfx(SFX.CLICK);
       session.gui.onMouseDown(p.panelUv);
+      if (session.gui.minimapDrag) {
+        // a hold on the map scrolls the view, so it must not orbit it too
+        vrOrbit = null;
+        if (controls.enabled) { controls.enabled = false; minimapHeldControls = true; }
+      }
     }
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
@@ -2255,7 +2388,9 @@
       return;
     }
     if (e.button === 0) vrOrbit = null;
+    if (minimapHeldControls && e.button === 0) { controls.enabled = true; minimapHeldControls = false; }
     if (!mouseAllowed() || e.button !== 0) return;
+    if (session.gui.minimapDrag) session.gui.onMouseUp(null); // wherever the button came up
     if (mouseScrub) { mouseScrub = null; return; } // it acted as it was dragged
     const p = pick(e);
     if (p && p.barTool && vrMouseFallback()) { actOnPick(p); return; }
@@ -2271,6 +2406,12 @@
   });
   renderer.domElement.addEventListener("pointermove", (e) => {
     if (!mouseAllowed()) return;
+    if (session.gui.minimapDrag && (e.buttons & 1)) {
+      // held on the map: keep centring the view under the pointer
+      const p = pick(e);
+      session.gui.onMouseMove(p && p.panelUv ? p.panelUv : null);
+      return;
+    }
     if (vrMouseFallback()) {
       const rc = mouseRaycaster(e);
       if (vrPan) {
@@ -2478,6 +2619,10 @@
       if (act) act();
     } else if (p.barTool === "no") {
       setVrModal(false);
+    } else if (p.barTool === "minimap" && session) {
+      // the press centres the view; held and moved, it goes on centring
+      if (session.gui.minimapDrag) session.gui.onMouseMove(p.panelUv);
+      else session.gui.onMouseDown(p.panelUv);
     } else if (p.panelUv && session) {
       audio.playSfx(SFX.CLICK);
       session.gui.onMouseDown(p.panelUv);
@@ -2492,6 +2637,9 @@
     raycastHit,
     onSelectPick: actOnPick,
     onHoverPick: applyHover,
+    // a hold on the minimap ends with the trigger, or when the beam leaves it
+    onScrubEnd: (what) => { if (what === "minimap" && session) session.gui.onMouseUp(null); },
+    onScrubOff: (what) => { if (what === "minimap" && session) session.gui.onMouseMove(null); },
     onBarDragStart: () => { barDragFrom = guiRoot.position.clone(); },
     // the hand moves in world space; the bar hangs off the head or the scene,
     // so the delta is turned into whichever space it is living in
@@ -2785,6 +2933,7 @@
       // here: grips, sticks and drags all change that scale mid-session
       session.particles.updateScale();
       updateHoverRing(); // ring keeps following the hovered lemming
+      session.gui.setViewRect(visibleLevelRect()); // the minimap's frame
       session.gui.update();
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
       if (renderer.xr.isPresenting) {
@@ -2938,39 +3087,42 @@
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
   renderMode(); // billing, catalog labels and editor availability
 
-  // The key hints are wide, so they fold to a "controls" button. Pressed, it
-  // unfolds into the panel, which stays as long as the mouse is on it and
-  // folds back a couple of seconds after the mouse has left - or at once
-  // from its own close.
-  const keysPanel = document.getElementById("hud-keys");
-  const KEYS_FOLD_MS = 2000;
-  let keysFoldTimer = null;
-  const cancelKeysFold = () => { clearTimeout(keysFoldTimer); keysFoldTimer = null; };
-  const foldKeys = () => { cancelKeysFold(); keysPanel.classList.add("folded"); };
-  const armKeysFold = () => {
-    cancelKeysFold();
-    keysFoldTimer = window.setTimeout(() => {
-      keysFoldTimer = null;
-      if (!keysPanel.matches(":hover")) foldKeys();
-    }, KEYS_FOLD_MS);
-  };
-  document.getElementById("keys-open").addEventListener("click", () => {
-    keysPanel.classList.remove("folded");
-    // the button was where the panel now is, so the mouse is usually on it;
-    // when it is not (a touch, say), the panel folds on its own
-    window.setTimeout(() => { if (!keysPanel.matches(":hover")) armKeysFold(); }, 0);
-  });
-  document.getElementById("keys-close").addEventListener("click", foldKeys);
-  keysPanel.addEventListener("mouseenter", cancelKeysFold);
-  keysPanel.addEventListener("mouseleave", () => {
-    if (!keysPanel.classList.contains("folded")) armKeysFold();
-  });
+  // The folding panels down the right edge - the key hints, the 3D
+  // effects. Each is a button; pressed, it unfolds into its panel, which
+  // stays as long as the mouse is on it and folds back a couple of seconds
+  // after the mouse has left - or at once from its own close.
+  const FOLD_MS = 2000;
+  function foldingPanel(panel) {
+    let timer = null;
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    const fold = () => { cancel(); panel.classList.add("folded"); };
+    const arm = () => {
+      cancel();
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (!panel.matches(":hover")) fold();
+      }, FOLD_MS);
+    };
+    panel.querySelector(".fold-open").addEventListener("click", () => {
+      panel.classList.remove("folded");
+      // the button was where the panel now is, so the mouse is usually on
+      // it; when it is not (a touch, say), the panel folds on its own
+      window.setTimeout(() => { if (!panel.matches(":hover")) arm(); }, 0);
+    });
+    panel.querySelector(".fold-close").addEventListener("click", fold);
+    panel.addEventListener("mouseenter", cancel);
+    panel.addEventListener("mouseleave", () => {
+      if (!panel.classList.contains("folded")) arm();
+    });
+  }
+  document.querySelectorAll(".fold").forEach(foldingPanel);
 
   // debug handle for the console / automated checks
   window.__lem3d = {
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
+    visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
     // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
     get session() { return session; },
