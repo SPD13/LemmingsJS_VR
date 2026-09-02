@@ -227,6 +227,11 @@
 <script src="../lemmix/js/sprites.js"></script>
 <script src="../lemmix/js/game.js"></script>
 <script src="../lemmix/js/panel.js"></script>
+<script type="module">
+  // the tracker-module player (libopenmpt in an AudioWorklet), for NeoLemmix pack music
+  import { ChiptuneJsPlayer } from "../lemmix/vendor/chiptune3/chiptune3.js";
+  window.ChiptuneJsPlayer = ChiptuneJsPlayer;
+</script>
 <script src="lib/three.min.js"></script>
 <script src="lib/OrbitControls.js"></script>
 <script src="js/audio.js"></script>

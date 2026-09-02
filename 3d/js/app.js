@@ -1232,6 +1232,8 @@
   const raycaster = new THREE.Raycaster();
 
   const audio = new GameAudio();
+
+  audio.setFileRoot("../");
   const audioResources = {}; // one GameResources per game type for ADLIB data
   const soundBtn = document.getElementById("btn-sound");
   const renderSoundBtn = () => {
@@ -1396,7 +1398,8 @@
     const musicTrack = state.engine === "lemmix"
       ? Array.from(state.levelId).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 1000
       : state.group * 30 + state.level;
-    audio.playMusic(musicTrack);
+    if (state.engine === "lemmix") audio.playLevelMusic(lemmixEngine.musicCandidates(where, level), musicTrack);
+    else audio.playMusic(musicTrack);
 
     const resources = new SessionResources();
 
@@ -1550,9 +1553,7 @@
       const lems = game.getLemmingManager().lemmings;
       if (game.sounds) {
         for (const cue of game.sounds) {
-          const sfx = SFX_BY_CUE[cue.name];
-          if (sfx == null) continue;
-          if (cue.x != null) audio.playSfx(sfx, sfxPos(cue.x, cue.y)); else audio.playSfx(sfx);
+          audio.playCue(cue.name, cue.x != null ? sfxPos(cue.x, cue.y) : null, SFX_BY_CUE[cue.name]);
         }
       }
       let tickSfx = null; // at most one effect per tick (nuke-proofing)
@@ -2785,6 +2786,40 @@
       if (!this.spriteSets.has(setName)) this.spriteSets.set(setName, new Lemmix.SpriteSet(Lemmix.io).load(setName));
       const sprites = await this.spriteSets.get(setName);
       return new Lemmix.Game(level, { masks: this.masks, sprites });
+    },
+    /**
+     * Where a level's music may be: its MUSIC line (a ;-separated list of
+     * fallbacks), else the pack's rotation by level ordinal; each name tried
+     * in the pack's music folder and then the repo's music/ (the NeoLemmix
+     * music packs), with the extensions NeoLemmix tries.
+     */
+    musicCandidates(where, level) {
+      const names = [];
+      const music = (level.info && level.info.music) || "";
+      if (music) {
+        for (let part of music.split(";")) {
+          part = part.trim().replace(/^!/, "");
+          if (!part || part.startsWith("?")) continue;
+          names.push(part);
+        }
+      }
+      const rotation = (where.pack && where.pack.musicRotation) || [];
+      if (rotation.length) {
+        const ordinal = LevelTree.levelsOf(where.pack).indexOf(where.level);
+        names.push(rotation[((ordinal % rotation.length) + rotation.length) % rotation.length]);
+      }
+      const dirs = [];
+      if (where.pack && where.pack.musicDir) dirs.push(where.pack.musicDir);
+      dirs.push("music");
+      const urls = [];
+      for (const name of names) {
+        for (const dir of dirs) {
+          for (const ext of ["ogg", "wav", "mp3", "it", "mod", "xm", "s3m"]) {
+            urls.push("../" + (dir + "/" + name + "." + ext).split("/").map(encodeURIComponent).join("/"));
+          }
+        }
+      }
+      return urls;
     },
     /** What portals.js reads: an id per object and its trigger box, in DOS terms. */
     objectData(level) {

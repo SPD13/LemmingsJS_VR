@@ -69,6 +69,13 @@ class GameAudio {
     this._gestured = false;
     this._pendingMusic = null;
     this._sfxTimer = 0;
+    // file-based audio (NeoLemmix packs): one context of our own, decoded
+    // effects kept by name, and a tracker player for module music
+    this.fileRoot = "";
+    this._fctx = null;
+    this._fileSfx = new Map();
+    this._fileMusic = null;
+    this._tracker = null;
     const arm = () => {
       this._gestured = true;
       window.removeEventListener("pointerdown", arm);
@@ -76,7 +83,7 @@ class GameAudio {
       if (this._pendingMusic !== null) {
         const track = this._pendingMusic;
         this._pendingMusic = null;
-        this.playMusic(track);
+        if (typeof track === "function") track(); else this.playMusic(track);
       }
     };
     window.addEventListener("pointerdown", arm);
@@ -211,9 +218,118 @@ class GameAudio {
 
   stopAll() {
     this._pendingMusic = null;
+    this.stopFileMusic();
     if (!this.resources) return;
     try { this.resources.stopMusic(); } catch (e) {}
     try { this.resources.stopSound(); } catch (e) {}
+  }
+
+  // ------------------------------------------------------- files (Lemmix)
+
+  /** Where sound/ and music/ are, relative to the page ("../" from 3d/). */
+  setFileRoot(root) { this.fileRoot = root; }
+
+  _fileContext() {
+    if (!this._fctx) this._fctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this._fctx.state === "suspended") this._fctx.resume().catch(() => {});
+    return this._fctx;
+  }
+
+  /** A decoded effect from sound/<name>.wav|ogg|mp3, or null; kept once found. */
+  _fileSfxBuffer(name) {
+    if (this._fileSfx.has(name)) return this._fileSfx.get(name);
+    const ctx = this._fileContext();
+    const p = (async () => {
+      for (const ext of ["wav", "ogg", "mp3"]) {
+        try {
+          const res = await fetch(this.fileRoot + "sound/" + encodeURIComponent(name) + "." + ext);
+          if (!res.ok) continue;
+          return await ctx.decodeAudioData(await res.arrayBuffer());
+        } catch (e) { /* try the next */ }
+      }
+      return null;
+    })();
+    this._fileSfx.set(name, p);
+    return p;
+  }
+
+  /**
+   * A NeoLemmix sound cue by name: the file if there is one, else the AdLib
+   * effect that stands in for it (`fallback`, an SFX index), else nothing.
+   */
+  playCue(name, worldPos = null, fallback = null) {
+    if (!this.enabled || !this._gestured || !name) return;
+    this._fileSfxBuffer(name).then((buffer) => {
+      if (!buffer) { if (fallback != null) this.playSfx(fallback, worldPos); return; }
+      const ctx = this._fileContext();
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      this._route({ processor: source, audioCtx: ctx }, worldPos);
+      source.start();
+    }).catch((e) => console.warn("[audio] cue failed:", e));
+  }
+
+  stopFileMusic() {
+    if (this._fileMusic) {
+      try { this._fileMusic.stop(); } catch (e) {}
+      this._fileMusic = null;
+    }
+    if (this._tracker) { try { this._tracker.stop(); } catch (e) {} }
+  }
+
+  /** Play a music file: a tracker module through libopenmpt, anything else decoded and looped. */
+  playMusicUrl(url) {
+    if (!this.enabled) return;
+    if (!this._gestured) { this._pendingMusic = () => this.playMusicUrl(url); return; }
+    this.stopFileMusic();
+    try { if (this.resources) this.resources.stopMusic(); } catch (e) {}
+    const ctx = this._fileContext();
+    const ext = url.split(".").pop().toLowerCase();
+    if (["it", "xm", "mod", "s3m", "mtm", "umx", "mo3"].includes(ext)) {
+      if (!window.ChiptuneJsPlayer) { console.warn("[audio] no tracker player loaded"); return; }
+      if (!this._tracker) {
+        this._tracker = new window.ChiptuneJsPlayer({ context: ctx, repeatCount: -1 });
+        this._tracker.onInitialized(() => {
+          this._route({ processor: this._tracker.gain, audioCtx: ctx }, null);
+          // a load asked for before the worklet was up is played now
+          if (this._trackerPending) { const u = this._trackerPending; this._trackerPending = null; this._tracker.load(u); }
+        });
+        this._tracker.onError((e) => console.warn("[audio] tracker:", e));
+      }
+      if (this._tracker.processNode) this._tracker.load(url);
+      else this._trackerPending = url;
+      this._lastMusicUrl = url;
+      return;
+    }
+    fetch(url).then((res) => res.ok ? res.arrayBuffer() : Promise.reject(new Error("HTTP " + res.status)))
+      .then((buf) => ctx.decodeAudioData(buf))
+      .then((buffer) => {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        this._route({ processor: source, audioCtx: ctx }, null);
+        source.start();
+        this._fileMusic = source;
+      })
+      .catch((e) => console.warn("[audio] music file failed:", e));
+  }
+
+  /**
+   * A level's music from a list of candidate URLs, the first that exists;
+   * none of them there, the AdLib track `fallback` plays instead.
+   */
+  playLevelMusic(candidates, fallback) {
+    if (!this.enabled) return;
+    if (!this._gestured) { this._pendingMusic = () => this.playLevelMusic(candidates, fallback); return; }
+    (async () => {
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, { method: "HEAD" });
+          if (res.ok) { this.playMusicUrl(url); return; }
+        } catch (e) { /* next */ }
+      }
+      this.playMusic(fallback);
+    })();
   }
 
   setEnabled(on) {
