@@ -34,7 +34,8 @@ Everything the port adds lives in `3d/`:
   js/
     app.js     2664   boot, scene, camera, input, level lifecycle, VR UI
     portals.js  898   objects that are not flat sprites: openings and water
-    gui.js      560   the original skill panel, extruded and made pickable
+    gui.js      703   the original skill panel, extruded and made pickable
+    minimap.js  227   the minimap in the panel's last box: map, dots, view frame
     vr.js       549   WebXR: session, placement, controllers, thumbsticks
     terrain.js  469   destructible extruded terrain, greedy-meshed in chunks
     library.js  441   the world catalog, level progress, level miniatures
@@ -184,12 +185,40 @@ dither and extruded 1 px; the hovered button and its figure rise toward the
 player. The counter text along the top gets the same 1 px relief on its light
 highlights, smoothed into a bevel, rebuilt whenever the counters change.
 
+**The minimap** (`minimap.js`) fills the panel's last box, the red-framed one
+the original never drew in: the level shrunk down in its own colours (a block
+with any solid pixel takes that pixel's colour), one green dot per lemming
+(red for a Lemmix zombie), and a 1 px frame in the panel's brick colour
+around the part of the level in view, as NeoLemmix draws it. The DOS box is
+104×20 inside its border, so classic levels use the DOS scale of 16 px across
+and 8 down and always fit; Lemmix levels use NeoLemmix's 8 both ways in its
+104×34 window, and a map larger than the window scrolls to keep the frame
+centred, stopping at its edges and frozen while the player holds the map.
+It is its own small plane over the box (render order 51) rather than pixels
+in the panel bitmap, because `GameGui` re-blits its whole bitmap whenever a
+count changes and the panel texture only uploads once per sim tick, while
+the frame follows a camera that moves between ticks.
+
+There is no scroll offset to draw a frame from: the "viewport" is what the
+camera, or the headset, sees of the board. `app.js` casts the rays through
+the four corners of the view onto the lemmings' plane each frame and hands
+the clamped level-space box to the panel (`visibleLevelRect`); a corner
+looking past the board still bounds the box on its side. A press on the map
+is answered by the page, never the game (the DOS `GameGui` would take it for
+a button past the last one and disarm a prepared nuke): `centerViewOn` puts
+the level point under the pointer in the middle of the view as far as the
+level allows, NeoLemmix's clamp, by translating between two board points —
+the camera and its orbit target move on the desktop, the board moves in the
+headset — so zoom, tilt and scale are kept. Held and moved, the press keeps
+centring; moved off the map, it lets go. In VR the map is a scrubber like
+the volume slider: the trigger held on it keeps re-picking.
+
 Render orders matter here and are worth knowing, because three draws *all*
 opaque objects before *any* transparent one — an overlay needs both a render
 order and `transparent: true` to win:
 
 ```
-50 panel · 51 socket · 52 relief · 53 hover · 54 hover relief
+50 panel · 51 socket, minimap · 52 relief · 53 hover · 54 hover relief
 55 bar tools · 56 modal · 57 modal buttons · 60 aiming marks (beam, dot, hands)
 ```
 
@@ -297,7 +326,7 @@ the DOS engine's generic parts by reference — `DisplayImage`, `Frame`,
 | `replay.js` | NeoLemmix `.nxrp` replays read (`?nxrp=<url>`, `nx-run --nxrp`) and written (the `r` key, `nx-run --save-nxrp`) |
 | `sprites.js` | a sprite set (`styles/<set>/lemmings/`) with its scheme and state recolouring; pickup pictures; the `gfx/mask` masks |
 | `game.js` | `Lemmix.Game`: the same surface `app.js` drives for the DOS game (timer at 17 fps, lemming manager with NeoLemmix's cursor priority, skills, victory condition, command manager) |
-| `panel.js` | the NeoLemmix skill panel drawn on the DOS panel's 320×40 canvas, so `gui.js` extrudes it unchanged; a pack's own panel graphics when it ships them |
+| `panel.js` | the NeoLemmix skill panel drawn on a 352×40 canvas the shape of the DOS panel's (fifteen cells and NeoLemmix's minimap frame after them), so `gui.js` extrudes it unchanged; a pack's own panel graphics when it ships them |
 
 The physics runs on integer maps only and has no randomness, so a run is
 reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
@@ -419,8 +448,8 @@ usually a different machine with its own empty localStorage — so `?emboss=1&sm
 is the usual VR URL. 3D terrain, 3D doors, smooth and sound all start on.
 
 `window.__lem3d` exposes `{state, session, camera, renderer, controls, library,
-vr, dioramaRoot, placeDioramaForXR, audio}` for the console and for automated
-checks.
+vr, dioramaRoot, placeDioramaForXR, audio, visibleLevelRect, centerViewOn}` for
+the console and for automated checks.
 
 ---
 

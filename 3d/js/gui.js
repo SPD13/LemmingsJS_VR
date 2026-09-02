@@ -27,6 +27,10 @@ let GUI_BUTTONS = 13;         // the DOS panel; a Lemmix game states its own (pa
 // Crop it short and don't grow it, or the raised copy lifts the box's border
 // along with it.
 let GUI_LAST_BUTTON = GUI_BUTTONS - 1;
+// The DOS panel's last box, inside its red border (x 207..312, y 17..38):
+// the minimap goes there, at the DOS scale of 16 px across and 8 down, so a
+// 1600x160 level is 100x20 and fits with no room for a frame outside it.
+const GUI_DOS_MINIMAP = { x: 208, y: 18, w: 104, h: 20, scaleX: 16, scaleY: 8, pad: 0 };
 const GUI_CROP_W = (index) =>
   !GUI_SHARED_BORDER ? GUI_TILE_W : index >= GUI_LAST_BUTTON ? GUI_TILE_W - 1 : GUI_TILE_W + 1;
 const GUI_GROW_FOR = (index) =>
@@ -97,6 +101,12 @@ class GuiPanel {
     GUI_SHARED_BORDER = !(layout && layout.sharedBorder === false);
     GUI_CROP_H = GUI_SHARED_BORDER ? GUI_TILE_H + 1 : GUI_TILE_H;
     GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
+    // the minimap's window: where a Lemmix panel put it, or the DOS box
+    this.minimapSpec = layout ? layout.minimap || null : GUI_DOS_MINIMAP;
+    this.minimap = null;
+    this.minimapDrag = false;  // a press on the map, still held
+    this.onMinimapCenter = null; // (levelPoint) => the page moves the view
+    this.viewRect = null;
 
     this.canvas = document.createElement("canvas");
     this.ctx = null;
@@ -115,6 +125,9 @@ class GuiPanel {
     // pixel of a 0.6m panel is under 2mm at arm's length - far too shallow to
     // read as raised. See setReliefDepth.
     this.reliefDepth = 1;
+    // Whether the artwork and counters stand off the panel at all: off, the
+    // bar is the flat original. See setRelief.
+    this.reliefOn = true;
     this._tileGeoms = [];
   }
 
@@ -190,6 +203,7 @@ class GuiPanel {
     this.scene.add(this.textMesh);
     this._refreshText();
 
+    this._applyReliefVisibility(); // the switch may have been thrown before the build
     this._layoutRelief();
   }
 
@@ -324,7 +338,7 @@ class GuiPanel {
       this.textMesh.geometry.dispose();
     }
     this.textMesh.geometry = geom || this._emptyGeom;
-    this.textMesh.visible = !!geom;
+    this.textMesh.visible = this.reliefOn && !!geom;
   }
 
   /** Per-tile relief geometry (cached), for the raised hovered button. */
@@ -456,6 +470,12 @@ class GuiPanel {
     this.hoverTile.visible = false;
     this.hoverTile.renderOrder = GUI_ORDER_HOVER;
     this.scene.add(this.hoverTile);
+
+    if (this.minimapSpec && typeof MiniMap !== "undefined" && this.game.level) {
+      this.minimap = new MiniMap(this, this.game, this.game.level, this.minimapSpec,
+        this.scene, this.resources);
+      if (this.viewRect) this.minimap.setViewRect(this.viewRect);
+    }
     return true;
   }
 
@@ -476,7 +496,7 @@ class GuiPanel {
     if (index === this.hoverIndex) return;
     // put the previously raised button back in its slot
     if (this.tileReliefs && this.hoverIndex != null && this.tileReliefs[this.hoverIndex]) {
-      this.tileReliefs[this.hoverIndex].visible = true;
+      this.tileReliefs[this.hoverIndex].visible = this.reliefOn;
     }
     this.hoverIndex = index;
     this.hoverTile.visible = index != null;
@@ -491,7 +511,7 @@ class GuiPanel {
     }
     if (this.hoverRelief) {
       const geom = this._tileGeometry(index);
-      this.hoverRelief.visible = !!geom;
+      this.hoverRelief.visible = this.reliefOn && !!geom;
       if (geom) this.hoverRelief.geometry = geom;
     }
     this._layoutHoverTile(index);
@@ -531,6 +551,28 @@ class GuiPanel {
     this._layoutRelief();
   }
 
+  /** Whether the artwork and counters are extruded at all. Off, the bar is
+   *  the flat original; a hovered button still rises, since that is how the
+   *  bar answers the pointer. */
+  setRelief(on) {
+    if (this.reliefOn === on) return;
+    this.reliefOn = on;
+    this._applyReliefVisibility();
+  }
+
+  _applyReliefVisibility() {
+    if (!this.tileReliefs) return; // applied once the relief is built
+    const on = this.reliefOn;
+    this.tileReliefs.forEach((m, i) => { m.visible = on && i !== this.hoverIndex; });
+    if (this.hoverRelief) {
+      this.hoverRelief.visible =
+        on && this.hoverIndex != null && !!this._tileGeometry(this.hoverIndex);
+    }
+    if (this.textMesh) {
+      this.textMesh.visible = on && this.textMesh.geometry !== this._emptyGeom;
+    }
+  }
+
   place(width, y, z) {
     const p = this._placement;
     if (this._placed && p && p.width === width && p.y === y && p.z === z) return;
@@ -552,6 +594,13 @@ class GuiPanel {
       this._layoutHoverRelief(this.hoverIndex);
     }
     this._layoutRelief();
+    if (this.minimap) this.minimap.layout();
+  }
+
+  /** The part of the level in view, in level px, from the page each frame. */
+  setViewRect(rect) {
+    if (rect) this.viewRect = rect;
+    if (this.minimap) this.minimap.setViewRect(rect);
   }
 
   /** How far a raised button's bottom edge sits below the panel's centre,
@@ -572,6 +621,7 @@ class GuiPanel {
   update() {
     if (!this._ensureMesh()) return;
     this._applyPlacement();
+    if (this.minimap) this.minimap.update(); // the frame moves between ticks
     if (!this.dirty) return;
     this.dirty = false;
     this.ctx.putImageData(this.display.getImageData(), 0, 0);
@@ -594,11 +644,55 @@ class GuiPanel {
     };
   }
 
-  onMouseDown(uv) { this.display.onMouseDown.trigger(this._uvToPixels(uv)); }
-  onMouseUp(uv) { this.display.onMouseUp.trigger(this._uvToPixels(uv)); }
-  onDoubleClick(uv) { this.display.onDoubleClick.trigger(this._uvToPixels(uv)); }
+  /** Does this UV land on the minimap's window? */
+  isMinimap(uv) {
+    if (!uv || !this.minimap) return false;
+    const p = this._uvToPixels(uv);
+    return this.minimap.contains(p.x, p.y);
+  }
+
+  _centerFromMinimap(p) {
+    if (this.onMinimapCenter) this.onMinimapCenter(this.minimap.pointToLevel(p.x, p.y));
+  }
+
+  _endMinimapDrag() {
+    this.minimapDrag = false;
+    if (this.minimap) this.minimap.setFreeze(false);
+  }
+
+  // A press on the map is the page's to answer, never the game's: the DOS
+  // GameGui would take it for a button past the last one and disarm a
+  // prepared nuke on the way (handleSkillMouseDown), and a Lemmix panel
+  // would look up a cell that is not there. Held and moved, it keeps
+  // centring the view (MinimapMouseMove); moved off the map, it lets go.
+  onMouseDown(uv) {
+    const p = this._uvToPixels(uv);
+    if (this.minimap && this.minimap.contains(p.x, p.y)) {
+      this.minimapDrag = true;
+      this.minimap.setFreeze(true);
+      this._centerFromMinimap(p);
+      return;
+    }
+    this.display.onMouseDown.trigger(p);
+  }
+  onMouseMove(uv) {
+    if (!this.minimapDrag) return;
+    const p = uv ? this._uvToPixels(uv) : null;
+    if (p && this.minimap.contains(p.x, p.y)) this._centerFromMinimap(p);
+    else this._endMinimapDrag();
+  }
+  onMouseUp(uv) {
+    if (this.minimapDrag) { this._endMinimapDrag(); return; }
+    if (uv) this.display.onMouseUp.trigger(this._uvToPixels(uv));
+  }
+  onDoubleClick(uv) {
+    const p = this._uvToPixels(uv);
+    if (this.minimap && this.minimap.contains(p.x, p.y)) return;
+    this.display.onDoubleClick.trigger(p);
+  }
 
   dispose() {
+    if (this.minimap) { this.minimap.dispose(); this.minimap = null; }
     if (this.mesh) this.scene.remove(this.mesh);
     if (this.hoverTile) this.scene.remove(this.hoverTile);
     if (this.tileReliefs) this.tileReliefs.forEach((m) => this.scene.remove(m));

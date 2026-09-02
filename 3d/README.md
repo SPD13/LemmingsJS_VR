@@ -28,7 +28,7 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
-`?emboss=`, `?smooth=`, `?doors=` and `?edit=` (`1`/`on`/`true` or
+`?emboss=`, `?smooth=`, `?doors=`, `?skillbar=` and `?edit=` (`1`/`on`/`true` or
 `0`/`off`/`false`). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them
 on a headset — its browser is a different machine with its own empty
@@ -43,6 +43,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   of the camera)
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
+- the minimap at the panel's right end shows the level, the lemmings as
+  green dots and a frame around what is in view; click or drag on it to
+  centre the view there, keeping the zoom (in VR, the trigger held on it)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `r` dump the replay string to the console
 - "prev", "restart" and "next" ask before throwing away a level in progress —
@@ -76,7 +79,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   NeoLemmix's own mechanics, with NeoLemmix's skill panel in place of the
   DOS one; they need the styles and player assets described in the root
   README under "Levels and assets".
-- "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
+- "3D effects" (top right, under "controls") unfolds the four render
+  switches. "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
   count, so turn it off if the frame rate suffers; individual pieces can
@@ -94,6 +98,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   them, by averaging the pixel heights that meet at each quad corner (crisp
   at depth-class boundaries and silhouettes); it only changes anything while
   "3D terrain" is on.
+- "3D skills bar" extrudes the skill panel's artwork and counters off the
+  panel, so they read as embossed; off, the bar is the flat original (a
+  hovered button still rises, since that is how the bar answers the pointer).
 - `e` enters edit mode and toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama

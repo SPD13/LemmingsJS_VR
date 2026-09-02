@@ -20,16 +20,22 @@
   #game-state.won { color: #6fce7e; }
   #game-state.lost { color: #e07a6a; }
   #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
-  /* the key hints: folded to a "controls" button, unfolding to the panel */
-  #hud-keys { top: 12px; right: 12px; color: #8fa1bb; text-align: right; padding-top: 26px; }
-  #hud-keys b { color: #cdd6e4; font-weight: 600; }
-  #hud-keys.folded { padding: 0; border: none; background: transparent; }
-  #hud-keys.folded #keys-body, #hud-keys:not(.folded) #keys-open { display: none; }
-  #keys-close {
+  /* the folding panels down the right edge: each is a button that unfolds
+     into its panel, which folds back once the mouse has left it */
+  .fold { right: 12px; padding-top: 26px; }
+  .fold.folded { padding: 0; border: none; background: transparent; }
+  /* over the next panel's button, and opaque so it does not show through */
+  .fold:not(.folded) { z-index: 11; background: #0e121a; }
+  .fold.folded .fold-body, .fold:not(.folded) .fold-open { display: none; }
+  .fold-close {
     position: absolute; top: 5px; right: 6px; padding: 0 6px; line-height: 16px;
     color: #8fa1bb; border-color: transparent; background: transparent;
   }
-  #keys-close:hover { color: #f0f3f8; background: #263043; border-color: #33405a; }
+  .fold-close:hover { color: #f0f3f8; background: #263043; border-color: #33405a; }
+  #hud-keys { top: 12px; color: #8fa1bb; text-align: right; }
+  #hud-keys b { color: #cdd6e4; font-weight: 600; }
+  #hud-fx { top: 46px; }
+  #hud-fx .btnrow { margin-top: 0; }
   .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btnrow button { white-space: nowrap; }
   button {
@@ -167,9 +173,6 @@
     <button id="btn-library">worlds</button>
     <button id="btn-sound">sound: on</button>
     <button id="btn-mode">mode: play</button>
-    <button id="btn-emboss">3D terrain: on</button>
-    <button id="btn-doors">3D doors: on</button>
-    <button id="btn-smooth">smooth: on</button>
   </div>
 </div>
 
@@ -186,14 +189,27 @@
   <div id="lib-grid"></div>
 </div>
 
-<div id="hud-keys" class="hud folded">
-  <button id="keys-open">controls</button>
-  <div id="keys-body">
-  <button id="keys-close" title="hide the controls">&times;</button>
+<div id="hud-keys" class="hud fold folded">
+  <button class="fold-open">controls</button>
+  <div class="fold-body">
+  <button class="fold-close" title="hide">&times;</button>
   <b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br>
   <b>click</b> lemming: assign skill &middot; panel: as in game<br>
   <b>space</b> pause &middot; <b>n</b> step &middot; <b>+/-</b> speed &middot; <b>,/.</b> level<br>
   <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>w</b> world library &middot; <b>r</b> dump replay
+  </div>
+</div>
+
+<div id="hud-fx" class="hud fold folded">
+  <button class="fold-open">3D effects</button>
+  <div class="fold-body">
+    <button class="fold-close" title="hide">&times;</button>
+    <div class="btnrow">
+      <button id="btn-emboss">3D terrain: on</button>
+      <button id="btn-doors">3D doors: on</button>
+      <button id="btn-smooth">smooth: on</button>
+      <button id="btn-skillbar">3D skills bar: on</button>
+    </div>
   </div>
 </div>
 
@@ -258,6 +274,7 @@
 <script src="js/editor.js"></script>
 <script src="js/library.js"></script>
 <script src="js/vr.js"></script>
+<script src="js/minimap.js"></script>
 <script src="js/gui.js"></script>
 <script src="js/app.js"></script>
 </body>

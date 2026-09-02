@@ -330,7 +330,8 @@ class VRManager {
     // scrubber - the volume slider, the catalog's scrollbar - takes hold of
     // it, anything else drags the world
     const on = this.hooks.pickWithRaycaster(this._rayFrom(controller));
-    const slider = !!(on && (on.barTool === "volume" || on.scrollBar));
+    // the minimap is a scrubber too: held and moved, it keeps centring the view
+    const slider = !!(on && (on.barTool === "volume" || on.scrollBar || on.minimap));
     const bar = !!(on && on.barTool === "move");
     this._press = {
       c: controller,
@@ -354,6 +355,9 @@ class VRManager {
   _onSelectEnd(controller) {
     const p = this._press;
     this._press = null;
+    if (p && p.c === controller && p.slider && this.hooks.onScrubEnd) {
+      this.hooks.onScrubEnd(p.scrub); // the hold is over, whatever it was on
+    }
     if (!p || p.c !== controller || p.dragging || !this.presenting) return;
     const pick = this.hooks.pickWithRaycaster(this._rayFrom(controller));
     if (pick) this.hooks.onSelectPick(pick);
@@ -376,6 +380,8 @@ class VRManager {
       const on = this.hooks.pickWithRaycaster(this._rayFrom(p.c));
       if (on && on.barTool === p.scrub) {
         this.hooks.onSelectPick(Object.assign({ scrubbing: true }, on));
+      } else if (this.hooks.onScrubOff) {
+        this.hooks.onScrubOff(p.scrub); // the beam left it (the minimap lets go)
       }
       return;
     }
