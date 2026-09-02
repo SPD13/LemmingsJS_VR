@@ -40,7 +40,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   jump straight to that level with the piece editor already enabled. A world
   header shows its level count and a green "✔ tagged" mark when a profile
   file exists in `profiles/`. The catalog is cached in localStorage ("rescan"
-  rebuilds it); miniatures render lazily as you scroll.
+  rebuilds it); miniatures render lazily as you scroll. The sim is held while
+  it is up, and released on closing — unless the game was already paused, in
+  which case it stays that way.
 - "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
