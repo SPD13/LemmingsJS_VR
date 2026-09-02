@@ -82,12 +82,12 @@
 
   // sound cue names (the sound/ file names NeoLemmix uses)
   const SFX = {
-    ASSIGN_SKILL: "assign", ASSIGN_FAIL: "assignfail", HITS_STEEL: "chink", LETSGO: "letsgo",
+    ASSIGN_SKILL: "mousepre", ASSIGN_FAIL: "assignfail", HITS_STEEL: "chink", LETSGO: "letsgo",
     ENTRANCE: "door", YIPPEE: "yippee", OHNO: "ohno", EXPLOSION: "explode", SPLAT: "splat",
     DROWNING: "glug", VAPORIZING: "fire", SWIMMING: "splash", FALLOUT: "die", ZOMBIE: "zombie",
-    PICKUP: "pickup", EXIT_OPEN: "exitopen", BUILDER_WARNING: "ting", FIXING: "fixing",
-    TIMEUP: "timeup", ADD_SKILL: "assign", REMOVE_SKILLS: "removeskills", NEUTRALIZE: "neutralize",
-    DENEUTRALIZE: "deneutralize", PORTAL: "warp",
+    PICKUP: "oing2", EXIT_OPEN: "exitopen", BUILDER_WARNING: "ting", FIXING: "wrench",
+    TIMEUP: "timeup", ADD_SKILL: "skill_add", REMOVE_SKILLS: "skill_remove", NEUTRALIZE: "neutralize",
+    DENEUTRALIZE: "deneutralize", PORTAL: "portal", SKILLBUTTON: "changeop",
   };
 
   const inSet = (v, arr) => arr.indexOf(v) >= 0;
