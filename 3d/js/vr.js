@@ -32,6 +32,7 @@ const GUI_VR_RELIEF_DEPTH = 1;
 const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
 const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
 const VR_VOLUME_HEIGHT = 0.15;  // the volume slider, standing off the bar's end
+const VR_SOUND_LINGER = 2000;   // ms the slider stays up once the beam leaves
 // The restart question, head-fixed in metres of camera space.
 const VR_MODAL_WIDTH = 0.42;
 const VR_MODAL_Y = 0.02;
