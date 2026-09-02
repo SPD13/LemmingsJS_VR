@@ -32,6 +32,7 @@ const SFX = {
   TING: 14,    // three bricks left to build  (128ms, 5.6kHz - short, bright)
   DOOR: 2,     // the entrance hatch swinging (537ms, 3.0kHz, the loudest)
   NUKE: 12,    // the nuke                    (855ms, 9.4kHz - long, noisy)
+  STEEL: 13,   // a skill stopped by steel    (172ms, 1.4kHz - a short clang)
 };
 
 // A builder lays 12 bricks; the original warns with three to go.
