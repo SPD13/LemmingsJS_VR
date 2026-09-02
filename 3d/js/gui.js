@@ -17,7 +17,10 @@ const GUI_TILE_GROW = 1.08;
 // GameGui draws the selection frame on the tile's shared right/bottom border
 // lines (x = 16i+16, y = 39), so a raised copy must crop one pixel wider and
 // taller or those two edges are left behind.
-const GUI_CROP_H = GUI_TILE_H + 1;
+// A Lemmix panel has no shared border - each 16-px cell is its own tile -
+// so its copies crop exactly one cell, or they bite the neighbour's edge.
+let GUI_SHARED_BORDER = true;
+let GUI_CROP_H = GUI_TILE_H + 1;
 let GUI_BUTTONS = 13;         // the DOS panel; a Lemmix game states its own (panelLayout)
 // ...but the last button (speed) has no next tile: the status box's red
 // border starts at x=207, so that button's cell is only 15 columns wide.
@@ -25,11 +28,11 @@ let GUI_BUTTONS = 13;         // the DOS panel; a Lemmix game states its own (pa
 // along with it.
 let GUI_LAST_BUTTON = GUI_BUTTONS - 1;
 const GUI_CROP_W = (index) =>
-  index >= GUI_LAST_BUTTON ? GUI_TILE_W - 1 : GUI_TILE_W + 1;
+  !GUI_SHARED_BORDER ? GUI_TILE_W : index >= GUI_LAST_BUTTON ? GUI_TILE_W - 1 : GUI_TILE_W + 1;
 const GUI_GROW_FOR = (index) =>
-  index >= GUI_LAST_BUTTON ? 1 : GUI_TILE_GROW;
+  GUI_SHARED_BORDER && index >= GUI_LAST_BUTTON ? 1 : GUI_TILE_GROW;
 const GUI_CROP_CX = (index) => index * GUI_TILE_W + GUI_CROP_W(index) / 2;
-const GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
+let GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
 // The toolbar is an overlay: drawn without depth testing, after the world,
 // so it is always visible and clickable no matter what it sits in front of.
 // Aiming marks - the cursor, the controller dots and the hand markers - carry
@@ -91,6 +94,9 @@ class GuiPanel {
     GUI_BUTTONS = layout ? layout.buttons : 13;
     GUI_LAST_BUTTON = GUI_BUTTONS - 1;
     GUI_DIGIT_BUTTONS = layout ? layout.digitButtons : 10;
+    GUI_SHARED_BORDER = !(layout && layout.sharedBorder === false);
+    GUI_CROP_H = GUI_SHARED_BORDER ? GUI_TILE_H + 1 : GUI_TILE_H;
+    GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
 
     this.canvas = document.createElement("canvas");
     this.ctx = null;

@@ -71,7 +71,8 @@
       const slots = this.skills.map((s) => "skill:" + s);
       while (slots.length < SKILL_SLOTS) slots.push("empty");
       this.cells = ["rrminus", "rrplus"].concat(slots).concat(["pause", "nuke", "speed"]);
-      this.layout = { buttons: this.cells.length, digitButtons: 2 + SKILL_SLOTS, width: PANEL_W, height: PANEL_H };
+      this.layout = { buttons: this.cells.length, digitButtons: 2 + SKILL_SLOTS, width: PANEL_W, height: PANEL_H,
+        sharedBorder: false }; // each cell is its own tile; nothing is drawn on a shared line
       game.panelLayout = this.layout;
       this.rrHeld = 0;
       this.lastNukeClick = -1;
