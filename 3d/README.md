@@ -79,10 +79,11 @@ intended start area.
   starts with it, and a trigger pull on the other hand takes it over — that
   pull only moves the beam, since until it had one that hand was aiming at
   nothing you could see
-- **thumbsticks** — right pans the board, left tilts it (yaw about the
-  vertical, pitch about your own horizontal): the same two moves as
-  right-drag and left-drag on the desktop, at 0.8&nbsp;m/s and 60°/s at full
-  deflection
+- **thumbsticks** — the pointing hand's pans the board, the other tilts it
+  (yaw about the vertical, pitch about your own horizontal): the same two
+  moves as right-drag and left-drag on the desktop, at 0.8&nbsp;m/s and 60°/s
+  at full deflection. They swap with the beam, so the pointing thumb always
+  pans
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of
