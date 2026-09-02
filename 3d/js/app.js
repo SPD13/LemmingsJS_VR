@@ -1305,12 +1305,27 @@
   }
 
   // world library: catalog of tilesets, click-to-enter for tagging sessions
+  let libraryHeldSim = false; // true while the catalog is the reason it stopped
   const library = new WorldLibrary(factory, async (gameType, group, level) => {
     state.gameType = gameType;
     state.group = group;
     state.level = level;
     await loadLevel();
     if (session && session.editor) session.editor.enable();
+  }, (open) => {
+    // Hold the sim while the catalog is up - lemmings should not be walking
+    // off ledges behind it. Only resume what we stopped: a game the player
+    // had already paused stays paused when the catalog closes.
+    if (!session) return;
+    const timer = session.game.getGameTimer();
+    if (open) {
+      libraryHeldSim = timer.isRunning();
+      if (libraryHeldSim) timer.suspend();
+    } else if (libraryHeldSim) {
+      libraryHeldSim = false;
+      timer.continue();
+    }
+    hud.pauseBtn.textContent = timer.isRunning() ? "pause" : "resume";
   });
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
 

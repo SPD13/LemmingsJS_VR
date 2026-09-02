@@ -20,10 +20,15 @@ const GAME_LABELS = { 1: "Lemmings", 2: "Oh No! More Lemmings" };
 const LIBRARY_CACHE_KEY = "lem3d-worlds-v2";
 
 class WorldLibrary {
-  /** enterWorld(gameType, group, level) loads the level with the editor on. */
-  constructor(factory, enterWorld) {
+  /**
+   * enterWorld(gameType, group, level) loads the level with the editor on.
+   * onVisibility(open) fires when the catalog is shown or hidden, so the
+   * caller can hold the sim while the player is reading it.
+   */
+  constructor(factory, enterWorld, onVisibility) {
     this.factory = factory;
     this.enterWorld = enterWorld;
+    this.onVisibility = onVisibility;
     this.isOpen = false;
     this.dom = {
       panel: document.getElementById("library"),
@@ -51,14 +56,18 @@ class WorldLibrary {
   toggle() { this.isOpen ? this.close() : this.open(); }
 
   open() {
+    if (this.isOpen) return;
     this.isOpen = true;
     this.dom.panel.hidden = false;
+    if (this.onVisibility) this.onVisibility(true);
     if (!this._populated) this._populate(false);
   }
 
   close() {
+    if (!this.isOpen) return;
     this.isOpen = false;
     this.dom.panel.hidden = true;
+    if (this.onVisibility) this.onVisibility(false);
   }
 
   _readCache() {
