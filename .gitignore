@@ -26,3 +26,6 @@ styles/
 gfx/
 sound/
 music/
+
+# NeoLemmix source, fetched for reference (see README) - not committed
+Doc/neolemmix-src/
