@@ -1,13 +1,16 @@
 "use strict";
 /**
- * World library: every level of both games, grouped by tileset ("world").
- * Clicking a level tile loads it.
+ * World library: every level of both games. Clicking a level tile loads it.
  *
  * What a tile says depends on the mode. Playing, it reports your own record:
  * a cleared level is marked and carries its best time. Editing, it reports
  * the tagging instead - a green mark on a world's header means a tagging file
  * for that world exists in 3d/profiles/ - and entering a level turns the
  * piece editor on.
+ *
+ * The tiles are laid out either way round: by level number, the order the
+ * games play them in (the default), or by world, the tileset each is built
+ * from. The choice is remembered in localStorage.
  *
  * Discovery scans the complete level order once, recording each level's
  * ground set (VGASPEC special levels carry no piece data and are skipped);
@@ -23,6 +26,7 @@ const WORLD_NAMES = {
 const GAME_LABELS = { 1: "Lemmings", 2: "Oh No! More Lemmings" };
 const LIBRARY_CACHE_KEY = "lem3d-worlds-v2";
 const PROGRESS_KEY = "lem3d-cleared";
+const ORDER_KEY = "lem3d-lib-order";
 
 /**
  * Which levels this browser has cleared, and how fast. Kept in localStorage,
@@ -78,7 +82,20 @@ class WorldLibrary {
       status: document.getElementById("lib-status"),
       close: document.getElementById("lib-close"),
       rescan: document.getElementById("lib-rescan"),
+      order: document.getElementById("lib-order"),
     };
+    // by level number, the way the games are played, or by the world each
+    // level is built from
+    let saved = null;
+    try { saved = localStorage.getItem(ORDER_KEY); } catch (e) {}
+    this.order = saved === "world" ? "world" : "level";
+    this._renderOrderBtn();
+    this.dom.order.addEventListener("click", () => {
+      this.order = this.order === "level" ? "world" : "level";
+      try { localStorage.setItem(ORDER_KEY, this.order); } catch (e) {}
+      this._renderOrderBtn();
+      if (this._populated) this._populate(false);
+    });
     this.dom.close.addEventListener("click", () => this.close());
     this.dom.rescan.addEventListener("click", () => {
       try { localStorage.removeItem(LIBRARY_CACHE_KEY); } catch (e) {}
@@ -96,6 +113,13 @@ class WorldLibrary {
   }
 
   toggle() { this.isOpen ? this.close() : this.open(); }
+
+  _renderOrderBtn() {
+    this.dom.order.textContent = "order: " + this.order;
+    this.dom.order.title = this.order === "level"
+      ? "listed by level number - click to group by world"
+      : "grouped by world - click to list by level number";
+  }
 
   /** Playing or editing: the tiles report different things. */
   setEditMode(on) {
@@ -177,7 +201,8 @@ class WorldLibrary {
         mapping = await this._discover();
         this._writeCache(mapping);
       }
-      await this._renderWorlds(mapping);
+      if (this.order === "world") await this._renderWorlds(mapping);
+      else await this._renderLevels(mapping);
       this.dom.status.textContent = "";
     } catch (err) {
       this.dom.status.textContent = "library failed to build — see console";
@@ -265,7 +290,64 @@ class WorldLibrary {
     }
   }
 
-  _buildTile(gameType, groupNames, entry) {
+  /**
+   * The same tiles, in the order the games play them: a heading per
+   * difficulty, and each tile saying which world it is built from, since that
+   * is no longer what groups them.
+   */
+  async _renderLevels(mapping) {
+    for (const gameType of Object.keys(mapping).map(Number)) {
+      const worlds = mapping[gameType];
+      if (!worlds || worlds.length === 0) continue;
+      const gameHeader = document.createElement("div");
+      gameHeader.className = "lib-game";
+      gameHeader.textContent = GAME_LABELS[gameType] || "game " + gameType;
+      this.dom.grid.appendChild(gameHeader);
+
+      const config = await this.factory.getConfig(gameType);
+      const names = WORLD_NAMES[gameType] || [];
+      const groupNames = config.level.groups || [];
+      const levels = [];
+      for (const world of worlds) {
+        for (const entry of world.levels) {
+          levels.push({ entry, set: names[world.set] || "set " + world.set });
+        }
+      }
+      // the scan walks a game tileset by tileset; play order is by group
+      levels.sort((a, b) =>
+        a.entry.group - b.entry.group || a.entry.level - b.entry.level);
+
+      let group = -1, tiles = null;
+      for (const { entry, set } of levels) {
+        if (entry.group !== group) {
+          group = entry.group;
+          const inGroup = levels.filter((l) => l.entry.group === group);
+          const header = document.createElement("div");
+          header.className = "lib-world";
+          const title = document.createElement("span");
+          title.textContent = (groupNames[group] || "Group " + (group + 1)) +
+            " · " + inGroup.length + " levels";
+          header.appendChild(title);
+          if (!this.editMode) {
+            const mark = document.createElement("span");
+            mark.className = "lib-mark";
+            const done = inGroup.filter((l) => LevelProgress.best(
+              gameType, l.entry.group, l.entry.level) !== null).length;
+            mark.textContent = done + " / " + inGroup.length + " cleared";
+            if (done === inGroup.length) mark.classList.add("tagged");
+            header.appendChild(mark);
+          }
+          this.dom.grid.appendChild(header);
+          tiles = document.createElement("div");
+          tiles.className = "lib-tiles";
+          this.dom.grid.appendChild(tiles);
+        }
+        tiles.appendChild(this._buildTile(gameType, groupNames, entry, set));
+      }
+    }
+  }
+
+  _buildTile(gameType, groupNames, entry, setName) {
     const tile = document.createElement("div");
     tile.className = "lib-tile";
 
@@ -299,8 +381,9 @@ class WorldLibrary {
 
     const sub = document.createElement("div");
     sub.className = "lib-sub";
-    sub.textContent = entry.name;
-    sub.title = entry.name;
+    // in level order the world is not the heading, so the tile carries it
+    sub.textContent = setName ? entry.name + " · " + setName : entry.name;
+    sub.title = sub.textContent;
     tile.appendChild(sub);
 
     tile.addEventListener("click", () => {
