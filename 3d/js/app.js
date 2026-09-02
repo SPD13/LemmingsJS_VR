@@ -2920,6 +2920,8 @@
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
+    // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
+    vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
     get session() { return session; },
   };
 
