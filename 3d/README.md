@@ -66,11 +66,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   opt out with "3D shade" in the piece editor, or flip which shades are
   raised with "invert" (some pieces are drawn with dark highlights, so
   darker pixels are the ones standing proud).
-- "3D doors" builds entrances and exits as real openings instead of flat
-  sprites (see `js/portals.js`). Off, they stay the sprites the original
-  draws and the terrain behind them is left uncarved. The carve happens as
-  the level is built, so toggling this rebuilds the level rather than
-  swapping in place.
+- "3D doors" builds the objects that are not flat sprites (`js/portals.js`):
+  entrances and exits as real openings, and water given the body its waves
+  are the surface of — as wide as the sprite, reaching down to whatever
+  ground stops it. Off, they all stay the sprites the original draws and the
+  terrain behind an opening is left uncarved. The carve happens as the level
+  is built, so toggling this rebuilds the level rather than swapping in
+  place.
 - "smooth" slopes the relief between neighbouring heights instead of stepping
   them, by averaging the pixel heights that meet at each quad corner (crisp
   at depth-class boundaries and silhouettes); it only changes anything while
@@ -271,6 +273,15 @@ Exiting VR restores the desktop camera and scale exactly as they were.
 - `js/vr.js` — WebXR layer: ENTER VR button, session handling, meter-scale
   diorama placement, controller rays feeding the same pick path as the mouse,
   grip drag and two-grip scale on the diorama root.
+- `js/steel.js` — steel areas, which the engine reads and then never uses.
+  `LevelReader.steel` has no consumer in lemmings.js, and its parse has x/y
+  and width/height the wrong way round besides, so most areas land off the
+  level. The ranges are recovered and unpacked properly here, and the digger,
+  basher and miner are wrapped on their own instances to stop at them: a
+  digger walks, a basher or miner turns round, each with a short clang, and
+  no ground is removed on the way. `js/app.js` restates the release loop the
+  same way, so a level with several entrances uses all of them in turn
+  instead of pouring everything out of the first.
 - `js/app.js` — boot, scene, camera, input, level switching. The sim keeps its
   fixed 60 ms step but is driven from the rAF loop via an accumulator
   (browsers throttle `setInterval` in unfocused windows; the VR build needs a
@@ -283,14 +294,13 @@ camera, renderer, controls}` for console debugging and automated checks.
 
 ## Known gaps / next steps
 
-- No tileset has been hand-tagged yet — the editor exists (`e`), the
-  authoring sessions haven't happened. Exported profiles must be saved into
-  `3d/profiles/` manually.
-- Objects extrude like all sprites but still sit at fixed depths (background
-  objects behind the slab, others in front); no shape classes (exit
-  interiors, hinged hatches, water shaders) yet.
-- `VGASPEC` special levels untested; steel areas and multi-entrance
-  behavior inherited as-is from LemmingsJS.
+- Only one tileset has been hand-tagged (`profiles/lemmings-g0.json`, seven
+  pieces of the dirt set marked backdrop); the other eight fall back to
+  "everything is terrain". The editor exists (`e`), the authoring sessions
+  have not happened. Exported profiles must be saved into `3d/profiles/`
+  manually.
+- Objects that are not openings or water still extrude like any sprite, at
+  fixed depths (background objects behind the slab, others in front).
 - Audio (music + SFX) plays through the engine's own AdLib/OPL synth
   (`js/audio.js`; "sound" button toggles, persisted). SFX indexes into
   ADLIB.DAT are a best-effort mapping — audition with
@@ -299,12 +309,17 @@ camera, renderer, controls}` for console debugging and automated checks.
   diorama position, listener from the headset pose); music stays ambient. The
   distance rolloff is deliberately shallow - the board is a 4m strip an arm's
   length away, and a realistic curve left its far end inaudible under the
-  music. Effects fire on a handful of cues only: the level's "let's go", a
-  skill assigned to a lemming, and the ones that are rare by nature (oh-no,
-  explosion, splat, drowning, the exit, a trap).
+  music. The cues are the level's "let's go", the entrance hatch, a press on
+  the skill panel, a skill assigned to a lemming, the builder's warning three
+  bricks from the end, a skill stopped by steel, the nuke, and the ones that
+  are rare by nature (oh-no, explosion, splat, drowning, the exit, a trap).
+  The four added last were mapped by measuring every ADLIB track's length and
+  spectral centroid rather than by guessing; the numbers are in the table.
 - Replay-based 2D-vs-3D end-state comparison is manual for now (`r` dump +
-  `?replay=`); an automated harness is Phase 0 debt.
-- The VR mode is logic-verified (placement math, controller pick path,
-  desktop regression) but has not yet been run on real headset hardware; the
-  DOM HUD (level name, buttons, editor) is invisible in-headset — in-scene
-  equivalents are pending.
+  `?replay=`); an automated harness is Phase 0 debt. Note that two fixes
+  below deliberately part company with the 2D page, in the direction of the
+  original game: steel stops the destructive skills, and multiple entrances
+  release in turn. Replays of levels with either will not match it.
+- The piece editor is the one part of the interface with no in-scene
+  equivalent: it is a desktop workbench, and edit mode is not offered in a
+  headset.
