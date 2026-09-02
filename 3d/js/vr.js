@@ -31,6 +31,8 @@ const VR_GUI_Z = -0.75;
 // distance - too shallow for the eyes to call it raised.
 const GUI_VR_RELIEF_DEPTH = 6;
 const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
+const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
+const VR_DOT_ORDER = 60;        // the beam's dot, over the toolbar (max 55)
 // Thumbsticks. The deadzone is generous because a resting thumb on a stick
 // that never quite centres would otherwise drift the board all session.
 const VR_STICK_DEADZONE = 0.15;
@@ -155,7 +157,9 @@ class VRManager {
       }
       c.add(new THREE.Mesh(tipGeom, tipMat)); // hand marker, always visible
       c.userData.dot = new THREE.Mesh(dotGeom, dotMat);
-      c.userData.dot.renderOrder = 20;
+      // above everything the toolbar draws, handles included: the dot marks
+      // where the beam lands, so it belongs on top of whatever it landed on
+      c.userData.dot.renderOrder = VR_DOT_ORDER;
       c.userData.dot.visible = false;
       scene.add(c.userData.dot);
       // grip-space marker: a second visibility path in case the runtime
