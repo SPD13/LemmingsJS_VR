@@ -12,7 +12,10 @@
  * it holds and how many of them are cleared - and a directory that holds
  * levels shows their miniature tiles. Where the player is in the tree is
  * remembered; opening the library lands on the directory of the level being
- * played.
+ * played. When the page starts with no level asked for, it opens on the
+ * library instead - at the root of levels/, locked, with no way to close it
+ * until a level is chosen: nothing plays until the player has picked
+ * something to play.
  *
  * What a tile says depends on the mode. Playing, it reports your own record:
  * a cleared level is marked and carries its best time. Editing, it reports
@@ -214,6 +217,7 @@ class WorldLibrary {
     this.enterLevel = enterLevel;
     this.onVisibility = onVisibility;
     this.isOpen = false;
+    this.locked = false;   // up until a level is entered (the page's start)
     this.editMode = false;
     this.currentLevelId = null;
     // how a level of each engine is loaded for a miniature; the classic
@@ -316,23 +320,43 @@ class WorldLibrary {
   /** The level being played: the library opens on its directory. */
   setCurrent(levelId) { this.currentLevelId = levelId; }
 
-  open() {
+  /**
+   * `opts.path` lands on that directory rather than the current level's;
+   * `opts.locked` keeps the library up until a level is entered - how the
+   * page starts when its URL names no level.
+   */
+  open(opts) {
+    opts = opts || {};
+    if (opts.locked) this.locked = true;
+    this.dom.close.hidden = this.locked;
+    if (opts.path !== undefined) this.navigate(opts.path);
     if (this.isOpen) return;
     this.isOpen = true;
     this.dom.panel.hidden = false;
     if (this.onVisibility) this.onVisibility(true);
     this.tree().then(() => {
-      const hit = this.currentLevelId && LevelTree.byId.get(this.currentLevelId);
+      const hit = opts.path === undefined && this.currentLevelId
+        && LevelTree.byId.get(this.currentLevelId);
       if (hit) this.path = hit.node.path;
       this._render();
     }).catch((err) => this._fail(err));
   }
 
+  /** Locked, the library stays: there is nothing behind it to go back to. */
   close() {
-    if (!this.isOpen) return;
+    if (!this.isOpen || this.locked) return;
     this.isOpen = false;
     this.dom.panel.hidden = true;
     if (this.onVisibility) this.onVisibility(false);
+  }
+
+  /** Enter a level, from either browser: the library comes down and the
+   *  level loads. This is what lifts the lock the page starts under. */
+  enter(levelId) {
+    this.locked = false;
+    this.dom.close.hidden = false;
+    this.close();
+    this.enterLevel(levelId);
   }
 
   /** The directory being looked at (the root until the tree is loaded). */
@@ -370,6 +394,9 @@ class WorldLibrary {
       else this._renderRows(node);
     } catch (err) {
       this._fail(err);
+    }
+    if (this.locked && !this.dom.status.textContent) {
+      this.dom.status.textContent = "choose a level to play";
     }
   }
 
@@ -662,10 +689,7 @@ class WorldLibrary {
     sub.title = sub.textContent;
     tile.appendChild(sub);
 
-    tile.addEventListener("click", () => {
-      this.close();
-      this.enterLevel(level.id);
-    });
+    tile.addEventListener("click", () => this.enter(level.id));
     return tile;
   }
 

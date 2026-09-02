@@ -18,6 +18,10 @@ npx http-server -p 8123 -c-1
 # (the original 2D game stays at http://127.0.0.1:8123/)
 ```
 
+The page opens on the world library, at the root of `levels/`, and nothing
+plays until a level is chosen there; a level named in the URL loads straight
+away instead.
+
 URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `lemmings/0/3` or
 `LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv`; the old
@@ -50,7 +54,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   validation mode, opens the piece editor, and turns the catalog over to
   tagging status. `?edit=1` selects it too, and pressing `e` enters it, since
   the piece editor is its tool. Remembered in localStorage.
-- `w` (or the "worlds" button) opens the world library, browsed the way the
+- `w` (or the "worlds" button) opens the world library, which is also where
+  the page starts when its URL names no level (at the root, and without a
+  close until a level is picked). It is browsed the way the
   `levels/` directory is laid out: a row per level pack — its name, whether
   it is **classic** (a DOS game) or **lemmix** (a NeoLemmix pack), how many
   levels it holds and how many you have cleared — and, inside a pack, a row

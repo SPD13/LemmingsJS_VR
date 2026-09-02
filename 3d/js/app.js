@@ -8,6 +8,10 @@
  *             lemmings/0/3 or LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv
  *             (the old ?type=1|2&group=N&level=N still name a classic level),
  *             ?speed=N, ?replay=<string from the 'r' key dump>
+ *
+ * With no level in the URL the page opens on the world library, at the root
+ * of levels/, and nothing plays until one is chosen there. A level named in
+ * the URL loads straight away, as a headset's bookmark or a replay link needs.
  */
 
 (function () {
@@ -58,6 +62,10 @@
     // The level, by its id in the tree (see library.js). A bare number in
     // ?level= is the old addressing, resolved with ?type= and ?group=.
     levelId: /\//.test(params.get("level") || "") ? params.get("level") : null,
+    // whether the URL named a level at all: without one the page starts on
+    // the world library and waits for a choice, rather than playing the
+    // first level there is
+    asked: params.has("level") || params.has("type") || params.has("group"),
     legacy: {
       type: parseInt(params.get("type") || "1", 10),
       group: parseInt(params.get("group") || "0", 10),
@@ -940,6 +948,7 @@
     // open on the level being played, so the list starts where the player is
     const here = items.findIndex((it) => it.current);
     if (here >= 0) vrCatalogRevealItem(here);
+    if (library.locked && !vrCatalogNote) vrCatalogNote = "choose a level to play";
     paintVrCatalog();
   }
 
@@ -1158,7 +1167,9 @@
     const show = open && renderer.xr.isPresenting;
     if (show === vrCatalog.visible) return;
     vrCatalog.visible = show;
-    vrCatalogClose.visible = show;
+    // locked (no level chosen yet), the catalog has no close: there is
+    // nothing behind it to go back to
+    vrCatalogClose.visible = show && !library.locked;
     setBarToolState(vrCatalogClose, { hovered: false });
     setVrCatalogHover(-1);
     if (show) { holdSim("vr-catalog"); loadVrCatalog(true); }
@@ -1292,7 +1303,7 @@
     try { localStorage.setItem("lem3d-doors", state.doors ? "on" : "off"); } catch (e) {}
     renderDoorsBtn();
     paintVrSettings();
-    loadLevel().catch((err) => console.error(err));
+    if (state.levelId) loadLevel().catch((err) => console.error(err));
   }
   doorsBtn.addEventListener("click", toggleDoors);
   renderDoorsBtn();
@@ -1827,6 +1838,7 @@
 
   /** Prev/next: the neighbouring level in the pack's play order, wrapping. */
   async function moveLevel(delta) {
+    if (!state.levelId) return; // no level yet: the library is up, choose there
     await library.tree();
     const next = LevelTree.next(state.levelId, delta);
     if (next) state.levelId = next;
@@ -1887,7 +1899,6 @@
    *  The toolbar is a fixed overlay in front of the viewer, so it takes
    *  priority over the play area behind it regardless of distance. */
   function raycastHit(rc) {
-    if (!session) return null;
     // A question on screen owns the ray: its two answers are the only things
     // that can be hit, so nothing behind it can be pressed by accident.
     if (vrModal.visible) {
@@ -1904,12 +1915,17 @@
       return onPanel.length ? onPanel[0] : null;
     }
     // the catalog owns it the same way: the grid and its close button only
+    // (a raycast does not skip an invisible mesh, so the hidden close of a
+    // locked catalog is skipped here)
     if (vrCatalog.visible) {
-      const onClose = rc.intersectObject(vrCatalogClose, false);
+      const onClose = vrCatalogClose.visible
+        ? rc.intersectObject(vrCatalogClose, false) : [];
       if (onClose.length) return onClose[0];
       const onPanel = rc.intersectObject(vrCatalogPanel, false);
       return onPanel.length ? onPanel[0] : null;
     }
+    // past the windows, everything else belongs to a level
+    if (!session) return null;
     if (vrVolumeSlider.visible) {
       const hit = rc.intersectObject(vrVolumeSlider, false);
       if (hit.length) return hit[0];
@@ -2045,11 +2061,11 @@
 
   /** Aiming feedback (mouse hover or VR controller ray). */
   function applyHover(p) {
-    if (!session) return;
     setBarToolHover(p ? p.barTool : null);
     setVrCatalogHover(p && p.barTool === "worldpanel"
       ? (p.scrollBar ? -2 : p.tile) : -1);
     setVrSettingsHover(p && p.barTool === "setpanel" ? p.row : -1);
+    if (!session) return;
     session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
       cursorSim = { x: p.simX, y: p.simY };
@@ -2382,6 +2398,8 @@
     controls.enabled = false;
     resetBar();
     layoutGuiPanel();
+    // no level chosen yet: the headset gets the catalog the monitor shows
+    if (!state.levelId) setVrCatalog(true);
   });
   renderer.xr.addEventListener("sessionend", () => {
     camera.near = desktopClip.near;
@@ -2436,7 +2454,7 @@
     } else if (p.barTool === "worlds") {
       setVrCatalog(true);
     } else if (p.barTool === "catclose") {
-      setVrCatalog(false);
+      if (!library.locked) setVrCatalog(false);
     } else if (p.barTool === "worldpanel") {
       // the scrollbar, pressed or dragged, moves the list instead
       if (p.scrollBar || p.scrubbing) {
@@ -2451,7 +2469,7 @@
           loadVrCatalog();
         } else if (item && item.playable) {
           setVrCatalog(false);
-          library.enterLevel(item.levelId);
+          library.enter(item.levelId);
         }
       }
     } else if (p.barTool === "yes") {
@@ -2487,11 +2505,11 @@
     // except while the catalog is up, when either stick scrolls its list and
     // neither one moves the board behind it
     onStick: (role, x, y, seconds) => {
-      if (!session) return;
       if (vrCatalog.visible) {
         scrollVrCatalog(-y * VR_CAT_SCROLL * seconds);
         return;
       }
+      if (!session) return;
       if (role === "tilt") tiltDioramaBy(x, y, seconds);
       else panDioramaBy(x, y, seconds);
     },
@@ -2774,19 +2792,24 @@
         // button, the panel, the space bar or the catalog
         setBarToolState(vrPauseBtn,
           { on: !session.game.getGameTimer().isRunning() });
-        layoutVrModal();
-        layoutVrCatalog();
-        layoutVrSettings();
-      } else if (vrPauseBtn.visible) {
-        setVrModal(false);
-        setVrCatalog(false);
-        setVrSettings(false);
       }
+    }
+    // the in-scene windows are there with or without a level: the catalog
+    // is how a level gets chosen in the first place
+    if (renderer.xr.isPresenting) {
+      layoutVrModal();
+      layoutVrCatalog();
+      layoutVrSettings();
+    } else if (vrCatalog.visible || vrModal.visible || vrSettings.visible) {
+      setVrModal(false);
+      setVrCatalog(false);
+      setVrSettings(false);
     }
     if (renderer.xr.isPresenting) {
       // grabs, sticks and hover; the headset pose drives the camera
       vr.update(dt / 1000);
-      vrWarningSign.visible = vrMouseFallback();
+      // the sign is parked over the level, so it has nowhere to be without one
+      vrWarningSign.visible = vrMouseFallback() && !!session;
     } else {
       controls.update();
       vrWarningSign.visible = false;
@@ -2915,6 +2938,7 @@
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
   renderMode(); // billing, catalog labels and editor availability
 
+
   // debug handle for the console / automated checks
   window.__lem3d = {
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
@@ -2925,10 +2949,20 @@
     get session() { return session; },
   };
 
-  loadLevel().catch((err) => {
-    hud.loading.textContent = "FAILED TO LOAD — see console";
-    console.error(err);
-  });
+  if (state.asked) {
+    loadLevel().catch((err) => {
+      hud.loading.textContent = "FAILED TO LOAD — see console";
+      console.error(err);
+    });
+  } else {
+    // Nothing asked for: the world library, at the root of levels/, and it
+    // stays up until a level is chosen. The board behind it is empty.
+    hud.loading.classList.add("hidden");
+    hud.name.textContent = "no level loaded";
+    hud.state.textContent = "choose a level in the world library";
+    setVrStatus({ name: "choose a level", meta: "", note: "", kind: "" });
+    library.open({ path: "", locked: true });
+  }
   // setAnimationLoop instead of window rAF: inside an XR session the
   // headset's frame loop (90Hz) drives the same fixed-step accumulator
   renderer.setAnimationLoop(animate);
