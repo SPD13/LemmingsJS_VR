@@ -37,6 +37,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   original panel (release rate, skills, pause, nuke, speed)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `r` dump the replay string to the console
+- "prev", "restart" and "next" ask before throwing away a level in progress —
+  cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
+  it. The `,` and `.` keys still jump straight there, since a shortcut that
+  stops to ask is no longer a shortcut.
 - "mode" switches between playing and editing. Playing is the game and is
   the default; editing is the tagging workbench — it bills itself as
   validation mode, opens the piece editor, and turns the catalog over to

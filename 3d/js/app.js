@@ -1304,7 +1304,49 @@
     hud.pauseBtn.textContent = timer.isRunning() ? "pause" : "resume";
   }
 
+  // -------------------------------------------------- confirmation dialog
+  // The desktop twin of the in-scene question the VR restart asks.
+  const confirmDom = {
+    panel: document.getElementById("confirm"),
+    title: document.getElementById("confirm-title"),
+    body: document.getElementById("confirm-body"),
+    yes: document.getElementById("confirm-yes"),
+    no: document.getElementById("confirm-no"),
+  };
+  let confirmAction = null;
+
+  /** Ask before anything that throws away a level in progress. */
+  function askConfirm(title, verb, action) {
+    confirmDom.title.textContent = title;
+    confirmDom.body.textContent = "Progress on this level is lost.";
+    confirmDom.yes.textContent = verb;
+    confirmAction = action;
+    confirmDom.panel.hidden = false;
+    confirmDom.yes.focus();
+  }
+  function closeConfirm() {
+    confirmAction = null;
+    confirmDom.panel.hidden = true;
+  }
+  confirmDom.yes.addEventListener("click", () => {
+    const act = confirmAction;
+    closeConfirm();
+    if (act) act();
+  });
+  confirmDom.no.addEventListener("click", closeConfirm);
+  // clicking off the dialog is a cancel, as it is anywhere else
+  confirmDom.panel.addEventListener("click", (e) => {
+    if (e.target === confirmDom.panel) closeConfirm();
+  });
+
   window.addEventListener("keydown", (e) => {
+    // a question on screen owns the keyboard: answer it or dismiss it, but
+    // do not let a stray space bar pause the game behind it
+    if (!confirmDom.panel.hidden) {
+      if (e.key === "Escape") { e.preventDefault(); closeConfirm(); }
+      else if (e.key === "Enter") { e.preventDefault(); confirmDom.yes.click(); }
+      return;
+    }
     if (!session) return;
     const timer = session.game.getGameTimer();
     switch (e.key) {
@@ -1423,9 +1465,15 @@
     }
   });
 
-  document.getElementById("btn-prev").addEventListener("click", () => moveLevel(-1));
-  document.getElementById("btn-next").addEventListener("click", () => moveLevel(1));
-  document.getElementById("btn-restart").addEventListener("click", () => moveLevel(0));
+  // Leaving a level in progress asks first, whichever way you leave it. The
+  // `,` and `.` keys still jump straight there: a shortcut that stops to ask
+  // is no longer a shortcut.
+  document.getElementById("btn-prev").addEventListener("click",
+    () => askConfirm("Go back a level?", "go back", () => moveLevel(-1)));
+  document.getElementById("btn-next").addEventListener("click",
+    () => askConfirm("Skip to the next level?", "skip", () => moveLevel(1)));
+  document.getElementById("btn-restart").addEventListener("click",
+    () => askConfirm("Restart level?", "restart", () => moveLevel(0)));
   hud.pauseBtn.addEventListener("click", togglePause);
 
   // ------------------------------------------------------------ render loop
