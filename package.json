@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/oklemenz/LemmingsJS#readme",
   "devDependencies": {
-    "http-server": "^14.0.1"
+    "http-server": "^14.0.1",
+    "pngjs": "^7.0.0"
   }
 }

@@ -2740,6 +2740,15 @@
     if (open) holdSim("library");
     else releaseSim("library");
   });
+  // NeoLemmix levels: parsed and built from the styles on disk. Until the
+  // Lemmix engine plays them, this is how their miniatures are drawn.
+  const lemmixStyles = new Lemmix.StyleManager(Lemmix.StyleManager.browserIO("../"));
+  library.registerLoader("lemmix", async (level) => {
+    const res = await fetch("../" + level.url.split("/").map(encodeURIComponent).join("/"));
+    if (!res.ok) throw new Error("level file: HTTP " + res.status);
+    const data = Lemmix.LevelBuilder.parseLevel(await res.text());
+    return Lemmix.LevelBuilder.build(data, lemmixStyles, { seed: level.id });
+  });
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
   renderMode(); // billing, catalog labels and editor availability
 
@@ -2747,6 +2756,7 @@
   window.__lem3d = {
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
+    lemmixStyles,
     get session() { return session; },
   };
 
