@@ -131,13 +131,21 @@ class GuiPanel {
     this._tileGeoms = [];
   }
 
+  /** A Lemmix panel says which pixels are pictures and which are digits
+   *  (layout.reliefMasks), since it drew them; the DOS panel is keyed by
+   *  colour. Null until a panel that promises masks has painted. */
+  _panelMasks() {
+    const layout = this.game.panelLayout || null;
+    return layout && layout.reliefFromMasks ? layout.reliefMasks || null : null;
+  }
+
   /** 1 where a pixel belongs to a tile's lemming picture, 0 elsewhere. */
   _buildIconMask() {
+    const masks = this._panelMasks();
+    if (masks) return masks.art;
     const W = this.canvas.width, H = this.canvas.height;
-    // the button backgrounds to key the pictures out of: the DOS dither, plus
-    // whatever a Lemmix panel reports once its graphics are in
-    const layout = this.game.panelLayout || null;
-    const bg = new Set([...GUI_BG_COLORS, ...((layout && layout.bgColors) || [])]);
+    // the button backgrounds to key the pictures out of: the DOS dither
+    const bg = GUI_BG_COLORS;
     const data = this.ctx.getImageData(0, 0, W, H).data;
     const mask = new Uint8Array(W * H);
     for (let x = 0; x < GUI_BUTTONS * GUI_TILE_W && x < W; x++) {
@@ -209,6 +217,8 @@ class GuiPanel {
 
   /** White digit pixels of the skill/release-rate counts. */
   _buildDigitMask() {
+    const masks = this._panelMasks();
+    if (masks) return masks.digits;
     const W = this.canvas.width, H = this.canvas.height;
     const data = this.ctx.getImageData(0, 0, W, H).data;
     const mask = new Uint8Array(W * H);
@@ -629,7 +639,10 @@ class GuiPanel {
     if (this.hoverTexture) this.hoverTexture.needsUpdate = true; // shares the canvas
     if (this.reliefTexture) this.reliefTexture.needsUpdate = true;
     if (!this.tileReliefs) {
-      this._buildRelief(); // needs painted pixels
+      // needs painted pixels: a Lemmix panel paints once its graphics are
+      // in, and says which pixels are what when it does
+      const layout = this.game.panelLayout;
+      if (!(layout && layout.reliefFromMasks && !layout.reliefMasks)) this._buildRelief();
     } else {
       this._refreshDigits();
       this._refreshText();
