@@ -74,7 +74,8 @@ intended start area.
 
 - **trigger** — the desktop click: aim the controller ray at a lemming to
   assign the selected skill, or at the skill panel to use it as in the game
-  (controller&nbsp;0's ray also drives the highlight ring)
+  (whichever hand is on the board drives the highlight ring, so either
+  one can aim)
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of

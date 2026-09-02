@@ -10,7 +10,8 @@
  *   front of the player; on exit it snaps back to desktop identity.
  * - Controller trigger = the desktop click (same pick() path: skill panel
  *   by UV, lemmings via sim coordinates through CommandManager). A ray
- *   line is drawn from each controller; controller 0 also drives hover.
+ *   line is drawn from each controller; whichever one is on the board
+ *   drives hover.
  * - Grip drags the diorama; both grips scale it about the hands' midpoint.
  *   The world itself never moves, so there is nothing to feel sick about.
  */
@@ -77,6 +78,7 @@ class VRManager {
     this.raycaster = new THREE.Raycaster();
     this._tempMatrix = new THREE.Matrix4();
     this._grab = null;
+    this._aiming = null; // the controller currently driving hover
 
     renderer.xr.enabled = true;
     createVRButton(renderer);
@@ -307,6 +309,7 @@ class VRManager {
     // drive hover from controller 0 - it would stomp the mouse hover with
     // null every frame, hiding the highlight ring
     const hasControllers = this.inputSourceCount > 0;
+    let aiming = null, aimingDist = Infinity;
     for (const c of this.controllers) {
       c.visible = hasControllers;
       if (c.userData.grip) c.userData.grip.visible = hasControllers;
@@ -322,10 +325,22 @@ class VRManager {
       for (const b of c.userData.beams) b.scale.z = len;
       c.userData.dot.visible = !!hit;
       if (hit) c.userData.dot.position.copy(hit.point);
+      // whichever hand is actually on the board drives the highlight, the one
+      // already doing so keeping it while it still lands, so two hands on the
+      // board do not fight over it frame by frame
+      if (!hit) continue;
+      if (c === this._aiming) { aiming = c; aimingDist = -1; }
+      else if (hit.distance < aimingDist) { aimingDist = hit.distance; aiming = c; }
     }
 
+    // Hover follows the aiming hand, not a fixed one. Asking controller 0 for
+    // it meant that pointing with the other hand fed a miss every frame: the
+    // beam landed on a lemming or a skill tile and neither the ring nor the
+    // tile's pop-out ever appeared.
     if (hasControllers) {
-      this.hooks.onHoverPick(this.hooks.pickWithRaycaster(this._rayFrom(this.controllers[0])));
+      this._aiming = aiming;
+      this.hooks.onHoverPick(aiming
+        ? this.hooks.pickWithRaycaster(this._rayFrom(aiming)) : null);
     }
   }
 }
