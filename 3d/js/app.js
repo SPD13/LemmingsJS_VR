@@ -1660,9 +1660,23 @@
         best = " — " + LevelProgress.format(seconds) +
           (record ? " (best)" : "");
       }
-      hud.state.textContent = won
+      // a NeoLemmix level's talismans and its closing text
+      let extra = "";
+      if (game.sim) {
+        const got = (level.talismans || []).filter((t) => game.sim.talismansAchieved.has(t.id));
+        if (got.length) {
+          extra += " — talisman: " + got.map((t) => t.title + " (" + t.color + ")").join(", ");
+          try {
+            const all = JSON.parse(localStorage.getItem("lem3d-talismans") || "{}");
+            all[state.levelId] = Array.from(new Set((all[state.levelId] || []).concat(got.map((t) => t.id))));
+            localStorage.setItem("lem3d-talismans", JSON.stringify(all));
+          } catch (e) {}
+        }
+        if (won && level.posttext && level.posttext.length) extra += " — " + level.posttext.join(" ");
+      }
+      hud.state.textContent = (won
         ? "LEVEL COMPLETE — " + Lemmings.GameStateTypes.toString(result.state) + best
-        : "FAILED — " + Lemmings.GameStateTypes.toString(result.state);
+        : "FAILED — " + Lemmings.GameStateTypes.toString(result.state)) + extra;
       hud.state.className = won ? "won" : "lost";
       setVrStatus({ note: won ? "COMPLETE" + best : "FAILED",
                     kind: won ? "won" : "lost" });
@@ -1682,6 +1696,11 @@
     const meta = where.packName + " · " + where.label +
       " · save " + level.needCount + "/" + level.releaseCount;
     hud.meta.textContent = meta;
+    // a NeoLemmix level's opening text, until the first result replaces it
+    if (level.pretext && level.pretext.length) {
+      hud.state.textContent = level.pretext.join(" ");
+      hud.state.className = "";
+    }
     hud.loading.classList.add("hidden");
     // the same, in the scene, where a headset can read it
     setVrStatus({

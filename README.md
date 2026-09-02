@@ -68,6 +68,9 @@ is **not** committed: `.gitignore` excludes everything else under `levels/`.
   name): https://www.neolemmix.com/?page=music_packs, unpacked into `music/`.
   Not committed.
 
+Tracker music (`.it/.xm/.mod`) plays through libopenmpt via chiptune3,
+vendored under `lemmix/vendor/chiptune3/` (MIT, libopenmpt BSD).
+
 The level browser reads `levels/index.json`. Regenerate it after adding or
 removing a pack:
 

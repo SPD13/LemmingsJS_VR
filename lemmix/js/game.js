@@ -93,7 +93,7 @@
       this.sim.adjustSpawnInterval(target);
       return true;
     }
-    doNuke() { this.sim.nuke(); return true; }
+    doNuke() { this.sim.nuke(); return true; } // the manager already asked; nuke() is idempotent
     doFinalize() {}
   }
 
@@ -191,6 +191,8 @@
       return !!name && this.game.sim.assignSkillTo(lem, name);
     }
     addNewLemmings() {} // the simulation releases its own
+    isNuking() { return this.game.sim.userSetNuking; }
+    doNukeAllLemmings() { this.game.sim.nuke(); }
     getLemmingsOut() { return this.game.sim.lemmingsOut; }
   }
 
