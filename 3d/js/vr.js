@@ -30,6 +30,7 @@ const VR_GUI_Z = -0.75;
 // for parallax as well, and one pixel of a 0.6m panel is under 2mm at this
 // distance - too shallow for the eyes to call it raised.
 const GUI_VR_RELIEF_DEPTH = 6;
+const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
 // Thumbsticks. The deadzone is generous because a resting thumb on a stick
 // that never quite centres would otherwise drift the board all session.
 const VR_STICK_DEADZONE = 0.15;
@@ -86,6 +87,8 @@ class VRManager {
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
    *  - onStick("pan"|"tilt", x, y, dt) -> thumbstick, already resolved to a
    *                                    role, y flipped to "away is positive"
+   *  - onBarDragStart(), onBarDrag(worldDelta) -> dragging the toolbar by its
+   *                                    move handle, instead of the world
    *  - placeDiorama()               -> position dioramaRoot for the headset
    */
   constructor(renderer, scene, camera, dioramaRoot, hooks) {
@@ -285,10 +288,14 @@ class VRManager {
       return;
     }
     if (!this._isPointer(controller)) return;
+    // a press that starts on the bar's move handle drags the bar; anything
+    // else drags the world
+    const on = this.hooks.pickWithRaycaster(this._rayFrom(controller));
     this._press = {
       c: controller,
       from: controller.getWorldPosition(new THREE.Vector3()),
       rootFrom: this.dioramaRoot.position.clone(),
+      bar: !!(on && on.barTool === "move"),
       dragging: false,
     };
   }
@@ -315,8 +322,15 @@ class VRManager {
     const cur = p.c.getWorldPosition(new THREE.Vector3());
     const delta = cur.sub(p.from);
     if (!p.dragging && delta.length() < VR_DRAG_THRESHOLD) return;
+    if (!p.dragging && p.bar && this.hooks.onBarDragStart) {
+      this.hooks.onBarDragStart();
+    }
     p.dragging = true;
-    this.dioramaRoot.position.copy(p.rootFrom).add(delta);
+    if (p.bar) {
+      if (this.hooks.onBarDrag) this.hooks.onBarDrag(delta);
+    } else {
+      this.dioramaRoot.position.copy(p.rootFrom).add(delta);
+    }
   }
 
   /** (Re)baseline the grab whenever the set of gripping controllers changes. */

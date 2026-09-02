@@ -84,6 +84,12 @@ intended start area.
   starts with it, and a trigger pull on the other hand takes it over — that
   pull only moves the beam, since until it had one that hand was aiming at
   nothing you could see
+- **the two handles above the toolbar** — the padlock unlocks the bar from
+  your head: it stays where it is hanging in the room while you look around,
+  and a second click hands it back to the head from wherever it has ended up
+  (it never jumps at the click, either way). The four-way arrows are a grab
+  handle: hold the trigger on them and move your hand to carry the bar,
+  locked or not. Leaving VR puts it back on the head, square in front.
 - **trigger + move** — drag the board about: it follows the hand in all three
   axes, so pulling back toward yourself walks it in along Z and pushing away
   sends it out. A click only counts as a click if the hand stayed put, so a
