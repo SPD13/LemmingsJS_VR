@@ -303,8 +303,14 @@ reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
 NeoLemmix commit the port follows. Terrain changes go through the level's
 `setGroundAt`/`clearGroundAt`, which is why the diorama's terrain hooks
 (§2.3) need nothing new. Sound cues come out of the simulation by name
-(`game.sounds`) and are mapped onto the AdLib effects until the file-based
-audio of the plan's phase 6 exists.
+(`game.sounds`) and play from `sound/` through the same gain and VR panner
+as the AdLib effects (`GameAudio.playCue`, with an AdLib stand-in when a
+file is missing); a level's music - its `MUSIC` line or the pack's rotation
+- plays from the pack's music folder or `music/`, tracker modules through
+libopenmpt (chiptune3, `lemmix/vendor/`) in an AudioWorklet, other files
+decoded and looped, the AdLib track when nothing is found. Pre-level text
+shows in the status line, post-level text and talismans with the result
+(`lem3d-talismans` records them).
 
 Checks (all under `tools/`, run with node): `nx-check` resolves every piece
 reference of every level against `styles/`; `nx-render` draws levels
