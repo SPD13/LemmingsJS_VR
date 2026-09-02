@@ -1494,6 +1494,32 @@
     timer.continue = function () { this.gameTimerHandler = 1; };
     timer.suspend = function () { this.gameTimerHandler = 0; };
 
+    // Steel areas, which the engine parses and then ignores entirely: the
+    // three destructive skills are stopped at them here (js/steel.js).
+    const steel = installSteel(
+      game,
+      new SteelMap(steelRangesFrom(groundData && groundData.lr, level)),
+      (lem) => audio.playSfx(SFX.STEEL, sfxPos(lem.x, lem.y)));
+
+    // Multiple entrances: the engine releases every lemming from the first
+    // one, where the original takes them in turn. The release is small enough
+    // to restate here, on the manager's own instance.
+    const lemmingManager = game.getLemmingManager();
+    if (lemmingManager && level.entrances.length > 1) {
+      let nextEntrance = 0;
+      lemmingManager.addNewLemmings = function () {
+        if (this.gameVictoryCondition.getLeftCount() <= 0) return;
+        this.releaseTickIndex++;
+        if (this.releaseTickIndex >= (104 - this.gameVictoryCondition.getCurrentReleaseRate())) {
+          this.releaseTickIndex = 0;
+          const list = this.level.entrances;
+          const entrance = list[nextEntrance++ % list.length];
+          this.addLemming(entrance.x + 24, entrance.y + 14);
+          this.gameVictoryCondition.releaseOne();
+        }
+      };
+    }
+
     // A trap fires through the trigger manager, and the state it puts a
     // lemming into is shared with climbing, so the trigger is where it can be
     // told apart. Instance wrapper, like every other hook here.
