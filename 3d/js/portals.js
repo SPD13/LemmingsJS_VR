@@ -1,6 +1,9 @@
 "use strict";
 /**
- * Entrances and exits as real openings (plan §5.4).
+ * The objects that are not flat sprites (plan §5.4): entrances and exits as
+ * real openings, and water given the body its waves are the surface of.
+ *
+ * Entrances and exits as real openings.
  *
  * Their sprites are perspective drawings of a box - a rim, slanted walls
  * converging inward, and a flat far face - so the artwork already says "this
@@ -28,7 +31,12 @@ const PORTAL_FUNNEL_RINGS = 3;     // rings of frame the funnel eases across
 const PORTAL_REVEAL_MIN = 8;       // pixels a colour needs to count as revealed
 const PORTAL_REVEAL_RATIO = 5;     // and how much rarer it must be when shut
 const PORTAL_SPAWN_OFFSET_X = 24;  // LemmingManager spawns at entrance.x + 24
-const PORTAL_PANEL_THICK = 1;      // the ceiling square is a game pixel thick
+const PORTAL_PANEL_THICK = 1;
+// How far under the waves the surface of the water itself sits, so the sprite
+// reads as floating on it rather than buried in it.
+const WATER_SURFACE_DROP = 2;
+// Enough to read as water without hiding what is standing in it.
+const WATER_OPACITY = 0.55;      // the ceiling square is a game pixel thick
 const PORTAL_FLAP_THICK = 1;       // and so are the doors hinged under it
 
 /** Stash the object list and their metadata as the level is built. */
@@ -64,6 +72,85 @@ function portalConfigFor(objectId, info, profile) {
     return { shape: "portal", depth: null };
   }
   return null;
+}
+
+/**
+ * Water: the pool an object's waves are the surface of.
+ *
+ * The sprite is a strip of animated waves a few pixels tall, laid along the
+ * top of a pool that the level data does not otherwise describe - flat, it
+ * reads as a decal hanging in front of the scenery. The drowning trigger does
+ * describe the pool, though: it is the box a lemming drowns in. So the body
+ * is built from the trigger, in the colour of the sprite's own pixels and
+ * deep enough to fill the terrain slab, and the waves go on animating on top
+ * of it as the surface they are.
+ */
+function waterObjectsFrom(level, profile, objectZ) {
+  const data = window.__lem3dObjectData;
+  const out = [];
+  if (!data || !Array.isArray(data.objects)) return out;
+  const byId = ((profile && profile.objects) || {}).byId || {};
+  const count = Math.min(level.objects.length, data.objects.length);
+  for (let i = 0; i < count; i++) {
+    const id = data.objects[i].id;
+    const info = data.objectImg ? data.objectImg[id] : null;
+    if (!info || info.trigger_effect_id !== Lemmings.TriggerTypes.DROWN) continue;
+    if (byId[id] && byId[id].shape === "flat") continue; // tagged out by hand
+    const mapObject = level.objects[i];
+    const frame = mapObject.animation && mapObject.animation.frames[0];
+    if (!frame) continue;
+    const x = mapObject.x + frame.offsetX;
+    const y = mapObject.y + frame.offsetY;
+    // The trigger says where a lemming drowns, which is the surface and a few
+    // pixels under it - not the pool. The pool is the hollow the water is
+    // lying in, so the body reaches down to whatever ground stops it, column
+    // by column, and settles on the deepest of them.
+    const top = y + (info.trigger_height ? info.trigger_top : 0);
+    const surface = top + WATER_SURFACE_DROP;
+    const bottom = poolFloor(level, x, x + frame.width, surface);
+    if (bottom <= surface) continue;
+    out.push({
+      index: i,
+      x0: x, x1: x + frame.width,
+      y0: surface, y1: bottom,
+      colour: averageFrameColour(frame),
+      z0: DEPTH_BANDS[DepthClass.TERRAIN].back,
+      // stopping short of the object plane keeps the waves clearly in front
+      // of the water instead of fighting it for the same pixels
+      z1: objectZ - WATER_SURFACE_DROP,
+    });
+  }
+  return out;
+}
+
+/**
+ * How deep the hollow under a stretch of water goes: the lowest point that
+ * any of its columns falls to before meeting ground, and the level's own
+ * floor for a column that never does.
+ */
+function poolFloor(level, x0, x1, surface) {
+  const mask = level.getGroundMaskLayer();
+  let deepest = surface;
+  for (let x = Math.max(0, x0); x < Math.min(level.width, x1); x++) {
+    let y = surface;
+    while (y < level.height && !mask.hasGroundAt(x, y)) y++;
+    if (y > deepest) deepest = y;
+  }
+  return deepest;
+}
+
+/** The average of a frame's opaque pixels: this tileset's own water colour. */
+function averageFrameColour(frame) {
+  const mask = frame.getMask(), buf = frame.getBuffer();
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (!mask[i]) continue;
+    const v = buf[i];
+    r += v & 255; g += (v >> 8) & 255; b += (v >> 16) & 255; n++;
+  }
+  if (!n) return 0x1f4f8f;
+  const avg = (v) => Math.min(255, Math.round(v / n));
+  return (avg(r) << 16) | (avg(g) << 8) | avg(b);
 }
 
 /** Concatenate two geometries built by the helpers below. */
