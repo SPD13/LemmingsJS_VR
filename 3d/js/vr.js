@@ -12,7 +12,8 @@
  *   by UV, lemmings via sim coordinates through CommandManager). One hand
  *   points at a time - it alone draws a ray, drives hover, and acts on its
  *   trigger. The right starts with it; a trigger pull on the other hand
- *   takes it over.
+ *   takes it over. Holding the trigger and moving the hand drags the board
+ *   instead, in all three axes, so pulling back walks it in along Z.
  * - Grip drags the diorama; both grips scale it about the hands' midpoint.
  *   The world itself never moves, so there is nothing to feel sick about.
  */
@@ -29,6 +30,9 @@ const VR_GUI_Z = -0.75;
 const VR_STICK_DEADZONE = 0.15;
 const VR_STICK_PAN = 0.8;   // metres per second at full deflection
 const VR_STICK_TILT = 1.0;  // radians per second at full deflection
+// How far the hand has to travel with the trigger held before it counts as a
+// drag rather than a click. A trigger pull moves the hand a little on its own.
+const VR_DRAG_THRESHOLD = 0.02; // metres
 
 function createVRButton(renderer) {
   const button = document.createElement("button");
@@ -89,6 +93,7 @@ class VRManager {
     this._aiming = null; // the controller currently driving hover
     this._pointerHand = "right"; // which hand carries the beam; a trigger
                                  // pull on the other one takes it over
+    this._press = null;  // trigger held: a click until the hand moves, then a drag
 
     renderer.xr.enabled = true;
     createVRButton(renderer);
@@ -161,7 +166,8 @@ class VRManager {
         c.userData.handedness = null;
         console.log("[vr] controller disconnected");
       });
-      c.addEventListener("selectstart", () => this._onSelect(c));
+      c.addEventListener("selectstart", () => this._onSelectStart(c));
+      c.addEventListener("selectend", () => this._onSelectEnd(c));
       c.addEventListener("squeezestart", () => { c.userData.gripping = true; this._grabBaseline(); });
       c.addEventListener("squeezeend", () => { c.userData.gripping = false; this._grabBaseline(); });
       scene.add(c);
@@ -259,18 +265,53 @@ class VRManager {
    * back. That first pull only hands it over and does not act - until it had
    * the beam that hand was aiming at nothing the player could see, and a
    * blind click assigns a skill to whatever happened to be under it.
+   *
+   * Otherwise the pull opens a press, which becomes either a click or a drag
+   * depending on whether the hand moves. Nothing happens yet: acting on the
+   * pull would fire the click at the start of every drag.
    */
-  _onSelect(controller) {
+  _onSelectStart(controller) {
     if (!this.presenting) return;
     const hand = controller.userData.handedness;
     if (hand && hand !== this._pointerHand) {
       this._pointerHand = hand;
       this._aiming = null;
+      this._press = null;
       return;
     }
     if (!this._isPointer(controller)) return;
+    this._press = {
+      c: controller,
+      from: controller.getWorldPosition(new THREE.Vector3()),
+      rootFrom: this.dioramaRoot.position.clone(),
+      dragging: false,
+    };
+  }
+
+  /** Release: a press that never turned into a drag is the click. */
+  _onSelectEnd(controller) {
+    const p = this._press;
+    this._press = null;
+    if (!p || p.c !== controller || p.dragging || !this.presenting) return;
     const pick = this.hooks.pickWithRaycaster(this._rayFrom(controller));
     if (pick) this.hooks.onSelectPick(pick);
+  }
+
+  /**
+   * Trigger held and the hand moved: the board comes with it, all three axes,
+   * so pulling the hand back walks the board in along Z as well as sliding it
+   * about. A grip beats it - that is the deliberate two-handed grab - and
+   * until the hand has moved past the threshold nothing happens, or no click
+   * would ever survive the tremor of pulling a trigger.
+   */
+  _updateDrag() {
+    const p = this._press;
+    if (!p || this._grab) return;
+    const cur = p.c.getWorldPosition(new THREE.Vector3());
+    const delta = cur.sub(p.from);
+    if (!p.dragging && delta.length() < VR_DRAG_THRESHOLD) return;
+    p.dragging = true;
+    this.dioramaRoot.position.copy(p.rootFrom).add(delta);
   }
 
   /** (Re)baseline the grab whenever the set of gripping controllers changes. */
@@ -363,6 +404,7 @@ class VRManager {
     }
     this._pollRecenter();
     this._pollSticks(dt);
+    this._updateDrag();
     const g = this._grab;
     if (g && g.mode === 1 && g.c.userData.gripping) {
       const cur = g.c.getWorldPosition(new THREE.Vector3());
