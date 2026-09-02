@@ -322,12 +322,16 @@ class VRManager {
     // volume slider scrubs it, anything else drags the world
     const on = this.hooks.pickWithRaycaster(this._rayFrom(controller));
     const slider = !!(on && on.barTool === "volume");
+    const bar = !!(on && on.barTool === "move");
     this._press = {
       c: controller,
       from: controller.getWorldPosition(new THREE.Vector3()),
       rootFrom: this.dioramaRoot.position.clone(),
-      bar: !!(on && on.barTool === "move"),
+      bar,
       slider,
+      // a press on any other control answers to the release alone: a hand
+      // that wanders while a button is held should not haul the board with it
+      button: !!(on && on.barTool) && !bar && !slider,
       // a slider answers to the press itself and keeps answering as the hand
       // moves; counting it as a drag from the outset stops the release firing
       // it a second time
@@ -361,6 +365,7 @@ class VRManager {
       if (on && on.barTool === "volume") this.hooks.onSelectPick(on);
       return;
     }
+    if (p.button) return;
     const cur = p.c.getWorldPosition(new THREE.Vector3());
     const delta = cur.sub(p.from);
     if (!p.dragging && delta.length() < VR_DRAG_THRESHOLD) return;
