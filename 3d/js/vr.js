@@ -25,11 +25,10 @@ const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
 const VR_GUI_WIDTH = 0.6;
 const VR_GUI_Y = -0.3;
 const VR_GUI_Z = -0.75;
-// The toolbar draws with no depth testing, so on a monitor its relief is sold
-// by shading alone and one canvas pixel of extrusion is enough. Stereo asks
-// for parallax as well, and one pixel of a 0.6m panel is under 2mm at this
-// distance - too shallow for the eyes to call it raised.
-const GUI_VR_RELIEF_DEPTH = 6;
+// The buttons stand off the panel by the one pixel they are modelled at, in
+// the headset as on a monitor. Multiplying it to force the parallax made them
+// look like blocks stuck to the bar rather than artwork pressed into it.
+const GUI_VR_RELIEF_DEPTH = 1;
 const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
 const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
 const VR_DOT_ORDER = 60;        // the beam's dot, over the toolbar (max 55)
