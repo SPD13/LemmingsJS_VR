@@ -31,7 +31,9 @@ const VR_GUI_Z = -0.75;
 const GUI_VR_RELIEF_DEPTH = 1;
 const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
 const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
-const VR_DOT_ORDER = 60;        // the beam's dot, over the toolbar (max 55)
+// Aiming marks - the impact dot and the hand markers - over everything the
+// toolbar draws, which tops out at 55.
+const VR_MARK_ORDER = 60;
 // Thumbsticks. The deadzone is generous because a resting thumb on a stick
 // that never quite centres would otherwise drift the board all session.
 const VR_STICK_DEADZONE = 0.15;
@@ -141,7 +143,19 @@ class VRManager {
       depthTest: false, // impact dot stays visible on top of everything
     });
     const tipGeom = new THREE.SphereGeometry(0.014, 12, 8);
-    const tipMat = new THREE.MeshBasicMaterial({ color: 0x6fce7e });
+    // The hand marks are where your hands are, so nothing should cover them.
+    // The toolbar draws with its depth test off, so a depth-tested marker
+    // loses to it however near the hand is: they go on top by render order
+    // instead, like the impact dot.
+    // Marked transparent despite being solid: three draws every transparent
+    // object after every opaque one, so an opaque marker would lose to the
+    // toolbar's transparent handles whatever its render order. In the
+    // transparent pass the order decides, which is the point. Both shapes are
+    // convex and cull their back faces, so they need no depth test to look
+    // right from any side.
+    const tipMat = new THREE.MeshBasicMaterial({
+      color: 0x6fce7e, transparent: true, depthTest: false, depthWrite: false,
+    });
     this.controllers = [];
     for (let i = 0; i < 2; i++) {
       const c = renderer.xr.getController(i);
@@ -154,18 +168,22 @@ class VRManager {
         b.scale.z = 4;
         c.add(b);
       }
-      c.add(new THREE.Mesh(tipGeom, tipMat)); // hand marker, always visible
+      const tip = new THREE.Mesh(tipGeom, tipMat); // hand marker
+      tip.renderOrder = VR_MARK_ORDER;
+      c.add(tip);
       c.userData.dot = new THREE.Mesh(dotGeom, dotMat);
       // above everything the toolbar draws, handles included: the dot marks
       // where the beam lands, so it belongs on top of whatever it landed on
-      c.userData.dot.renderOrder = VR_DOT_ORDER;
+      c.userData.dot.renderOrder = VR_MARK_ORDER;
       c.userData.dot.visible = false;
       scene.add(c.userData.dot);
       // grip-space marker: a second visibility path in case the runtime
       // tracks grips but not target rays
       const grip = renderer.xr.getControllerGrip(i);
-      grip.add(new THREE.Mesh(
-        new THREE.BoxGeometry(0.03, 0.03, 0.06), tipMat));
+      const gripBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.03, 0.06), tipMat);
+      gripBox.renderOrder = VR_MARK_ORDER;
+      grip.add(gripBox);
       scene.add(grip);
       c.userData.grip = grip;
       c.addEventListener("connected", (e) => {
