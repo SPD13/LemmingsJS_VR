@@ -239,12 +239,34 @@
       return { x0: x, y0: y, x1: x + w, y1: y + h };
     }
 
+    /** The number NeoLemmix writes on this gadget, if any (pickup count, exit/window capacity). */
+    digits() {
+      if (this.effect === "PICKUP" || this.effectBase === "PICKUP") {
+        if (this.skillCount > 1 || this.meta.digitMinLength >= 1) return { value: this.skillCount, min: this.meta.digitMinLength };
+      } else if (["EXIT", "LOCKEXIT", "WINDOW"].includes(this.effectBase) && this.remainingLemmings >= 0) {
+        return { value: this.remainingLemmings, min: this.meta.digitMinLength };
+      }
+      return null;
+    }
+
     /** The composite picture of every visible animation, at this moment. */
     render() {
-      const key = this.animations.map((a) => (a.visible || a.state !== "pause") ? a.frame : "-").join(",");
+      const digits = Lemmix.digitFont ? this.digits() : null;
+      const digitText = digits && (digits.value > 0 || digits.min > 0) ? String(digits.value).padStart(digits.min, "0") : "";
+      const key = this.animations.map((a) => (a.visible || a.state !== "pause") ? a.frame : "-").join(",") + "|" + digitText;
       if (this._frameCache.has(key)) return this._frameCache.get(key);
       // the composite spans every animation's box, offsets included
       let x0 = 0, y0 = 0, x1 = this.width, y1 = this.height;
+      let digitBox = null;
+      if (digitText) {
+        // DrawNumberWithCountdownDigits: 4x5 digits 5 px apart, at DIGIT_X/Y with the alignment
+        const dw = digitText.length * 5;
+        const dx = this.v.digit.x, dy = this.v.digit.y - 2;
+        const left = this.v.digit.align < 0 ? dx : this.v.digit.align > 0 ? dx - dw + 1 : dx - (dw >> 1) + 1;
+        digitBox = { left: left - 1, top: dy, right: left + dw + 1, bottom: dy + 7 };
+        x0 = Math.min(x0, digitBox.left); y0 = Math.min(y0, digitBox.top);
+        x1 = Math.max(x1, digitBox.right); y1 = Math.max(y1, digitBox.bottom);
+      }
       for (const a of this.animations) {
         x0 = Math.min(x0, a.meta.offsetX); y0 = Math.min(y0, a.meta.offsetY);
         x1 = Math.max(x1, a.meta.offsetX + a.meta.width + this.widthVariance);
@@ -256,6 +278,19 @@
         const src = a.meta.frames[a.frame % a.meta.frames.length];
         Pixels.drawNineSlice(bmp, a.meta.offsetX - x0, a.meta.offsetY - y0,
           a.meta.width + this.widthVariance, a.meta.height + this.heightVariance, src, a.meta.cut, Pixels.combineGadget);
+      }
+      if (digitText) {
+        const font = Lemmix.digitFont;
+        let cx = digitBox.left + 1 - x0;
+        for (const ch of digitText) {
+          const d = ch.charCodeAt(0) - 48;
+          const shadow = (ox, oy) => Pixels.blit(bmp, cx + ox, digitBox.top + 1 + oy - y0, font, d * 4, 0, 4, 5, (fd, fi, bd, bi) => {
+            if (fd[fi + 3]) { bd[bi] = 0x20; bd[bi + 1] = 0x20; bd[bi + 2] = 0x20; bd[bi + 3] = 255; }
+          });
+          shadow(-1, 1); shadow(0, 0); shadow(0, 1);
+          Pixels.blit(bmp, cx - 1, digitBox.top + 1 - y0, font, d * 4, 0, 4, 5, Pixels.mergeOver);
+          cx += 5;
+        }
       }
       const frame = frameFromBitmap(bmp, x0, y0);
       this._frameCache.set(key, frame);
@@ -400,12 +435,25 @@
     // ---- terrain: the picture and the physics-prep map, in one pass
     const picture = new Bitmap(width, height);
     const prep = new Bitmap(width, height);
+    const pieces = [];   // every placement, for the diorama's depth tagging
+    const drawnCache = new Map();
     data.terrains.forEach((t, i) => {
       const { meta, defWidth, defHeight } = terrainMeta[i];
       if (!meta) return;
       const v = meta.variation(t.flip, t.invert, t.rotate);
       const w = evaluateResizable(t.width || defWidth, v.defaultWidth, v.width, v.resizeH);
       const h = evaluateResizable(t.height || defHeight, v.defaultHeight, v.height, v.resizeV);
+      const key = meta.gs + ":" + meta.piece;
+      const variantKey = key + "/" + (t.flip ? "f" : "") + (t.invert ? "i" : "") + (t.rotate ? "r" : "") + "/" + w + "x" + h;
+      if (!drawnCache.has(variantKey)) {
+        let image = v.image;
+        if (w !== v.width || h !== v.height) {
+          image = new Bitmap(w, h);
+          Pixels.drawNineSlice(image, 0, 0, w, h, v.image, v.cut, Pixels.combineGadget);
+        }
+        drawnCache.set(variantKey, { key, variantKey, image, width: w, height: h, steel: meta.steel });
+      }
+      pieces.push({ x: t.x, y: t.y, drawn: drawnCache.get(variantKey), noOverwrite: t.noOverwrite, erase: t.erase, oneWay: t.oneWay });
       const combine = t.noOverwrite ? Pixels.combineTerrainNoOverwrite
         : t.erase ? Pixels.combineTerrainErase : Pixels.combineTerrainDefault;
       Pixels.drawNineSlice(picture, t.x, t.y, w, h, v.image, v.cut, combine);
@@ -491,6 +539,7 @@
     level.groundMask = new (Lemmings && Lemmings.SolidLayer ? Lemmings.SolidLayer : SolidLayerFallback)(width, height, mask);
     level.physics = physics;
     level.gadgets = gadgets;
+    level.pieces = pieces;
     level.objects = gadgets.filter((g) => !g.offMap).map((g) => gadgetAsObject(g));
     level.entrances = gadgets.filter((g) => g.effectBase === "WINDOW");
     level.preplaced = data.lemmings;
@@ -558,6 +607,18 @@
         used[test] = true;
         found.flipLemming = g.flipLemming; // SetFlipOfReceiverTo
       }
+    }
+    for (let i = 0; i < n; i++) {
+      const g = gadgets[i];
+      if (g.effect !== "PORTAL" || used[i]) continue;
+      let test = i, found = null;
+      do { test++; found = gadgets[test % n]; } while (!((found.effect === "PORTAL" && found.pairing === g.pairing) || test === i + n));
+      test %= n;
+      if (test === i) { g.effect = "NONE"; continue; }
+      g.receiverId = test; found.receiverId = i;
+      used[i] = true; used[test] = true;
+      g.pairingId = pairCount; found.pairingId = pairCount; pairCount++;
+      found.flipLemming = g.flipLemming;
     }
     for (let i = 0; i < n; i++) {
       if (gadgets[i].effect === "RECEIVER" && !used[i]) gadgets[i].effect = "NONE";
@@ -649,9 +710,11 @@
     const saved = g.currentFrame;
     for (let f = 0; f < count; f++) { g.currentFrame = f; frames.push(g.render()); }
     g.currentFrame = saved;
+    // moving backgrounds sit behind the terrain, whatever their flags say
+    const behind = g.noOverwrite || (g.effectBase === "BACKGROUND" && !g.onlyOnTerrain);
     const drawProperties = Lemmings && Lemmings.DrawProperties
-      ? new Lemmings.DrawProperties(false, g.noOverwrite, g.onlyOnTerrain, false)
-      : { isUpsideDown: false, noOverwrite: g.noOverwrite, onlyOverwrite: g.onlyOnTerrain, isErase: false };
+      ? new Lemmings.DrawProperties(false, behind, g.onlyOnTerrain, false)
+      : { isUpsideDown: false, noOverwrite: behind, onlyOverwrite: g.onlyOnTerrain, isErase: false };
     const object = {
       x: g.x, y: g.y, gadget: g, drawProperties,
       animation: {

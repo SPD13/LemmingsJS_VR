@@ -194,13 +194,15 @@ builder, node tools, miniatures), Phase 3 with most of 4 and 5 (the full
 LemGame.pas port bar Jumper/Shimmier/Slider/Laserer/Portal; gadgets
 including teleporters, pickups, buttons, updrafts, splitters, pads, force
 fields; the Game wrapper and the NeoLemmix panel; `nx-run` over all 796
-levels; 19 physics fixtures), Phase 6 (file SFX, tracker and ogg music,
-AdLib fallback), Phase 7 in part (portal/water descriptors for Lemmix
-objects, pre/post text and talismans). Open: depth profiles by piece name
-for Lemmix styles (edit mode tags nothing on Lemmix levels yet), per-pack
-panel skins, Phase 8 (`.nxrp` replay import, countdown digits,
-moving-background gadgets drawn to the backdrop, the remaining
-LemGame.pas details, Jumper/Shimmier/Slider/Laserer/Portal).
+levels; 23 physics fixtures), Phase 6 (file SFX, tracker and ogg music,
+AdLib fallback), Phase 7 (portal/water descriptors for Lemmix objects,
+pre/post text and talismans, depth profiles by piece name with the editor
+and the catalog marks, per-pack panel skins) and Phase 8 (`.nxrp` replays
+read and written with a verified round trip, countdown digits, gadget
+count digits, moving backgrounds behind the terrain, and the last skills
+and gadgets: jumper, shimmier, slider, laserer, portals). Nothing from the
+plan is open; what remains is fidelity work against real NeoLemmix
+replays as they become available.
 
 ## Part 3 — Phases
 

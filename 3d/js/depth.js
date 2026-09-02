@@ -59,10 +59,13 @@ const DepthProfiles = {
  * tags (the piece editor). Entrances/exits are objects, not terrain pieces,
  * and never enter the depth buffer.
  */
+/** What a placed piece is tagged by: its name (Lemmix styles) or its numeric id (DOS tilesets). */
+function pieceKey(piece) { return piece.key != null ? piece.key : piece.id; }
+
 function depthClassForPiece(piece, profile) {
   const terrainCfg = (profile && profile.terrain) || {};
   const byId = terrainCfg.byId || {};
-  const override = DepthClassByName[byId[piece.id]];
+  const override = DepthClassByName[byId[pieceKey(piece)]];
   if (override) return override;
   return DepthClassByName[terrainCfg.default] || DepthClass.TERRAIN;
 }
@@ -77,7 +80,7 @@ const RELIEF_MAX = 4;
  */
 function buildPieceMap(level, groundData) {
   const W = level.width, H = level.height;
-  const map = new Uint8Array(W * H);
+  const map = new Uint16Array(W * H);
   const usable = groundData && groundData.lr &&
     groundData.lr.levelWidth === W && groundData.lr.levelHeight === H &&
     Array.isArray(groundData.lr.terrains);
@@ -101,7 +104,7 @@ function buildPieceMap(level, groundData) {
         if (props.isErase) { map[idx] = 0; continue; }
         if (props.noOverwrite && map[idx] !== 0) continue;
         if (props.onlyOverwrite && map[idx] === 0) continue;
-        map[idx] = (piece.id + 1) & 0xff;
+        map[idx] = (piece.id + 1) & 0xffff;
       }
     }
   }
@@ -140,15 +143,20 @@ function embossInvertedFor(pieceId, profile) {
  * every tileset uses the full range instead of a fixed global threshold.
  * `enabled` false (the default) returns a flat map.
  */
-function buildReliefMap(level, pieceMap, profile, enabled) {
+function buildReliefMap(level, pieceMap, profile, enabled, groundData) {
   const W = level.width, H = level.height;
   const relief = new Uint8Array(W * H);
   if (!enabled) return relief;
 
-  // 0 = off, 1 = lighter is higher, 2 = darker is higher
-  const embossById = new Uint8Array(256);
-  for (let id = 0; id < 255; id++) {
-    const mode = embossModeFor(id, profile);
+  // 0 = off, 1 = lighter is higher, 2 = darker is higher; a Lemmix level's
+  // pieces are tagged by name, so the id is looked up through its image
+  const images = (groundData && groundData.terraImages) || {};
+  let maxId = 254;
+  for (const id of Object.keys(images)) maxId = Math.max(maxId, +id);
+  const embossById = new Uint8Array(maxId + 2);
+  for (let id = 0; id <= maxId; id++) {
+    const key = images[id] && images[id].name != null ? images[id].name : id;
+    const mode = embossModeFor(key, profile);
     embossById[id + 1] = mode === "off" ? 0 : mode === "invert" ? 2 : 1;
   }
 

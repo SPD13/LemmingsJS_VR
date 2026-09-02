@@ -486,6 +486,15 @@ class WorldLibrary {
     } else if (!this.canLoad(node.engine)) {
       this.dom.status.textContent =
         "these levels need the Lemmix engine, which is not built yet";
+    } else if (this.editMode) {
+      // a Lemmix profile is per theme style: say which of this rank's are tagged
+      const themes = Array.from(new Set(node.levels.map((l) => l.theme).filter(Boolean)));
+      Promise.all(themes.map((t) => fetch("profiles/nx-" + t + ".json", { method: "HEAD" })
+        .then((r) => [t, r.ok]).catch(() => [t, false]))).then((marks) => {
+        this.dom.status.textContent = "styles tagged: " +
+          (marks.filter((m) => m[1]).map((m) => m[0]).join(", ") || "none") +
+          " · not tagged: " + (marks.filter((m) => !m[1]).map((m) => m[0]).join(", ") || "none");
+      });
     }
 
     if (scan && this.order === "world") {

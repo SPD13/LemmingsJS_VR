@@ -170,6 +170,21 @@
 
     /** Sound cues of the last frame: [{name, x, y}]. */
     get sounds() { return this.sim.sounds; }
+
+    /** The 4x5 countdown digit `n` as a frame, cached. */
+    countdownFrame(n) {
+      if (!Lemmix.digitFont) return null;
+      if (!this._countdown) this._countdown = new Map();
+      if (!this._countdown.has(n)) {
+        const font = Lemmix.digitFont;
+        const bmp = font.crop(Math.min(9, Math.max(0, n)) * 4, 0, 4, 5);
+        this._countdown.set(n, Lemmix.LevelBuilder.frameFromBitmap(bmp, 0, 0));
+      }
+      return this._countdown.get(n);
+    }
+
+    /** Play a NeoLemmix replay (parsed by Lemmix.Replay) from the start. */
+    loadReplay(replay) { this.sim.loadReplay(replay); }
   }
 
   /** getLemmingManager(): the lemmings, and how a click picks one. */
@@ -211,9 +226,16 @@
   /** What the display and the diorama draw for a lemming. */
   Lemming.prototype.render = function (display) {
     if (this.removed || this.teleporting || !this.game) return;
+    if (this.portalWarpFrame >= 3 && this.portalWarpFrame <= 4) return; // mid-warp
     const variant = this.isZombie ? "zombie" : this.isNeutral ? "neutral" : this.hasPermanentSkills ? "athlete" : "normal";
     const frame = this.game.sprites.frame(this.action, this.dx, this.frame, variant);
     if (frame) display.drawFrame(frame, this.x, this.y);
+    // the countdown over a lemming about to blow (DrawLemmingCountdown)
+    if (this.explosionTimer > 0 && !this.hideCountdown) {
+      const n = Math.floor(this.explosionTimer / 17) + 1;
+      const digit = this.game.countdownFrame(n);
+      if (digit) display.drawFrame(digit, this.x - (this.dx < 0 ? 2 : 1), this.y - 17);
+    }
   };
   Object.defineProperty(Lemming.prototype, "state", { get() { return this.action === BA.BUILDING ? 12 - this.bricksLeft : 0; } });
 
