@@ -89,6 +89,102 @@
   const guiRoot = new THREE.Group();
   camera.add(guiRoot);
 
+  // ------------------------------------------------- toolbar handles (VR)
+  /** A small square with a drawn icon, sitting above the toolbar. */
+  function makeBarTool(name, draw) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 64;
+    const cx = cv.getContext("2d");
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = name;
+    mesh.renderOrder = GUI_ORDER_BAR_TOOL;
+    mesh.visible = false;
+    mesh.userData.repaint = (on) => { draw(cx, on); tex.needsUpdate = true; };
+    mesh.userData.repaint(false);
+    guiRoot.add(mesh);
+    return mesh;
+  }
+
+  const barToolIcon = (cx, bg, stroke, body) => {
+    cx.clearRect(0, 0, 64, 64);
+    cx.fillStyle = bg;
+    cx.beginPath();
+    cx.roundRect ? cx.roundRect(2, 2, 60, 60, 12) : cx.rect(2, 2, 60, 60);
+    cx.fill();
+    cx.strokeStyle = stroke;
+    cx.lineWidth = 5;
+    cx.lineCap = "round";
+    cx.lineJoin = "round";
+    body(cx);
+  };
+
+  // padlock: shackle up and open when the bar floats free, closed when it
+  // rides the head
+  const barLockBtn = makeBarTool("bar-lock", (cx, unlocked) => {
+    barToolIcon(cx, unlocked ? "#4a4326" : "#12331d",
+      unlocked ? "#ffd866" : "#6fce7e", (c) => {
+        c.strokeRect(18, 32, 28, 20);
+        c.beginPath();
+        if (unlocked) c.arc(42, 28, 10, Math.PI, Math.PI * 1.9); // swung open
+        else c.arc(32, 30, 10, Math.PI, 0);
+        c.stroke();
+      });
+  });
+
+  // four-way arrows: grab here to move the bar
+  const barMoveBtn = makeBarTool("bar-move", (cx) => {
+    barToolIcon(cx, "#1c2432", "#cdd6e4", (c) => {
+      c.beginPath();
+      c.moveTo(32, 14); c.lineTo(32, 50);
+      c.moveTo(14, 32); c.lineTo(50, 32);
+      for (const [x, y, dx, dy] of [[32, 14, 0, 1], [32, 50, 0, -1],
+                                    [14, 32, 1, 0], [50, 32, -1, 0]]) {
+        c.moveTo(x - 7 * (dy ? 1 : 0) + 7 * dx, y - 7 * (dx ? 1 : 0) + 7 * dy);
+        c.lineTo(x, y);
+        c.lineTo(x + 7 * (dy ? 1 : 0) + 7 * dx, y + 7 * (dx ? 1 : 0) + 7 * dy);
+      }
+      c.stroke();
+    });
+  });
+  const barTools = [barLockBtn, barMoveBtn];
+
+  /**
+   * The toolbar rides the head by default. Unlocked, it is handed to the
+   * scene with its world transform kept, so it simply stays where it was
+   * hanging while the player looks around; locking hands it back the same
+   * way, so it never jumps at the moment of the click - it just starts
+   * following again from wherever it is.
+   */
+  let barLocked = true;
+  let barDragFrom = null;
+  function setBarLocked(locked) {
+    if (barLocked === locked) return;
+    barLocked = locked;
+    const parent = locked ? camera : scene;
+    parent.updateMatrixWorld(true);
+    guiRoot.updateMatrixWorld(true);
+    const world = guiRoot.matrixWorld.clone();
+    parent.add(guiRoot); // three removes it from the old parent
+    guiRoot.matrix.copy(parent.matrixWorld).invert().multiply(world);
+    guiRoot.matrix.decompose(
+      guiRoot.position, guiRoot.quaternion, guiRoot.scale);
+    barLockBtn.userData.repaint(!locked);
+  }
+
+  /** Back to riding the head, square in front, with no drag offset. */
+  function resetBar() {
+    setBarLocked(true);
+    guiRoot.position.set(0, 0, 0);
+    guiRoot.quaternion.identity();
+    guiRoot.scale.setScalar(1);
+    barDragFrom = null;
+  }
+
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
@@ -443,7 +539,18 @@
       // its shading, but stereo wants parallax to go with it
       session.gui.setReliefDepth(GUI_VR_RELIEF_DEPTH);
       session.gui.place(VR_GUI_WIDTH, VR_GUI_Y, VR_GUI_Z); // metres
+      // the handles ride just above the bar's top edge, in its own space so
+      // dragging or unlocking carries them along
+      const barTop = VR_GUI_Y + session.gui.mesh.scale.y / 2;
+      const y = barTop + VR_BAR_TOOL_SIZE * 0.8;
+      barLockBtn.position.set(-VR_BAR_TOOL_SIZE * 0.7, y, VR_GUI_Z);
+      barMoveBtn.position.set(VR_BAR_TOOL_SIZE * 0.7, y, VR_GUI_Z);
+      for (const b of barTools) {
+        b.scale.setScalar(VR_BAR_TOOL_SIZE);
+        b.visible = true;
+      }
     } else {
+      for (const b of barTools) b.visible = false;
       session.gui.setReliefDepth(1);
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -497,6 +604,12 @@
    *  priority over the play area behind it regardless of distance. */
   function raycastHit(rc) {
     if (!session) return null;
+    // the handles sit above the bar and take the ray before it does
+    for (const b of barTools) {
+      if (!b.visible) continue;
+      const hit = rc.intersectObject(b, false);
+      if (hit.length) return hit[0];
+    }
     if (session.gui.mesh) {
       const guiHits = rc.intersectObject(session.gui.mesh, false);
       if (guiHits.length) return guiHits[0];
@@ -509,6 +622,8 @@
   function pickWithRaycaster(rc) {
     const hit = raycastHit(rc);
     if (!hit) return null;
+    if (hit.object.name === "bar-lock") return { barTool: "lock" };
+    if (hit.object.name === "bar-move") return { barTool: "move" };
     if (hit.object.name === "gui-panel") return { panelUv: hit.uv };
     const local = session.worldGroup.worldToLocal(hit.point.clone());
     return { simX: Math.round(local.x), simY: Math.round(local.y) };
@@ -912,6 +1027,7 @@
     // OrbitControls would silently accumulate wheel/drag input during the
     // session and apply it as a jump on exit
     controls.enabled = false;
+    resetBar();
     layoutGuiPanel();
   });
   renderer.xr.addEventListener("sessionend", () => {
@@ -921,6 +1037,8 @@
     // the session leaves the camera at the last headset pose (meter-scale,
     // near the scene origin); restore the page-load framing
     controls.enabled = true;
+    // an unlocked bar is a VR notion: on the desktop it rides the camera
+    resetBar();
     if (session) frameDesktopCamera(session.level);
     layoutGuiPanel();
   });
@@ -929,7 +1047,11 @@
     pickWithRaycaster,
     raycastHit,
     onSelectPick: (p) => {
-      if (p.panelUv && session) {
+      if (p.barTool === "lock") {
+        setBarLocked(!barLocked);
+      } else if (p.barTool === "move") {
+        // nothing on a tap; it is the drag that moves the bar
+      } else if (p.panelUv && session) {
         session.gui.onMouseDown(p.panelUv);
         session.gui.onMouseUp(p.panelUv);
       } else if (p.simX !== undefined) {
@@ -937,6 +1059,15 @@
       }
     },
     onHoverPick: applyHover,
+    onBarDragStart: () => { barDragFrom = guiRoot.position.clone(); },
+    // the hand moves in world space; the bar hangs off the head or the scene,
+    // so the delta is turned into whichever space it is living in
+    onBarDrag: (worldDelta) => {
+      if (!barDragFrom || !guiRoot.parent) return;
+      const q = guiRoot.parent.getWorldQuaternion(new THREE.Quaternion());
+      guiRoot.position.copy(barDragFrom)
+        .add(worldDelta.clone().applyQuaternion(q.invert()));
+    },
     // the pointing hand's stick pans, the other tilts (vr.js decides which)
     onStick: (role, x, y, seconds) => {
       if (!session) return;

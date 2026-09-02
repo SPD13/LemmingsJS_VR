@@ -39,6 +39,7 @@ const GUI_ORDER_SOCKET = 51;  // covers the slot a raised button left behind
 const GUI_ORDER_RELIEF = 52;
 const GUI_ORDER_HOVER = 53;
 const GUI_ORDER_HOVER_RELIEF = 54;
+const GUI_ORDER_BAR_TOOL = 55;  // the VR lock/move handles above the bar
 
 // The panel ships as one composited bitmap - the button pictures are baked
 // into their tiles - but every tile's background is just the yellow/gray
