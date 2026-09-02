@@ -4,9 +4,10 @@
  * hands over (GameBaseSkillPanel.pas, on the DOS panel's 320x40 canvas so
  * the 3D toolbar can pick it up unchanged): an info strip along the top in
  * the 8x16 panel font, then 16-px buttons from x = 0 - release rate down
- * and up, the level's skills (up to ten, each with its count in the 4x8
- * skill digits), pause, nuke and speed. Skill pictures are the lemming
- * sprites themselves, placed the way NeoLemmix places them.
+ * and up, ten skill slots (the level's skills with their counts in the 4x8
+ * skill digits, the rest empty slots, as NeoLemmix always shows ten),
+ * pause, nuke and speed. Skill pictures are the lemming sprites themselves,
+ * placed the way NeoLemmix places them.
  *
  * Presses come back through the display's mouse events, as they do for the
  * DOS panel, and turn into the DOS commands the replay records.
@@ -18,6 +19,7 @@
 
   const PANEL_W = 320, PANEL_H = 40;
   const BUTTON_Y = 16, CELL = 16;
+  const SKILL_SLOTS = 10;   // MAX_SKILL_TYPES_PER_LEVEL: the panel always shows this many
   // sprite frame, and where its feet go inside the 16x23 button (SetSkillIcons)
   const SKILL_ICONS = {
     WALKER: ["walker", 1, 1, 6, 21], JUMPER: ["jumper", 1, 0, 6, 20], SHIMMIER: ["shimmier", 1, 1, 7, 20],
@@ -66,8 +68,10 @@
       this.assets = null;
       this.skills = game.sim.activeSkills;
       // cell -> what it does
-      this.cells = ["rrminus", "rrplus"].concat(this.skills.map((s) => "skill:" + s)).concat(["pause", "nuke", "speed"]);
-      this.layout = { buttons: this.cells.length, digitButtons: 2 + this.skills.length, width: PANEL_W, height: PANEL_H };
+      const slots = this.skills.map((s) => "skill:" + s);
+      while (slots.length < SKILL_SLOTS) slots.push("empty");
+      this.cells = ["rrminus", "rrplus"].concat(slots).concat(["pause", "nuke", "speed"]);
+      this.layout = { buttons: this.cells.length, digitButtons: 2 + SKILL_SLOTS, width: PANEL_W, height: PANEL_H };
       game.panelLayout = this.layout;
       this.rrHeld = 0;
       this.lastNukeClick = -1;
@@ -109,7 +113,14 @@
         else if (what === "pause") icon(i, A.icon_pause);
         else if (what === "nuke") icon(i, A.icon_nuke);
         else if (what === "speed") icon(i, A.icon_ff);
-        else icon(i, this._skillIcon(what.slice(6)));
+        else if (what === "empty") {
+          // an unused slot: black, with the empty-slot picture merged over it (SetSkillIcons)
+          for (let y = 0; y < 23; y++) for (let x = 0; x < CELL; x++) {
+            const p = ((BUTTON_Y + y) * PANEL_W + i * CELL + x) * 4;
+            base.data[p] = base.data[p + 1] = base.data[p + 2] = 0; base.data[p + 3] = 255;
+          }
+          icon(i, A.empty_slot);
+        } else icon(i, this._skillIcon(what.slice(6)));
       });
       this.base = base;
       // the button backgrounds' own colours, so the toolbar's relief keys the pictures out of them
