@@ -104,18 +104,46 @@
     mesh.name = name;
     mesh.renderOrder = GUI_ORDER_BAR_TOOL;
     mesh.visible = false;
-    mesh.userData.repaint = (on) => { draw(cx, on); tex.needsUpdate = true; };
-    mesh.userData.repaint(false);
+    mesh.userData.state = { on: false, hovered: false };
+    mesh.userData.repaint = () => {
+      draw(cx, mesh.userData.state);
+      tex.needsUpdate = true;
+    };
+    mesh.userData.repaint();
     guiRoot.add(mesh);
     return mesh;
   }
 
-  const barToolIcon = (cx, bg, stroke, body) => {
+  /** Change a handle's state, repainting only when something actually moved. */
+  function setBarToolState(mesh, patch) {
+    const st = mesh.userData.state;
+    let changed = false;
+    for (const k of Object.keys(patch)) {
+      if (st[k] !== patch[k]) { st[k] = patch[k]; changed = true; }
+    }
+    if (changed) mesh.userData.repaint();
+  }
+
+  /** The beam is on a handle (or has left them all). */
+  function setBarToolHover(name) {
+    setBarToolState(barLockBtn, { hovered: name === "lock" });
+    setBarToolState(barMoveBtn, { hovered: name === "move" });
+  }
+
+  const barToolIcon = (cx, hovered, bg, stroke, body) => {
     cx.clearRect(0, 0, 64, 64);
     cx.fillStyle = bg;
     cx.beginPath();
     cx.roundRect ? cx.roundRect(2, 2, 60, 60, 12) : cx.rect(2, 2, 60, 60);
     cx.fill();
+    if (hovered) {
+      // the same white outline the skill panel puts round a chosen button
+      cx.strokeStyle = "#ffffff";
+      cx.lineWidth = 4;
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(4, 4, 56, 56, 10) : cx.rect(4, 4, 56, 56);
+      cx.stroke();
+    }
     cx.strokeStyle = stroke;
     cx.lineWidth = 5;
     cx.lineCap = "round";
@@ -125,8 +153,11 @@
 
   // padlock: shackle up and open when the bar floats free, closed when it
   // rides the head
-  const barLockBtn = makeBarTool("bar-lock", (cx, unlocked) => {
-    barToolIcon(cx, unlocked ? "#4a4326" : "#12331d",
+  const barLockBtn = makeBarTool("bar-lock", (cx, st) => {
+    const unlocked = st.on;
+    barToolIcon(cx, st.hovered,
+      unlocked ? (st.hovered ? "#6b6036" : "#4a4326")
+               : (st.hovered ? "#1d5030" : "#12331d"),
       unlocked ? "#ffd866" : "#6fce7e", (c) => {
         c.strokeRect(18, 32, 28, 20);
         c.beginPath();
@@ -137,8 +168,8 @@
   });
 
   // four-way arrows: grab here to move the bar
-  const barMoveBtn = makeBarTool("bar-move", (cx) => {
-    barToolIcon(cx, "#1c2432", "#cdd6e4", (c) => {
+  const barMoveBtn = makeBarTool("bar-move", (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
       c.beginPath();
       c.moveTo(32, 14); c.lineTo(32, 50);
       c.moveTo(14, 32); c.lineTo(50, 32);
@@ -173,7 +204,7 @@
     guiRoot.matrix.copy(parent.matrixWorld).invert().multiply(world);
     guiRoot.matrix.decompose(
       guiRoot.position, guiRoot.quaternion, guiRoot.scale);
-    barLockBtn.userData.repaint(!locked);
+    setBarToolState(barLockBtn, { on: !locked });
   }
 
   /** Back to riding the head, square in front, with no drag offset. */
@@ -543,10 +574,15 @@
       // dragging or unlocking carries them along
       const barTop = VR_GUI_Y + session.gui.mesh.scale.y / 2;
       const y = barTop + VR_BAR_TOOL_SIZE * 0.8;
-      barLockBtn.position.set(-VR_BAR_TOOL_SIZE * 0.7, y, VR_GUI_Z);
-      barMoveBtn.position.set(VR_BAR_TOOL_SIZE * 0.7, y, VR_GUI_Z);
+      barLockBtn.position.x = -VR_BAR_TOOL_SIZE * 0.7;
+      barMoveBtn.position.x = VR_BAR_TOOL_SIZE * 0.7;
       for (const b of barTools) {
-        b.scale.setScalar(VR_BAR_TOOL_SIZE);
+        // a hovered handle grows and steps toward the player, the way a
+        // hovered skill button does
+        const hot = b.userData.state.hovered;
+        b.scale.setScalar(VR_BAR_TOOL_SIZE * (hot ? VR_BAR_TOOL_HOVER : 1));
+        b.position.y = y;
+        b.position.z = VR_GUI_Z + (hot ? VR_BAR_TOOL_SIZE * 0.25 : 0);
         b.visible = true;
       }
     } else {
@@ -724,6 +760,7 @@
   /** Aiming feedback (mouse hover or VR controller ray). */
   function applyHover(p) {
     if (!session) return;
+    setBarToolHover(p ? p.barTool : null);
     session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
       cursorSim = { x: p.simX, y: p.simY };
