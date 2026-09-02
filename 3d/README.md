@@ -41,6 +41,11 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
   stops to ask is no longer a shortcut.
+
+Anything you have to deal with holds the clock while it is up: the catalog and
+either restart question, in both views. Only what was stopped gets restarted,
+so a game you had already paused stays paused, and two of them overlapping do
+not resume it between them.
 - "mode" switches between playing and editing. Playing is the game and is
   the default; editing is the tagging workbench — it bills itself as
   validation mode, opens the piece editor, and turns the catalog over to
@@ -53,9 +58,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   are done; editing, the header shows a green "✔ tagged" mark when a profile
   file exists in `profiles/` and entering a level opens the editor. Clears
   are per-browser, in localStorage. The catalog is cached in localStorage ("rescan"
-  rebuilds it); miniatures render lazily as you scroll. The sim is held while
-  it is up, and released on closing — unless the game was already paused, in
-  which case it stays that way.
+  rebuilds it); miniatures render lazily as you scroll.
 - "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
