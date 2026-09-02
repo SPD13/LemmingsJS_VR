@@ -20,8 +20,16 @@
   #game-state.won { color: #6fce7e; }
   #game-state.lost { color: #e07a6a; }
   #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
-  #hud-keys { top: 12px; right: 12px; color: #8fa1bb; text-align: right; }
+  /* the key hints: folded to a "controls" button, unfolding to the panel */
+  #hud-keys { top: 12px; right: 12px; color: #8fa1bb; text-align: right; padding-top: 26px; }
   #hud-keys b { color: #cdd6e4; font-weight: 600; }
+  #hud-keys.folded { padding: 0; border: none; background: transparent; }
+  #hud-keys.folded #keys-body, #hud-keys:not(.folded) #keys-open { display: none; }
+  #keys-close {
+    position: absolute; top: 5px; right: 6px; padding: 0 6px; line-height: 16px;
+    color: #8fa1bb; border-color: transparent; background: transparent;
+  }
+  #keys-close:hover { color: #f0f3f8; background: #263043; border-color: #33405a; }
   .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btnrow button { white-space: nowrap; }
   button {
@@ -178,11 +186,15 @@
   <div id="lib-grid"></div>
 </div>
 
-<div id="hud-keys" class="hud">
+<div id="hud-keys" class="hud folded">
+  <button id="keys-open">controls</button>
+  <div id="keys-body">
+  <button id="keys-close" title="hide the controls">&times;</button>
   <b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br>
   <b>click</b> lemming: assign skill &middot; panel: as in game<br>
   <b>space</b> pause &middot; <b>n</b> step &middot; <b>+/-</b> speed &middot; <b>,/.</b> level<br>
   <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>w</b> world library &middot; <b>r</b> dump replay
+  </div>
 </div>
 
 <div id="hud-hover" class="hud">&nbsp;</div>
