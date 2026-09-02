@@ -362,13 +362,41 @@ class GuiPanel {
     }
   }
 
+  /** The panel cell of the selected skill, or -1: on the DOS panel the selection frame
+   *  is drawn on the lines tiles share, so which lines a raised copy takes depends on it. */
+  _selectedIndex() {
+    if (!GUI_SHARED_BORDER) return -1;
+    try {
+      const skill = this.game.getGameSkills().getSelectedSkill();
+      return skill > 0 ? skill + 1 : -1; // CLIMBER..DIGGER (1..8) sit on cells 2..9
+    } catch (e) { return -1; }
+  }
+
+  /**
+   * What a raised copy of `index` crops: its own cell, plus the shared line
+   * on its right when the selection frame is its own, minus its first column
+   * when that line belongs to a selected neighbour on the left. The DOS panel's
+   * last button stops a column short of the status box's border.
+   */
+  _crop(index) {
+    let x0 = index * GUI_TILE_W, x1 = x0 + GUI_TILE_W;
+    if (GUI_SHARED_BORDER) {
+      const sel = this._selectedIndex();
+      if (index >= GUI_LAST_BUTTON) x1 -= 1;
+      else if (sel === index) x1 += 1;
+      if (sel === index - 1) x0 += 1;
+    }
+    return { x0, w: x1 - x0, cx: (x0 + x1) / 2 };
+  }
+
   _layoutSocket(index) {
     if (!this.socket || !this.mesh) return;
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
-    this.socket.scale.set((GUI_CROP_W(index) / cw) * pw, (GUI_CROP_H / ch) * ph, 1);
+    const crop = this._crop(index);
+    this.socket.scale.set((crop.w / cw) * pw, (GUI_CROP_H / ch) * ph, 1);
     this.socket.position.set(
-      this.mesh.position.x + (GUI_CROP_CX(index) / cw - 0.5) * pw,
+      this.mesh.position.x + (crop.cx / cw - 0.5) * pw,
       this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * ph,
       this.mesh.position.z + 0.1 * this._unit);
   }
@@ -379,7 +407,7 @@ class GuiPanel {
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
     const sx = pw / this.canvas.width, sy = ph / this.canvas.height;
     const g = GUI_GROW_FOR(index);
-    const cx = GUI_CROP_CX(index); // same pivot as the raised copy
+    const cx = this._crop(index).cx; // same pivot as the raised copy
     const cy = GUI_CROP_CY;
     this.hoverRelief.scale.set(sx * g, -sy * g, sx * g * this.reliefDepth);
     this.hoverRelief.position.set(
@@ -474,17 +502,17 @@ class GuiPanel {
   _layoutHoverTile(index) {
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, phh = this.mesh.scale.y;
-    // crop the texture to this button, including its frame edges
-    this.hoverTexture.repeat.set(GUI_CROP_W(index) / cw, GUI_CROP_H / ch);
-    this.hoverTexture.offset.set(
-      (index * GUI_TILE_W) / cw, 1 - (GUI_TILE_TOP + GUI_CROP_H) / ch);
+    // crop the texture to this button, with the frame edges that are its own
+    const crop = this._crop(index);
+    this.hoverTexture.repeat.set(crop.w / cw, GUI_CROP_H / ch);
+    this.hoverTexture.offset.set(crop.x0 / cw, 1 - (GUI_TILE_TOP + GUI_CROP_H) / ch);
     this.hoverTexture.needsUpdate = true;
     // match the button's footprint on the panel, grown a touch
     const grow = GUI_GROW_FOR(index);
     this.hoverTile.scale.set(
-      (GUI_CROP_W(index) / cw) * pw * grow, (GUI_CROP_H / ch) * phh * grow, 1);
+      (crop.w / cw) * pw * grow, (GUI_CROP_H / ch) * phh * grow, 1);
     this.hoverTile.position.set(
-      this.mesh.position.x + (GUI_CROP_CX(index) / cw - 0.5) * pw,
+      this.mesh.position.x + (crop.cx / cw - 0.5) * pw,
       this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * phh,
       this.mesh.position.z + GUI_TILE_POP * this._unit
     );
@@ -518,7 +546,11 @@ class GuiPanel {
     this.mesh.scale.set(width, height, 1);
     this.mesh.position.set(0, y, z);
     this._placed = true;
-    if (this.hoverIndex != null) this._layoutHoverTile(this.hoverIndex);
+    if (this.hoverIndex != null) {
+      this._layoutHoverTile(this.hoverIndex);   // the selection may have moved a frame edge
+      this._layoutSocket(this.hoverIndex);
+      this._layoutHoverRelief(this.hoverIndex);
+    }
     this._layoutRelief();
   }
 
