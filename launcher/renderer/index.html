@@ -51,7 +51,9 @@
   }
   .url:hover { color: var(--green); }
   .url.disabled { color: var(--muted); cursor: default; text-decoration: none; }
-  #error { color: var(--red); min-height: 18px; margin-top: 12px; }
+  #error { color: var(--red); min-height: 18px; margin-top: 12px; line-height: 1.5; }
+  /* the same line carries a plain remark, which is not a failure */
+  #error.notice { color: var(--muted); }
 
   label { color: var(--muted); display: block; margin-bottom: 6px; }
   label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); cursor: pointer; }

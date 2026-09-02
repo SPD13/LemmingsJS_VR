@@ -8,7 +8,13 @@ npm install
 npm start
 ```
 
-- **Server tab** — start/stop the server and see its status. When running, it
+- **Server tab** — start/stop the server and see its status. If the port is
+  still held by a previous run of this launcher — a crash, a hard quit, an
+  Electron that never got its `will-quit` — that stale process is stopped and
+  the server starts anyway, with a line saying which pid was cleared. Only
+  this program is ever killed: anything else on the port is named in an error
+  and left strictly alone (`port.js` decides, by what a process is *running*,
+  not where it was started). When running, it
   shows the internal URL (`http://localhost:<port>/3d/`) and the external URL
   (this machine's LAN IPv4) — the address a headset or another device on the
   same network would use. Click a URL to open it in the browser.

@@ -35,7 +35,10 @@ function renderStatus(s) {
   };
   setUrl("internal-url", s.internalUrl);
   setUrl("external-url", s.externalUrl);
-  $("error").textContent = s.error || "";
+  // one line for both: a failure in red, a remark (the port was reclaimed)
+  // in the muted colour
+  $("error").textContent = s.error || s.notice || "";
+  $("error").classList.toggle("notice", !s.error && !!s.notice);
 
   if (!$("port").matches(":focus")) $("port").value = s.port;
   $("https-toggle").checked = !!s.https;
