@@ -13,6 +13,10 @@
  * is a best-effort mapping. Audition candidates from the console with
  *   __lem3d.audio.playSfx(<n>)
  * and adjust SFX_* here if an effect sounds wrong.
+ *
+ * The later four were picked by measuring every track rather than guessing:
+ * each entry carries the length and spectral centroid it was chosen for, so
+ * anyone re-mapping has the same numbers to work from.
  */
 
 const SFX = {
@@ -24,16 +28,29 @@ const SFX = {
   YIPPEE: 7,   // reached the exit
   DROWN: 8,    // glug
   TRAP: 9,     // caught by a trap
+  CLICK: 11,   // a press on the skill panel  (107ms, centroid 2.0kHz)
+  TING: 14,    // three bricks left to build  (128ms, 5.6kHz - short, bright)
+  DOOR: 2,     // the entrance hatch swinging (537ms, 3.0kHz, the loudest)
+  NUKE: 12,    // the nuke                    (855ms, 9.4kHz - long, noisy)
 };
 
-/** lemming action-name transition -> effect (checked on every state change) */
+// A builder lays 12 bricks; the original warns with three to go.
+const BUILDER_WARN_AT = 9;
+
+/**
+ * lemming action-name transition -> effect (checked on every state change).
+ *
+ * "hoist" is deliberately absent. The engine sends a lemming caught by a trap
+ * into HOISTING, so hoisting looked like the trap cue - but it is also what a
+ * climber does on reaching the top of a wall, which made every successful
+ * climb sound like a death. The trap is caught at its trigger instead.
+ */
 const SFX_BY_ACTION = {
   "oh-no": SFX.OHNO,
   "exploding": SFX.EXPLODE,
   "splatter": SFX.SPLAT,
   "drowning": SFX.DROWN,
   "exiting": SFX.YIPPEE,
-  "hoist": SFX.TRAP,
 };
 
 class GameAudio {
