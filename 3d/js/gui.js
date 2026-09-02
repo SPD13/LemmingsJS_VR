@@ -82,6 +82,13 @@ class GuiPanel {
     this.hoverIndex = null;
     this.tileReliefs = null;   // extruded artwork, one mesh per button
     this.hoverRelief = null;   // the hovered tile's figure, raised with it
+    // Multiplies how far the artwork stands off the panel. The toolbar is an
+    // overlay drawn with no depth testing, so on a flat screen the relief is
+    // sold entirely by its shading and one canvas pixel is plenty. In a
+    // headset the shading is the same but the eyes want parallax too, and one
+    // pixel of a 0.6m panel is under 2mm at arm's length - far too shallow to
+    // read as raised. See setReliefDepth.
+    this.reliefDepth = 1;
     this._tileGeoms = [];
   }
 
@@ -311,7 +318,7 @@ class GuiPanel {
     const meshes = this.textMesh
       ? this.tileReliefs.concat([this.textMesh]) : this.tileReliefs;
     for (const mesh of meshes) {
-      mesh.scale.set(sx, -sy, sx);
+      mesh.scale.set(sx, -sy, sx * this.reliefDepth);
       mesh.position.set(
         this.mesh.position.x - this.mesh.scale.x / 2,
         this.mesh.position.y + this.mesh.scale.y / 2,
@@ -342,7 +349,7 @@ class GuiPanel {
     const g = GUI_GROW_FOR(index);
     const cx = GUI_CROP_CX(index); // same pivot as the raised copy
     const cy = GUI_CROP_CY;
-    this.hoverRelief.scale.set(sx * g, -sy * g, sx * g);
+    this.hoverRelief.scale.set(sx * g, -sy * g, sx * g * this.reliefDepth);
     this.hoverRelief.position.set(
       this.mesh.position.x - pw / 2 + cx * sx * (1 - g),
       this.mesh.position.y + ph / 2 + cy * sy * (g - 1),
@@ -456,6 +463,14 @@ class GuiPanel {
    *  the play area is moved. The buffer may not exist yet on the first call
    *  (GameGui sizes it on its first render), so the request is remembered and
    *  applied from update(). */
+  /** How far the extruded artwork stands off the panel, as a multiple of the
+   *  one canvas pixel it is modelled at. */
+  setReliefDepth(mult) {
+    if (this.reliefDepth === mult) return;
+    this.reliefDepth = mult;
+    this._layoutRelief();
+  }
+
   place(width, y, z) {
     const p = this._placement;
     if (this._placed && p && p.width === width && p.y === y && p.z === z) return;

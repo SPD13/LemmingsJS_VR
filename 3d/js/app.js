@@ -437,8 +437,12 @@
   function layoutGuiPanel() {
     if (!session || !session.gui) return;
     if (renderer.xr.isPresenting) {
+      // deeper relief in a headset: on a flat screen the emboss is carried by
+      // its shading, but stereo wants parallax to go with it
+      session.gui.setReliefDepth(GUI_VR_RELIEF_DEPTH);
       session.gui.place(VR_GUI_WIDTH, VR_GUI_Y, VR_GUI_Z); // metres
     } else {
+      session.gui.setReliefDepth(1);
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const viewH = 2 * dist * tanHalf;
