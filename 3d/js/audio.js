@@ -89,7 +89,9 @@ class GameAudio {
       player.processor.disconnect();
       let tail = player.processor;
       if (worldPos && this._spatial && this._spatial.isActive()) {
-        tail = this._panner(player, worldPos, ctx);
+        const panner = this._panner(player, worldPos, ctx);
+        player.processor.connect(panner); // the panner needs its input
+        tail = panner;
       }
       let gain = player.__gain;
       if (!gain || gain.context !== ctx) {
@@ -119,9 +121,14 @@ class GameAudio {
     const panner = ctx.createPanner();
     panner.panningModel = "HRTF";
     panner.distanceModel = "inverse";
-    panner.refDistance = 0.5; // full volume within arm's reach of the diorama
+    // The board is a 4m strip an arm's length away, so its far end is metres
+    // off: a realistic rolloff would leave half the level inaudible under the
+    // music. This one is deliberately shallow - full volume out to the near
+    // edge, and roughly half at the far end - so the panning carries the
+    // direction while the effect stays audible.
+    panner.refDistance = 1.5;
     panner.maxDistance = 25;
-    panner.rolloffFactor = 1;
+    panner.rolloffFactor = 0.5;
     if (panner.positionX) {
       panner.positionX.value = worldPos.x;
       panner.positionY.value = worldPos.y;
