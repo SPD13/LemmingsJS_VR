@@ -219,7 +219,8 @@
     // entrances/exits become real openings; this also carves the terrain
     // behind them (render only - collision is untouched). Switched off, they
     // stay the flat sprites the original draws and nothing is carved.
-    const portals = state.doors ? buildPortals(level, profile, depthMap) : [];
+    const portals = state.doors
+      ? buildPortals(level, profile, depthMap, OBJECT_Z) : [];
     const portalIndices = new Set(portals.map((p) => p.index));
 
     // music: the original rotates tunes with the level ordinal
