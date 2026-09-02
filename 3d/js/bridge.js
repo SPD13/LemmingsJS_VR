@@ -24,6 +24,9 @@ const SPRITE_SHADE_RIGHT = 0.66;
 const SPRITE_SHADE_TOP = 0.85;
 const SPRITE_SHADE_BOTTOM = 0.5;
 
+/** An explosion particle, in game pixels (see ParticleCloud.updateScale). */
+const PARTICLE_SIZE = 2.2;
+
 /** Tracks GPU resources for one loaded level so we can free them on teardown. */
 class SessionResources {
   constructor() {
@@ -363,13 +366,27 @@ class ParticleCloud {
     this.z = z;
     this.geometry = new THREE.BufferGeometry();
     this.material = new THREE.PointsMaterial({
-      size: 2.2,
+      size: PARTICLE_SIZE,
       vertexColors: true,
       sizeAttenuation: true,
     });
     this.points = new THREE.Points(this.geometry, this.material);
     this.points.frustumCulled = false;
     parent.add(this.points);
+  }
+
+  /**
+   * Keep a particle the size of a game pixel whatever the diorama is scaled
+   * to. A point's size is a view-space constant in three's shader - it is not
+   * carried by the object's scale the way its position is - so the same 2.2
+   * that reads as a couple of screen pixels on the desktop covers a headset's
+   * eye when the board is 2.5mm to the pixel and an arm's length away.
+   */
+  updateScale() {
+    this.points.updateWorldMatrix(true, false);
+    const s = new THREE.Vector3().setFromMatrixScale(this.points.matrixWorld);
+    const size = PARTICLE_SIZE * Math.abs(s.x);
+    if (this.material.size !== size) this.material.size = size;
   }
 
   sync(flat) {

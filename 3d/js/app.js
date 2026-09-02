@@ -1107,6 +1107,9 @@
         tickDebt = 0;
       }
       session.lemmingPool.applyInterpolation(alpha);
+      // point size does not follow the diorama's scale, so it is reapplied
+      // here: grips, sticks and drags all change that scale mid-session
+      session.particles.updateScale();
       updateHoverRing(); // ring keeps following the hovered lemming
       session.gui.update();
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
