@@ -376,7 +376,32 @@
     setBarToolState(vrMuteBtn, { on: !audio.enabled });
   }
 
-  const vrLeftTools = [barLockBtn, barMoveBtn];
+  // cogwheel: the render switches, which are DOM buttons on a monitor
+  const vrSettingsBtn = makeIconButton("vr-settings", guiRoot, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
+      c.fillStyle = "#cdd6e4";
+      c.beginPath();
+      for (let i = 0; i < 8; i++) {           // eight teeth round the rim
+        const a = (i / 8) * Math.PI * 2;
+        c.save();
+        c.translate(32 + Math.cos(a) * 20, 32 + Math.sin(a) * 20);
+        c.rotate(a);
+        c.fillRect(-5, -5, 10, 10);
+        c.restore();
+      }
+      c.fill();
+      c.beginPath();
+      c.arc(32, 32, 16, 0, Math.PI * 2);
+      c.fill();
+      c.globalCompositeOperation = "destination-out";  // the hub
+      c.beginPath();
+      c.arc(32, 32, 7, 0, Math.PI * 2);
+      c.fill();
+      c.globalCompositeOperation = "source-over";
+    });
+  });
+
+  const vrLeftTools = [barLockBtn, barMoveBtn, vrSettingsBtn];
   const vrRightTools = [vrWorldsBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
   const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
   // the sound column keeps its own place, so it is not in the row above, but
@@ -848,6 +873,216 @@
     paintVrCatalog();
   }
 
+  // --------------------------------------------------------- settings (VR)
+  /**
+   * The render switches, in the scene. They are DOM buttons on a monitor,
+   * which a headset cannot reach: a framerate that suffers mid-session used
+   * to mean taking the headset off (or knowing the URL params). The panel
+   * calls exactly what the buttons call, so the two stay in step, and it
+   * carries the recentre that is otherwise only on the A/X button.
+   */
+  const VR_SET_W = 640, VR_SET_H = 400;   // canvas pixels
+  const VR_SET_TOP = 96;                  // first row
+  const VR_SET_ROW = 68;
+
+  const vrSettingRows = [
+    { label: "3D terrain", get: () => state.emboss, act: () => toggleEmboss() },
+    { label: "3D doors", get: () => state.doors, act: () => toggleDoors() },
+    { label: "smooth", get: () => state.smooth, act: () => toggleSmooth() },
+    { label: "recentre the board", act: () => vr.recenterNow() },
+  ];
+  let vrSettingsHover = -1;
+
+  const vrSettings = new THREE.Group();
+  vrSettings.visible = false;
+  camera.add(vrSettings);
+
+  const vrSettingsPanel = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = VR_SET_W; cv.height = VR_SET_H;
+    const cx = cv.getContext("2d");
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = "vr-setpanel";
+    mesh.renderOrder = GUI_ORDER_MODAL;
+    mesh.userData.paint = () => {
+      cx.clearRect(0, 0, VR_SET_W, VR_SET_H);
+      cx.fillStyle = "rgba(10, 14, 22, 0.96)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, VR_SET_W - 4, VR_SET_H - 4, 16)
+                   : cx.rect(2, 2, VR_SET_W - 4, VR_SET_H - 4);
+      cx.fill();
+      cx.strokeStyle = "#ffd866";
+      cx.lineWidth = 4;
+      cx.stroke();
+      cx.textAlign = "left";
+      cx.fillStyle = "#f0f3f8";
+      cx.font = "bold 34px monospace";
+      cx.fillText("SETTINGS", 28, 60);
+
+      vrSettingRows.forEach((row, i) => {
+        const y = VR_SET_TOP + i * VR_SET_ROW;
+        const hot = i === vrSettingsHover;
+        const on = row.get ? row.get() : null;
+        cx.fillStyle = hot ? "#2b3548" : "#19202c";
+        cx.beginPath();
+        cx.roundRect ? cx.roundRect(24, y, VR_SET_W - 48, VR_SET_ROW - 12, 10)
+                     : cx.rect(24, y, VR_SET_W - 48, VR_SET_ROW - 12);
+        cx.fill();
+        if (hot) {
+          cx.strokeStyle = "#ffffff";
+          cx.lineWidth = 3;
+          cx.stroke();
+        }
+        cx.fillStyle = "#f0f3f8";
+        cx.font = "26px monospace";
+        cx.fillText(row.label, 44, y + 38);
+        if (on === null) return;                    // an action, not a switch
+        const pw = 86, px = VR_SET_W - 48 - pw - 12;
+        cx.fillStyle = on ? "#1d5030" : "#3a2530";
+        cx.beginPath();
+        cx.roundRect ? cx.roundRect(px, y + 12, pw, 32, 16)
+                     : cx.rect(px, y + 12, pw, 32);
+        cx.fill();
+        cx.fillStyle = on ? "#6fce7e" : "#e07a6a";
+        cx.font = "bold 22px monospace";
+        cx.textAlign = "center";
+        cx.fillText(on ? "ON" : "OFF", px + pw / 2, y + 36);
+        cx.textAlign = "left";
+      });
+      tex.needsUpdate = true;
+    };
+    mesh.userData.paint();
+    vrSettings.add(mesh);
+    return mesh;
+  })();
+
+  const vrSettingsClose = makeIconButton("vr-setclose", vrSettings, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#5a2a2a" : "#33201c", "#e07a6a", (c) => {
+      c.beginPath();
+      c.moveTo(19, 19); c.lineTo(45, 45);
+      c.moveTo(45, 19); c.lineTo(19, 45);
+      c.stroke();
+    });
+  });
+  vrSettingsClose.renderOrder = GUI_ORDER_MODAL_BTN;
+
+  function paintVrSettings() { vrSettingsPanel.userData.paint(); }
+
+  /** Which row the beam is on, from the panel's own UV. */
+  function vrSettingsRowAt(uv) {
+    if (!uv) return -1;
+    const x = uv.x * VR_SET_W, y = (1 - uv.y) * VR_SET_H;
+    if (x < 24 || x > VR_SET_W - 24) return -1;
+    const i = Math.floor((y - VR_SET_TOP) / VR_SET_ROW);
+    if (i < 0 || i >= vrSettingRows.length) return -1;
+    return (y - VR_SET_TOP) % VR_SET_ROW <= VR_SET_ROW - 12 ? i : -1;
+  }
+
+  function setVrSettingsHover(index) {
+    if (vrSettingsHover === index) return;
+    vrSettingsHover = index;
+    paintVrSettings();
+  }
+
+  /** Show or hide the switches, holding the clock while they are up. */
+  function setVrSettings(open) {
+    const show = open && renderer.xr.isPresenting;
+    if (show === vrSettings.visible) return;
+    vrSettings.visible = show;
+    vrSettingsClose.visible = show;
+    setBarToolState(vrSettingsClose, { hovered: false });
+    setVrSettingsHover(-1);
+    if (show) { holdSim("vr-settings"); paintVrSettings(); }
+    else releaseSim("vr-settings");
+  }
+
+  /** In the dialog's plane, like every other window. */
+  function layoutVrSettings() {
+    const w = VR_SETTINGS_WIDTH, h = w * VR_SET_H / VR_SET_W;
+    vrSettingsPanel.scale.set(w, h, 1);
+    vrSettingsPanel.position.set(0, VR_MODAL_Y, VR_MODAL_Z);
+    const size = VR_BAR_TOOL_SIZE;
+    const hot = vrSettingsClose.userData.state.hovered;
+    vrSettingsClose.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
+    vrSettingsClose.position.set(
+      w / 2 - size * 0.6, VR_MODAL_Y + h / 2 - size * 0.6,
+      VR_MODAL_Z + (hot ? size * 0.25 : 0.001));
+  }
+
+  // ------------------------------------------------------ status strip (VR)
+  /**
+   * What the DOM HUD says, in the scene: which level this is, what it asks
+   * for, and how it ended. None of that is readable in a headset otherwise -
+   * the page around the canvas simply is not there - so a win, a loss and a
+   * level swap all used to happen in silence.
+   *
+   * It rides the toolbar like the button row, just above it, so it follows
+   * the bar wherever it is dragged or unpinned to.
+   */
+  const VR_STATUS_W = 1024, VR_STATUS_H = 132;
+
+  const vrStatus = { name: "", meta: "", note: "loading…", kind: "" };
+
+  const vrStatusPanel = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = VR_STATUS_W; cv.height = VR_STATUS_H;
+    const cx = cv.getContext("2d");
+    const tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = "vr-status";
+    mesh.renderOrder = GUI_ORDER_BAR_TOOL;
+    mesh.visible = false;
+    mesh.userData.paint = () => {
+      cx.clearRect(0, 0, VR_STATUS_W, VR_STATUS_H);
+      cx.fillStyle = "rgba(10, 14, 22, 0.86)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, VR_STATUS_W - 4, VR_STATUS_H - 4, 14)
+                   : cx.rect(2, 2, VR_STATUS_W - 4, VR_STATUS_H - 4);
+      cx.fill();
+      cx.strokeStyle = vrStatus.kind === "won" ? "#6fce7e"
+        : vrStatus.kind === "lost" ? "#e07a6a" : "#2a3446";
+      cx.lineWidth = 3;
+      cx.stroke();
+      cx.textAlign = "left";
+      cx.fillStyle = "#f0f3f8";
+      cx.font = "bold 40px monospace";
+      cx.fillText(vrStatus.name || "…", 26, 56);
+      cx.fillStyle = "#8fa1bb";
+      cx.font = "26px monospace";
+      cx.fillText(vrStatus.meta, 26, 98);
+      if (vrStatus.note) {
+        // the outcome, or that a level is on its way in
+        cx.textAlign = "right";
+        cx.fillStyle = vrStatus.kind === "won" ? "#6fce7e"
+          : vrStatus.kind === "lost" ? "#e07a6a" : "#ffd866";
+        cx.font = "bold 32px monospace";
+        cx.fillText(vrStatus.note, VR_STATUS_W - 26, 84);
+      }
+      tex.needsUpdate = true;
+    };
+    mesh.userData.paint();
+    guiRoot.add(mesh);
+    return mesh;
+  })();
+
+  /** Update the strip. Any field left undefined keeps what it had. */
+  function setVrStatus(patch) {
+    let changed = false;
+    for (const k of Object.keys(patch)) {
+      if (vrStatus[k] !== patch[k]) { vrStatus[k] = patch[k]; changed = true; }
+    }
+    if (changed) vrStatusPanel.userData.paint();
+  }
+
   /** Show or hide the catalog, holding the clock while the player reads it. */
   function setVrCatalog(open) {
     const show = open && renderer.xr.isPresenting;
@@ -878,6 +1113,7 @@
   // all would hit one.
   layoutVrModal();
   layoutVrCatalog();
+  layoutVrSettings();
 
   /**
    * The toolbar rides the head by default. Unlocked, it is handed to the
@@ -945,12 +1181,14 @@
   const renderEmbossBtn = () => {
     embossBtn.textContent = "3D terrain: " + (state.emboss ? "on" : "off");
   };
-  embossBtn.addEventListener("click", () => {
+  function toggleEmboss() {
     state.emboss = !state.emboss;
     try { localStorage.setItem("lem3d-emboss", state.emboss ? "on" : "off"); } catch (e) {}
     renderEmbossBtn();
     if (session) session.rebuildRelief();
-  });
+    paintVrSettings();
+  }
+  embossBtn.addEventListener("click", toggleEmboss);
   renderEmbossBtn();
 
   /** Playing or editing: the billing, the catalog's labels, and whether the
@@ -977,12 +1215,14 @@
   const renderDoorsBtn = () => {
     doorsBtn.textContent = "3D doors: " + (state.doors ? "on" : "off");
   };
-  doorsBtn.addEventListener("click", () => {
+  function toggleDoors() {
     state.doors = !state.doors;
     try { localStorage.setItem("lem3d-doors", state.doors ? "on" : "off"); } catch (e) {}
     renderDoorsBtn();
+    paintVrSettings();
     loadLevel().catch((err) => console.error(err));
-  });
+  }
+  doorsBtn.addEventListener("click", toggleDoors);
   renderDoorsBtn();
 
   // slope the relief between heights instead of stepping
@@ -990,12 +1230,14 @@
   const renderSmoothBtn = () => {
     smoothBtn.textContent = "smooth: " + (state.smooth ? "on" : "off");
   };
-  smoothBtn.addEventListener("click", () => {
+  function toggleSmooth() {
     state.smooth = !state.smooth;
     try { localStorage.setItem("lem3d-smooth", state.smooth ? "on" : "off"); } catch (e) {}
     renderSmoothBtn();
     if (session) session.terrain.setSmooth(state.smooth);
-  });
+    paintVrSettings();
+  }
+  smoothBtn.addEventListener("click", toggleSmooth);
   renderSmoothBtn();
 
   audio.configureSpatial({
@@ -1038,6 +1280,7 @@
     hud.loading.classList.remove("hidden");
     hud.state.textContent = "";
     hud.state.className = "";
+    setVrStatus({ note: "loading…", kind: "" });
 
     window.__lem3dGroundData = null; // cleared so a VGASPEC level can't reuse a stale piece list
     const game = await factory.getGame(state.gameType);
@@ -1244,6 +1487,8 @@
         ? "LEVEL COMPLETE — " + Lemmings.GameStateTypes.toString(result.state) + best
         : "FAILED — " + Lemmings.GameStateTypes.toString(result.state);
       hud.state.className = won ? "won" : "lost";
+      setVrStatus({ note: won ? "COMPLETE" + best : "FAILED",
+                    kind: won ? "won" : "lost" });
       window.setTimeout(() => {
         if (session && session.game === game) moveLevel(won ? 1 : 0);
       }, 3000);
@@ -1262,6 +1507,15 @@
       " · level " + (state.level + 1) +
       " · save " + level.needCount + "/" + level.releaseCount;
     hud.loading.classList.add("hidden");
+    // the same, in the scene, where a headset can read it
+    const groupNames = (await factory.getConfig(state.gameType)).level.groups || [];
+    setVrStatus({
+      name: level.name.trim() || "(unnamed level)",
+      meta: (GAME_LABELS[state.gameType] || "game " + state.gameType) + " · " +
+        (groupNames[state.group] || "group " + state.group) + " " +
+        (state.level + 1) + " · save " + level.needCount + "/" + level.releaseCount,
+      note: "", kind: "",
+    });
 
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
@@ -1298,6 +1552,12 @@
       // the level at the right end.
       const barTop = VR_GUI_Y + session.gui.mesh.scale.y / 2;
       const y = barTop + VR_BAR_TOOL_SIZE * 0.8;
+      // the status strip sits over the row, as wide as the bar itself
+      const statusH = VR_GUI_WIDTH * VR_STATUS_H / VR_STATUS_W;
+      vrStatusPanel.scale.set(VR_GUI_WIDTH, statusH, 1);
+      vrStatusPanel.position.set(
+        0, y + VR_BAR_TOOL_SIZE * 0.75 + statusH / 2, VR_GUI_Z);
+      vrStatusPanel.visible = true;
       const step = VR_BAR_TOOL_SIZE * 1.15;
       const end = VR_GUI_WIDTH / 2 - VR_BAR_TOOL_SIZE * 0.6;
       vrLeftTools.forEach((b, i) => { b.position.x = -end + i * step; });
@@ -1331,6 +1591,7 @@
     } else {
       for (const b of vrWidgets) b.visible = false;
       vrVolumeSlider.visible = false;
+      vrStatusPanel.visible = false;
       session.gui.setReliefDepth(1);
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -1393,6 +1654,12 @@
       }
       return null;
     }
+    if (vrSettings.visible) {
+      const onClose = rc.intersectObject(vrSettingsClose, false);
+      if (onClose.length) return onClose[0];
+      const onPanel = rc.intersectObject(vrSettingsPanel, false);
+      return onPanel.length ? onPanel[0] : null;
+    }
     // the catalog owns it the same way: the grid and its close button only
     if (vrCatalog.visible) {
       const onClose = rc.intersectObject(vrCatalogClose, false);
@@ -1425,6 +1692,9 @@
     if (hit.object.name === "vr-volume") {
       // up the track is the value: the plane's own V, 0 at the bottom
       return { barTool: "volume", volume: hit.uv ? hit.uv.y : audio.volume };
+    }
+    if (hit.object.name === "vr-setpanel") {
+      return { barTool: "setpanel", row: vrSettingsRowAt(hit.uv) };
     }
     if (hit.object.name === "vr-worldpanel") {
       // the grid is one plane: what is under the beam comes from the UV
@@ -1536,6 +1806,7 @@
     setBarToolHover(p ? p.barTool : null);
     setVrCatalogHover(p && p.barTool === "worldpanel"
       ? (p.scrollBar ? -2 : p.tile) : -1);
+    setVrSettingsHover(p && p.barTool === "setpanel" ? p.row : -1);
     session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
       cursorSim = { x: p.simX, y: p.simY };
@@ -1655,6 +1926,9 @@
       : dioramaFocusWorld());
   }, { passive: false });
 
+  // a volume slider or catalog scrollbar held down by the mouse
+  let mouseScrub = null;
+
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
     if (e.button === 2) rightDownAt = { x: e.clientX, y: e.clientY };
@@ -1677,6 +1951,18 @@
     if (e.button !== 0) return;
     downAt = { x: e.clientX, y: e.clientY };
     if (vrMouseFallback()) {
+      // The in-scene controls answer to the mouse too: without controllers it
+      // is the only pointer there is, and pause, restart and the catalog are
+      // in the scene, not the DOM.
+      const p0 = pick(e);
+      if (p0 && p0.barTool) {
+        if (p0.barTool === "volume" || p0.scrollBar) {
+          // a scrubber follows the cursor until the button comes back up
+          mouseScrub = p0.barTool;
+          actOnPick(p0);
+        }
+        return; // a press on a control never orbits the board
+      }
       // left-drag = orbit, as in the web view: rotates the diorama about
       // its focus point; a barely-moved press stays a click
       vrOrbit = { lastX: e.clientX, lastY: e.clientY,
@@ -1708,7 +1994,9 @@
     }
     if (e.button === 0) vrOrbit = null;
     if (!mouseAllowed() || e.button !== 0) return;
+    if (mouseScrub) { mouseScrub = null; return; } // it acted as it was dragged
     const p = pick(e);
+    if (p && p.barTool && vrMouseFallback()) { actOnPick(p); return; }
     if (p && p.panelUv) session.gui.onMouseUp(p.panelUv);
     // treat as a click only if the pointer barely moved (else it was an orbit)
     if (!downAt || Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y) > 5) return;
@@ -1755,6 +2043,11 @@
         vrOrbit.lastX = e.clientX;
         vrOrbit.lastY = e.clientY;
         if (vrOrbit.active) return;
+      }
+      if (mouseScrub && (e.buttons & 1)) {
+        const on = pickWithRaycaster(rc);
+        if (on && on.barTool === mouseScrub) actOnPick(on);
+        return;
       }
       const hit = raycastHit(rc);
       // always render the cursor so it can be steered back onto the board:
@@ -1854,64 +2147,79 @@
     // the in-scene windows are for the headset; the DOM does this on a monitor
     setVrModal(false);
     setVrCatalog(false);
+    setVrSettings(false);
     // an unlocked bar is a VR notion: on the desktop it rides the camera
     resetBar();
     if (session) frameDesktopCamera(session.level);
     layoutGuiPanel();
   });
 
+  /**
+   * Act on a confirmed activation, wherever it came from: a controller
+   * trigger, or the mouse in a session with no controllers. Everything the
+   * in-scene controls do lives here, so both pointers reach all of it.
+   */
+  function actOnPick(p) {
+    if (p.barTool === "lock") {
+      setBarLocked(!barLocked);
+    } else if (p.barTool === "move") {
+      // nothing on a tap; it is the drag that moves the bar
+    } else if (p.barTool === "volume") {
+      audio.setVolume(p.volume);
+      paintVolume();
+    } else if (p.barTool === "mute") {
+      audio.setEnabled(!audio.enabled);
+      renderSoundBtn();
+      if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
+      paintVolume();
+    } else if (p.barTool === "pause") {
+      togglePause();
+    } else if (p.barTool === "restart") {
+      askVrConfirm("Restart level?", () => moveLevel(0));
+    } else if (p.barTool === "prev") {
+      askVrConfirm("Go back a level?", () => moveLevel(-1));
+    } else if (p.barTool === "next") {
+      askVrConfirm("Skip to the next level?", () => moveLevel(1));
+    } else if (p.barTool === "settings") {
+      setVrSettings(true);
+    } else if (p.barTool === "setclose") {
+      setVrSettings(false);
+    } else if (p.barTool === "setpanel") {
+      const row = vrSettingRows[p.row];
+      if (row) { row.act(); paintVrSettings(); }
+    } else if (p.barTool === "worlds") {
+      setVrCatalog(true);
+    } else if (p.barTool === "catclose") {
+      setVrCatalog(false);
+    } else if (p.barTool === "worldpanel") {
+      // the scrollbar, pressed or dragged, moves the list instead
+      if (p.scrollBar || p.scrubbing) {
+        if (vrCatalogScrollTo(p.scrollAt)) paintVrCatalog();
+      } else {
+        const item = vrCatalogItems[p.tile];
+        if (item) {
+          setVrCatalog(false);
+          library.enterWorld(item.gameType, item.group, item.level);
+        }
+      }
+    } else if (p.barTool === "yes") {
+      const act = vrConfirmAction;
+      setVrModal(false);
+      if (act) act();
+    } else if (p.barTool === "no") {
+      setVrModal(false);
+    } else if (p.panelUv && session) {
+      session.gui.onMouseDown(p.panelUv);
+      session.gui.onMouseUp(p.panelUv);
+    } else if (p.simX !== undefined) {
+      actOnSimPick(p.simX, p.simY);
+    }
+  }
+
   const vr = new VRManager(renderer, scene, camera, dioramaRoot, {
     pickWithRaycaster,
     raycastHit,
-    onSelectPick: (p) => {
-      if (p.barTool === "lock") {
-        setBarLocked(!barLocked);
-      } else if (p.barTool === "move") {
-        // nothing on a tap; it is the drag that moves the bar
-      } else if (p.barTool === "volume") {
-        audio.setVolume(p.volume);
-        paintVolume();
-      } else if (p.barTool === "mute") {
-        audio.setEnabled(!audio.enabled);
-        renderSoundBtn();
-        if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
-        paintVolume();
-      } else if (p.barTool === "pause") {
-        togglePause();
-      } else if (p.barTool === "restart") {
-        askVrConfirm("Restart level?", () => moveLevel(0));
-      } else if (p.barTool === "prev") {
-        askVrConfirm("Go back a level?", () => moveLevel(-1));
-      } else if (p.barTool === "next") {
-        askVrConfirm("Skip to the next level?", () => moveLevel(1));
-      } else if (p.barTool === "worlds") {
-        setVrCatalog(true);
-      } else if (p.barTool === "catclose") {
-        setVrCatalog(false);
-      } else if (p.barTool === "worldpanel") {
-        // the scrollbar, pressed or dragged, moves the list instead
-        if (p.scrollBar || p.scrubbing) {
-          if (vrCatalogScrollTo(p.scrollAt)) paintVrCatalog();
-        } else {
-          const item = vrCatalogItems[p.tile];
-          if (item) {
-            setVrCatalog(false);
-            library.enterWorld(item.gameType, item.group, item.level);
-          }
-        }
-      } else if (p.barTool === "yes") {
-        const act = vrConfirmAction;
-        setVrModal(false);
-        if (act) act();
-      } else if (p.barTool === "no") {
-        setVrModal(false);
-      } else if (p.panelUv && session) {
-        session.gui.onMouseDown(p.panelUv);
-        session.gui.onMouseUp(p.panelUv);
-      } else if (p.simX !== undefined) {
-        actOnSimPick(p.simX, p.simY);
-      }
-    },
+    onSelectPick: actOnPick,
     onHoverPick: applyHover,
     onBarDragStart: () => { barDragFrom = guiRoot.position.clone(); },
     // the hand moves in world space; the bar hangs off the head or the scene,
@@ -2211,9 +2519,11 @@
           { on: !session.game.getGameTimer().isRunning() });
         layoutVrModal();
         layoutVrCatalog();
+        layoutVrSettings();
       } else if (vrPauseBtn.visible) {
         setVrModal(false);
         setVrCatalog(false);
+        setVrSettings(false);
       }
     }
     if (renderer.xr.isPresenting) {
