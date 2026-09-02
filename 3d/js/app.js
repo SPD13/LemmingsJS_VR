@@ -4,8 +4,10 @@
  * renders it as an extruded diorama with Three.js in a normal browser tab.
  * Same scene graph the VR build will use, orbit camera instead of a headset.
  *
- * URL params: ?type=1|2 (Lemmings / Oh No!), ?group=N, ?level=N, ?speed=N,
- *             ?replay=<string from the 'r' key dump>
+ * URL params: ?level=<id> - a level's path in levels/index.json, e.g.
+ *             lemmings/0/3 or LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv
+ *             (the old ?type=1|2&group=N&level=N still name a classic level),
+ *             ?speed=N, ?replay=<string from the 'r' key dump>
  */
 
 (function () {
@@ -17,7 +19,7 @@
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
 
-  window.__LEM3D_BUILD = "2026-08-31.4";
+  window.__LEM3D_BUILD = "2026-09-02.1";
   console.log("[3d] build " + window.__LEM3D_BUILD);
   window.addEventListener("unhandledrejection", (e) => {
     console.warn("[3d] unhandled rejection:", e.reason,
@@ -53,9 +55,16 @@
     // Editing is the tagging workbench: the piece editor, the tagging marks
     // in the catalog, the "validation mode" billing. Playing is the game.
     edit: setting("edit", "lem3d-edit", false),
-    gameType: parseInt(params.get("type") || "1", 10),
-    group: parseInt(params.get("group") || "0", 10),
-    level: parseInt(params.get("level") || "0", 10),
+    // The level, by its id in the tree (see library.js). A bare number in
+    // ?level= is the old addressing, resolved with ?type= and ?group=.
+    levelId: /\//.test(params.get("level") || "") ? params.get("level") : null,
+    legacy: {
+      type: parseInt(params.get("type") || "1", 10),
+      group: parseInt(params.get("group") || "0", 10),
+      level: parseInt(params.get("level") || "0", 10),
+    },
+    engine: null,   // "classic" or "lemmix": which engine plays levelId
+    gameType: 1, group: 0, level: 0, // the classic engine's own addressing of it
     speed: parseFloat(params.get("speed") || "1"),
     replay: params.get("replay"),
   };
@@ -520,7 +529,8 @@
   const VR_CAT_COLS = 4;
   const VR_CAT_THUMB_H = 26;              // a level is ~10:1, so it draws thin
   const VR_CAT_TILE_H = 126;              // one row of levels
-  const VR_CAT_BAND_H = 48;               // a difficulty's heading
+  const VR_CAT_BAND_H = 48;               // the heading: where in the tree we are
+  const VR_CAT_ROW_H = 60;                // a directory row
   const VR_CAT_BAR_W = 16;                // the scrollbar down the right edge
   const VR_CAT_BAR_GRAB = 12;             // slack either side of it, for the ray
   const VR_CAT_SCROLL = 900;              // canvas px/second at full stick
@@ -530,9 +540,10 @@
   const VR_CAT_VIEW_W = VR_CAT_W - 2 * VR_CAT_PAD - VR_CAT_BAR_W - 8;
   const VR_CAT_VIEW_H = VR_CAT_H - VR_CAT_TOP - VR_CAT_PAD;
 
-  let vrCatalogItems = [];   // every level, in the order the games play them
+  let vrCatalogItems = [];   // what the directory holds: rows, or level tiles
   let vrCatalogCells = [];   // one per item, in the list's own coordinates
-  let vrCatalogBands = [];   // the difficulty headings between them
+  let vrCatalogBands = [];   // the heading above them
+  let vrCatalogHeading = ""; // the path down the tree to here
   let vrCatalogHeight = 0;   // how tall the whole list is
   let vrCatalogScroll = 0;   // how far down it we are
   let vrCatalogHover = -1;
@@ -543,9 +554,9 @@
   camera.add(vrCatalog);
 
   /**
-   * Lay the whole list out once, in its own coordinates: a heading wherever
-   * the difficulty changes, then rows of level tiles under it. Painting and
-   * picking both work from this, offset by the scroll.
+   * Lay the whole list out once, in its own coordinates: the heading saying
+   * where we are, then a full-width row per directory, or rows of level
+   * tiles. Painting and picking both work from this, offset by the scroll.
    */
   function layoutVrCatalogList() {
     vrCatalogCells = [];
@@ -553,14 +564,23 @@
     const colW = VR_CAT_VIEW_W / VR_CAT_COLS;
     let y = 0;              // the top of whatever is placed next
     let col = VR_CAT_COLS;  // == VR_CAT_COLS: no row is open
-    let band = null;
+    if (vrCatalogHeading) {
+      vrCatalogBands.push({ label: vrCatalogHeading, y, h: VR_CAT_BAND_H });
+      y += VR_CAT_BAND_H;
+    }
     vrCatalogItems.forEach((item, i) => {
-      const key = item.gameType + "/" + item.group;
-      if (key !== band) {
-        band = key;
+      if (item.kind !== "level") {
+        // a directory (or the way back up) takes a row of its own
         if (col < VR_CAT_COLS) { y += VR_CAT_TILE_H; col = VR_CAT_COLS; }
-        vrCatalogBands.push({ label: item.band, y, h: VR_CAT_BAND_H });
-        y += VR_CAT_BAND_H;
+        vrCatalogCells.push({
+          item, i,
+          x: VR_CAT_VIEW_X + VR_CAT_GAP / 2,
+          y: y + VR_CAT_GAP / 2,
+          w: VR_CAT_VIEW_W - VR_CAT_GAP,
+          h: VR_CAT_ROW_H - VR_CAT_GAP,
+        });
+        y += VR_CAT_ROW_H;
+        return;
       }
       if (col >= VR_CAT_COLS) col = 0; // this item opens a row at y
       vrCatalogCells.push({
@@ -687,8 +707,36 @@
       for (const cell of vrCatalogCells) {
         if (cell.y + cell.h < top || cell.y > bottom) continue;
         const it = cell.item;
-        const done = it.best !== null;
         const hot = cell.i === vrCatalogHover;
+        if (it.kind !== "level") {
+          // a directory row: name, classic/lemmix, how many levels, how many done
+          const all = it.kind === "dir" && it.done === it.count && it.count > 0;
+          cx.fillStyle = it.kind === "back" ? (hot ? "#232b3a" : "rgba(255,255,255,0.03)")
+            : all ? (hot ? "#2c7042" : "#1d4a2b") : (hot ? "#2b3548" : "#19202c");
+          cx.beginPath();
+          cx.roundRect ? cx.roundRect(cell.x, cell.y, cell.w, cell.h, 10)
+                       : cx.rect(cell.x, cell.y, cell.w, cell.h);
+          cx.fill();
+          if (hot) { cx.strokeStyle = "#ffffff"; cx.lineWidth = 3; cx.stroke(); }
+          cx.textAlign = "left";
+          cx.fillStyle = it.kind === "back" ? "#8fa1bb" : "#f0f3f8";
+          cx.font = "bold 24px monospace";
+          cx.fillText(fit(it.label, cell.w - 520), cell.x + 16, cell.y + 31);
+          if (it.kind === "dir") {
+            cx.font = "16px monospace";
+            cx.fillStyle = it.engine === "lemmix" ? "#ffb066" : "#7fd6e8";
+            cx.fillText((it.engine || "").toUpperCase(), cell.x + cell.w - 470, cell.y + 30);
+            cx.textAlign = "right";
+            cx.fillStyle = "#cdd6e4";
+            cx.font = "20px monospace";
+            cx.fillText(it.count + " levels", cell.x + cell.w - 230, cell.y + 31);
+            cx.fillStyle = all ? "#6fce7e" : "#8fa1bb";
+            cx.fillText(it.done + " / " + it.count + " cleared", cell.x + cell.w - 16, cell.y + 31);
+            cx.textAlign = "left";
+          }
+          continue;
+        }
+        const done = it.best !== null;
         cx.fillStyle = done ? (hot ? "#2c7042" : "#1d4a2b")
                             : (hot ? "#2b3548" : "#19202c");
         cx.beginPath();
@@ -801,8 +849,7 @@
   function vrCatalogWantsThumb(item, width) {
     if (item.thumbReq) return;
     item.thumbReq = true;
-    library.thumbnail(item.gameType, item.group, item.level,
-      width, VR_CAT_THUMB_H)
+    library.thumbnail(item.levelId, width, VR_CAT_THUMB_H)
       .then((canvas) => {
         item.thumb = canvas;
         if (vrCatalog.visible) paintVrCatalog();
@@ -817,54 +864,66 @@
   }
 
   /**
-   * Every level of both games, in the order they are played: game, then
-   * difficulty, then level. The scan behind it is cached; which levels have
-   * been cleared is re-read on each open, since that changes as the player
-   * plays.
+   * The directory the library is looking at, as the headset's list: a row per
+   * subdirectory (with its classic/lemmix mark and counts), or the level tiles
+   * where the directory holds levels, in the order they are played. Opening
+   * the catalog (`landing`) goes to the directory of the level being played;
+   * a row press descends and the back row ascends, through the same library
+   * object the DOM browser uses. Which levels are cleared is re-read on each
+   * visit, since that changes as the player plays.
    */
-  async function loadVrCatalog() {
-    vrCatalogNote = "scanning levels…";
+  async function loadVrCatalog(landing) {
+    vrCatalogNote = "loading…";
     paintVrCatalog();
-    let mapping;
+    let node;
     try {
-      mapping = await library.catalog();
+      await library.tree();
+      if (landing) {
+        const hit = state.levelId && LevelTree.byId.get(state.levelId);
+        if (hit) library.navigate(hit.node.path);
+      }
+      node = library.currentNode() || LevelTree.root;
     } catch (err) {
       vrCatalogNote = "catalog unavailable";
       paintVrCatalog();
       console.error(err);
       return;
     }
+    const chain = [];
+    for (let n = node; n; n = n.parent) chain.unshift(n.name);
+    vrCatalogHeading = chain.join(" › ");
     const items = [];
-    for (const gameType of Object.keys(mapping).map(Number)) {
-      const config = await factory.getConfig(gameType).catch(() => null);
-      const groupNames = (config && config.level.groups) || [];
-      const gameLabel = GAME_LABELS[gameType] || "game " + gameType;
-      const levels = [];
-      for (const world of mapping[gameType] || []) {
-        for (const entry of world.levels) {
-          levels.push({ entry, set: worldName(gameType, world) });
-        }
+    if (node.parent) items.push({ kind: "back", label: "‹ back" });
+    if (node.levels && node.levels.length) {
+      if (node.engine === "classic") {
+        vrCatalogNote = "scanning levels…";
+        paintVrCatalog();
+        await library.ensureNames(node); // classic names come from a scan
       }
-      // the scan walks the games tileset by tileset; play order is by group
-      levels.sort((a, b) =>
-        a.entry.group - b.entry.group || a.entry.level - b.entry.level);
-      for (const { entry, set } of levels) {
-        const group = groupNames[entry.group] || "Group " + (entry.group + 1);
+      const playable = library.canLoad(node.engine);
+      node.levels.forEach((level, i) => {
         items.push({
-          gameType, group: entry.group, level: entry.level,
-          band: gameLabel + " · " + group,
-          label: group + " " + (entry.level + 1),
-          name: entry.name || "",
-          set: set || "",
-          best: LevelProgress.best(gameType, entry.group, entry.level),
-          current: gameType === state.gameType && entry.group === state.group &&
-            entry.level === state.level,
+          kind: "level", levelId: level.id, playable,
+          label: node.name + " " + (i + 1),
+          name: library.levelName(level.id),
+          set: library.worldOf(level.id),
+          best: LevelProgress.best(level.id),
+          current: level.id === state.levelId,
           thumb: null, thumbReq: false,
         });
+      });
+      vrCatalogNote = playable ? "" : "needs the Lemmix engine";
+    } else {
+      for (const child of node.children || []) {
+        items.push({
+          kind: "dir", node: child, label: child.name, engine: child.engine,
+          count: child.count, done: LevelProgress.clearedUnder(child),
+        });
       }
+      vrCatalogNote = "";
     }
     vrCatalogItems = items;
-    vrCatalogNote = "";
+    vrCatalogScroll = 0;
     layoutVrCatalogList();
     // open on the level being played, so the list starts where the player is
     const here = items.findIndex((it) => it.current);
@@ -1090,7 +1149,7 @@
     vrCatalogClose.visible = show;
     setBarToolState(vrCatalogClose, { hovered: false });
     setVrCatalogHover(-1);
-    if (show) { holdSim("vr-catalog"); loadVrCatalog(); }
+    if (show) { holdSim("vr-catalog"); loadVrCatalog(true); }
     else releaseSim("vr-catalog");
   }
 
@@ -1282,6 +1341,8 @@
     setVrStatus({ note: "loading…", kind: "" });
 
     window.__lem3dGroundData = null; // cleared so a VGASPEC level can't reuse a stale piece list
+    const where = await resolveLevel();
+    if (state.engine !== "classic") { showUnplayable(where); return; }
     const game = await factory.getGame(state.gameType);
     await game.loadLevel(state.group, state.level);
     const level = game.level;
@@ -1292,7 +1353,9 @@
     let profile = null;
     let profileUrl = null;
     if (groundData && groundData.lr) {
-      const slug = (config.path || "game").replace(/[^a-z0-9]/gi, "").toLowerCase();
+      // the profile is named after the pack's folder, wherever it lives
+      const slug = (config.path || "game").split("/").pop()
+        .replace(/[^a-z0-9]/gi, "").toLowerCase();
       const setId = groundData.lr.graphicSet1 != null ? groundData.lr.graphicSet1 : 0;
       profileUrl = "profiles/" + slug + "-g" + setId + ".json";
       profile = await DepthProfiles.load(profileUrl);
@@ -1563,8 +1626,7 @@
       if (won) {
         // the clock counts down; how long it took is the elapsed time
         const seconds = game.getGameTimer().getGameTime();
-        const record = LevelProgress.record(
-          state.gameType, state.group, state.level, seconds);
+        const record = LevelProgress.record(state.levelId, seconds);
         best = " — " + LevelProgress.format(seconds) +
           (record ? " (best)" : "");
       }
@@ -1587,19 +1649,14 @@
     if (!renderer.xr.isPresenting) frameDesktopCamera(level);
 
     hud.name.textContent = level.name.trim() || "(unnamed level)";
-    hud.meta.textContent =
-      "type " + state.gameType + " · group " + state.group +
-      " · level " + (state.level + 1) +
+    const meta = where.packName + " · " + where.label +
       " · save " + level.needCount + "/" + level.releaseCount;
+    hud.meta.textContent = meta;
     hud.loading.classList.add("hidden");
     // the same, in the scene, where a headset can read it
-    const groupNames = (await factory.getConfig(state.gameType)).level.groups || [];
     setVrStatus({
       name: level.name.trim() || "(unnamed level)",
-      meta: (GAME_LABELS[state.gameType] || "game " + state.gameType) + " · " +
-        (groupNames[state.group] || "group " + state.group) + " " +
-        (state.level + 1) + " · save " + level.needCount + "/" + level.releaseCount,
-      note: "", kind: "",
+      meta, note: "", kind: "",
     });
 
     session = {
@@ -1702,18 +1759,53 @@
     controls.update();
   }
 
+  /** Prev/next: the neighbouring level in the pack's play order, wrapping. */
   async function moveLevel(delta) {
-    const config = await factory.getConfig(state.gameType);
-    state.level += delta;
-    if (state.level >= config.level.getGroupLength(state.group)) {
-      state.group++; state.level = 0;
-      if (state.group >= config.level.order.length) { state.group = 0; }
-    } else if (state.level < 0) {
-      state.group--;
-      if (state.group < 0) { state.group = 0; state.level = 0; }
-      else state.level = config.level.getGroupLength(state.group) - 1;
-    }
+    await library.tree();
+    const next = LevelTree.next(state.levelId, delta);
+    if (next) state.levelId = next;
     await loadLevel();
+  }
+
+  /**
+   * Settle which level is meant: state.levelId, else the old ?type/group/level
+   * parameters, else the first level there is - and, for a classic level, the
+   * game/group/index the DOS engine addresses it by.
+   */
+  async function resolveLevel() {
+    await library.tree();
+    if (!state.levelId) {
+      state.levelId = LevelTree.classicId(
+        state.legacy.type, state.legacy.group, state.legacy.level) || LevelTree.firstLevelId();
+    }
+    let where = LevelTree.describe(state.levelId);
+    if (!where) {
+      state.levelId = LevelTree.firstLevelId();
+      where = LevelTree.describe(state.levelId);
+    }
+    if (!where) throw new Error("no levels found — run tools/levels-index.js");
+    state.engine = where.engine;
+    if (state.engine === "classic") {
+      state.gameType = where.pack.gameType;
+      state.group = where.level.group;
+      state.level = where.level.index;
+    }
+    library.setCurrent(state.levelId);
+    return where;
+  }
+
+  /** A level the page has no engine for yet: say so, and leave the board empty. */
+  function showUnplayable(where) {
+    hud.name.textContent = where.title || where.label;
+    hud.meta.textContent = where.packName + " · " + where.label + " · " + where.engine;
+    hud.state.textContent = "these levels need the Lemmix engine, which is not built yet";
+    hud.state.className = "lost";
+    hud.loading.classList.add("hidden");
+    setVrStatus({
+      name: where.title || where.label,
+      meta: where.packName + " · " + where.label,
+      note: "needs the Lemmix engine", kind: "lost",
+    });
   }
 
   // ------------------------------------------------------------------ input
@@ -2285,9 +2377,15 @@
         if (vrCatalogScrollTo(p.scrollAt)) paintVrCatalog();
       } else {
         const item = vrCatalogItems[p.tile];
-        if (item) {
+        if (item && item.kind === "back") {
+          library.up();
+          loadVrCatalog();
+        } else if (item && item.kind === "dir") {
+          library.navigate(item.node.path);
+          loadVrCatalog();
+        } else if (item && item.playable) {
           setVrCatalog(false);
-          library.enterWorld(item.gameType, item.group, item.level);
+          library.enterLevel(item.levelId);
         }
       }
     } else if (p.barTool === "yes") {
@@ -2424,6 +2522,14 @@
       else if (e.key === "Enter") { e.preventDefault(); confirmDom.yes.click(); }
       return;
     }
+    // the library and the level keys work without a level on the board too:
+    // a level the page cannot play yet leaves no session behind
+    switch (e.key) {
+      case "w": window.__lem3d.library.toggle(); return;
+      case "Escape": window.__lem3d.library.close(); return;
+      case ",": moveLevel(-1); return;
+      case ".": moveLevel(1); return;
+    }
     if (!session) return;
     const timer = session.game.getGameTimer();
     switch (e.key) {
@@ -2431,8 +2537,6 @@
       case "n": if (!timer.isRunning()) timer.tick(); break;
       case "+": case "=": timer.speedFactor = Math.min(10, timer.speedFactor + 1); break;
       case "-": timer.speedFactor = Math.max(0.5, timer.speedFactor - 0.5); break;
-      case ",": moveLevel(-1); break;
-      case ".": moveLevel(1); break;
       case "e":
         // the piece editor is the edit mode's tool; asking for it enters it
         if (!state.edit) {
@@ -2525,12 +2629,6 @@
         console.log("[vr] yaw correction: " +
           Math.round(vrYawCorrection * 180 / Math.PI) + "°");
         if (renderer.xr.isPresenting) vr.recenterNow();
-        break;
-      case "w":
-        window.__lem3d.library.toggle();
-        break;
-      case "Escape":
-        window.__lem3d.library.close();
         break;
       case "c":
         if (session.editor && session.editor.enabled) session.editor.cycleClass();
@@ -2631,11 +2729,9 @@
     renderer.render(scene, camera);
   }
 
-  // world library: catalog of tilesets, click-to-enter for tagging sessions
-  const library = new WorldLibrary(factory, async (gameType, group, level) => {
-    state.gameType = gameType;
-    state.group = group;
-    state.level = level;
+  // world library: the level packs, browsed like the levels/ directory
+  const library = new WorldLibrary(factory, "../", async (levelId) => {
+    state.levelId = levelId;
     await loadLevel();
     // the catalog is a way into a level in either mode; only the tagging
     // workbench opens the editor with it

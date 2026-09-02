@@ -8,6 +8,7 @@ const http = require("http");
 const https = require("https");
 const path = require("path");
 const fs = require("fs");
+const { buildIndex } = require("../tools/levels-index");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -22,6 +23,18 @@ const MIME = {
   ".webmanifest": "application/manifest+json",
   ".wasm": "application/wasm",
   ".dat": "application/octet-stream",
+  // NeoLemmix level packs and assets
+  ".nxlv": "text/plain; charset=utf-8",
+  ".nxmi": "text/plain; charset=utf-8",
+  ".nxmo": "text/plain; charset=utf-8",
+  ".nxmt": "text/plain; charset=utf-8",
+  ".nxtm": "text/plain; charset=utf-8",
+  ".ogg": "audio/ogg",
+  ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
+  ".it": "application/octet-stream",
+  ".xm": "application/octet-stream",
+  ".mod": "application/octet-stream",
 };
 
 /**
@@ -65,6 +78,19 @@ function createStaticServer(root, port, tls = null) {
               res.end("invalid JSON");
             }
           });
+          return;
+        }
+
+        // the level browser's tree, built from the folders as they are now,
+        // so a pack dropped into levels/ shows up without a rebuild step
+        if (req.method === "GET" && /^\/levels\/index\.json$/.test(urlPath)) {
+          const json = JSON.stringify(buildIndex(absRoot));
+          res.writeHead(200, {
+            "Content-Type": MIME[".json"],
+            "Content-Length": Buffer.byteLength(json),
+            "Cache-Control": "no-cache",
+          });
+          res.end(json);
           return;
         }
 

@@ -75,6 +75,35 @@
   }
   .lib-mark { font-size: 11px; color: #5a6a7c; }
   .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
+  /* the directory browser: where we are, and one row per thing inside */
+  #lib-crumb { font-size: 12px; color: #8fa1bb; display: flex; gap: 8px; align-items: baseline; }
+  #lib-crumb .lib-part { color: #cdd6e4; text-decoration: none; }
+  #lib-crumb a.lib-part:hover { color: #6fce7e; }
+  #lib-crumb .lib-part.here { color: #f0f3f8; font-weight: 600; }
+  #lib-crumb .lib-sep { color: #5a6a7c; }
+  #lib-head .lib-spacer { flex: 1; }
+  .lib-rows { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
+  .lib-row {
+    display: flex; align-items: center; gap: 14px;
+    background: #161c28; border: 1px solid #2a3446; border-radius: 6px;
+    padding: 10px 14px; cursor: pointer; font-size: 12px;
+  }
+  .lib-row:hover { border-color: #6fce7e; background: #1a2231; }
+  .lib-row.done { background: #16281a; border-color: #2f6b3d; }
+  .lib-row.lib-back { background: transparent; border-style: dashed; color: #8fa1bb; padding: 6px 14px; }
+  .lib-row-name { color: #f0f3f8; font-size: 13px; flex: 1; display: flex; align-items: baseline; gap: 10px; }
+  .lib-row-by { color: #8fa1bb; font-size: 11px; }
+  .lib-logo { height: 22px; width: auto; image-rendering: pixelated; }
+  .lib-badge {
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 3px; padding: 2px 7px; border: 1px solid;
+  }
+  .lib-badge.classic { color: #7fd6e8; border-color: #2f5f6b; }
+  .lib-badge.lemmix { color: #ffb066; border-color: #6b4a2f; }
+  .lib-count { color: #cdd6e4; min-width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
+  .lib-cleared { color: #5a6a7c; min-width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+  .lib-cleared.all { color: #6fce7e; font-weight: 600; }
+  #lib-order[hidden] { display: none; }
   #vr-button {
     /* top centre: the 3D toolbar owns the bottom of the viewport */
     position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
@@ -137,6 +166,8 @@
 <div id="library" hidden>
   <div id="lib-head">
     <h1>WORLD LIBRARY</h1>
+    <div id="lib-crumb"></div>
+    <span class="lib-spacer"></span>
     <button id="lib-order">order: level</button>
     <button id="lib-rescan">rescan</button>
     <button id="lib-close">close</button>

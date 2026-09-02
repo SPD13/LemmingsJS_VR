@@ -11,5 +11,18 @@
 bower_components/
 node_modules/
 
-# third-party level packs (33MB of assets, referenced by nothing here)
-LemmingsPlus_All_20201114/
+# Level packs: everything under levels/ is a drop-in and stays out of git,
+# except the two classic games the repo has always carried and the generated
+# index (see README "Levels and assets" for where packs come from).
+levels/*
+!levels/lemmings/
+!levels/lemmings_ohNo/
+!levels/index.json
+!levels/README.md
+
+# NeoLemmix assets (styles, panel/mask graphics, sound effects, music packs):
+# downloaded, not committed - see README "Levels and assets".
+styles/
+gfx/
+sound/
+music/
