@@ -380,6 +380,31 @@ class GuiPanel {
     return { y0: GUI_TILE_TOP, h: GUI_CROP_H, cy: GUI_CROP_CY };
   }
 
+  /**
+   * What a raised copy shows: on the DOS panel the cell with the shared
+   * frame lines that are its own (_crop/_vcrop); on a Lemmix panel, where
+   * every cell is its own tile drawn a column and a row short of the cell
+   * (and a split cell's halves a row apart), the box of its lit pixels -
+   * so no black gap comes up with the button.
+   */
+  _tileRect(index, half) {
+    const crop = this._crop(index), v = this._vcrop(half);
+    const rect = { x0: crop.x0, w: crop.w, cx: crop.cx, y0: v.y0, h: v.h, cy: v.cy };
+    if (GUI_SHARED_BORDER || !this.ctx) return rect;
+    const data = this.ctx.getImageData(crop.x0, v.y0, crop.w, v.h).data;
+    let x0 = crop.w, x1 = -1, y0 = v.h, y1 = -1;
+    for (let y = 0; y < v.h; y++) {
+      for (let x = 0; x < crop.w; x++) {
+        const i = (y * crop.w + x) * 4;
+        if (data[i] + data[i + 1] + data[i + 2] <= 40) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+    if (x1 < 0) return rect;
+    return { x0: crop.x0 + x0, w: x1 - x0 + 1, cx: crop.x0 + (x0 + x1 + 1) / 2,
+      y0: v.y0 + y0, h: y1 - y0 + 1, cy: v.y0 + (y0 + y1 + 1) / 2 };
+  }
+
   /** Which half of a split cell a panel row falls in; null on an ordinary cell. */
   _halfAt(index, py) {
     if (!GUI_SPLIT.has(index)) return null;
@@ -462,11 +487,11 @@ class GuiPanel {
     if (!this.socket || !this.mesh) return;
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
-    const crop = this._crop(index), v = this._vcrop(half);
-    this.socket.scale.set((crop.w / cw) * pw, (v.h / ch) * ph, 1);
+    const r = this._tileRect(index, half);
+    this.socket.scale.set((r.w / cw) * pw, (r.h / ch) * ph, 1);
     this.socket.position.set(
-      this.mesh.position.x + (crop.cx / cw - 0.5) * pw,
-      this.mesh.position.y + (0.5 - v.cy / ch) * ph,
+      this.mesh.position.x + (r.cx / cw - 0.5) * pw,
+      this.mesh.position.y + (0.5 - r.cy / ch) * ph,
       this.mesh.position.z + 0.1 * this._unit);
   }
 
@@ -476,8 +501,8 @@ class GuiPanel {
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
     const sx = pw / this.canvas.width, sy = ph / this.canvas.height;
     const g = GUI_GROW_FOR(index);
-    const cx = this._crop(index).cx; // same pivot as the raised copy
-    const cy = this._vcrop(half).cy;
+    const r = this._tileRect(index, half); // same pivot as the raised copy
+    const cx = r.cx, cy = r.cy;
     this.hoverRelief.scale.set(sx * g, -sy * g, sx * g * this.reliefDepth);
     this.hoverRelief.position.set(
       this.mesh.position.x - pw / 2 + cx * sx * (1 - g),
@@ -577,17 +602,17 @@ class GuiPanel {
     const pw = this.mesh.scale.x, phh = this.mesh.scale.y;
     // crop the texture to this button (or this half of a split cell), with
     // the frame edges that are its own
-    const crop = this._crop(index), v = this._vcrop(half);
-    this.hoverTexture.repeat.set(crop.w / cw, v.h / ch);
-    this.hoverTexture.offset.set(crop.x0 / cw, 1 - (v.y0 + v.h) / ch);
+    const r = this._tileRect(index, half);
+    this.hoverTexture.repeat.set(r.w / cw, r.h / ch);
+    this.hoverTexture.offset.set(r.x0 / cw, 1 - (r.y0 + r.h) / ch);
     this.hoverTexture.needsUpdate = true;
     // match the button's footprint on the panel, grown a touch
     const grow = GUI_GROW_FOR(index);
     this.hoverTile.scale.set(
-      (crop.w / cw) * pw * grow, (v.h / ch) * phh * grow, 1);
+      (r.w / cw) * pw * grow, (r.h / ch) * phh * grow, 1);
     this.hoverTile.position.set(
-      this.mesh.position.x + (crop.cx / cw - 0.5) * pw,
-      this.mesh.position.y + (0.5 - v.cy / ch) * phh,
+      this.mesh.position.x + (r.cx / cw - 0.5) * pw,
+      this.mesh.position.y + (0.5 - r.cy / ch) * phh,
       this.mesh.position.z + GUI_TILE_POP * this._unit
     );
   }
