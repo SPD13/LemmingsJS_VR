@@ -53,6 +53,7 @@ class TerrainMesh {
     this.group.add(this.chunkGroup);
     this.flatMesh = null;                // the one quad (2D), built on first use
     this.flat = false;
+    this.flatZ = 0;                      // the quad's plane, which the chunks collapse onto
 
     this.maskLayer = level.getGroundMaskLayer();
     this.hasRelief = this.relief.some((v) => v > 0);
@@ -154,7 +155,8 @@ class TerrainMesh {
       this.flatMesh.name = "terrain-flat";
       this.group.add(this.flatMesh);
     }
-    if (this.flatMesh && z != null) this.flatMesh.position.set(this.w / 2, this.h / 2, z);
+    if (z != null) this.flatZ = z;
+    if (this.flatMesh) this.flatMesh.position.set(this.w / 2, this.h / 2, this.flatZ);
     if (this.flat === on) return;
     this.flat = on;
     this.chunkGroup.visible = !on;
@@ -298,6 +300,14 @@ class TerrainMesh {
     this._refillTexRect(0, 0, w, h);
     this.texture.needsUpdate = true;
     this.flushDirty(Infinity);
+  }
+
+  /** The slab's depth as a fraction of what was built, for the change of
+   *  view: the chunks squeezed toward the quad's plane (1 = as built). A
+   *  group transform, so nothing is re-meshed. */
+  setExtrusion(s) {
+    this.chunkGroup.scale.z = s;
+    this.chunkGroup.position.z = this.flatZ * (1 - s);
   }
 
   /** Re-mesh dirty chunks, at most `budget` per call (nuke-proofing). */

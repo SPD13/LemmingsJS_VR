@@ -27,6 +27,11 @@
   // original; the background objects and the backdrop stay behind it
   const FLAT_TERRAIN_Z = OBJECT_Z - 1;
 
+  /** Where a view of the level starts, and what it turns about: the middle
+   *  of the board (the original scrolls to the level's own start position
+   *  instead, but the board is seen whole here, in 2D, 3D and a headset). */
+  const levelFocusX = (level) => level.width / 2;
+
   window.__LEM3D_BUILD = "2026-09-02.1";
   console.log("[3d] build " + window.__LEM3D_BUILD);
   window.addEventListener("unhandledrejection", (e) => {
@@ -1599,7 +1604,7 @@
     if (!session) return;
     const level = session.level;
     const { w, h } = vrStatusPx();
-    const x = level.screenPositionX + 200;
+    const x = levelFocusX(level);
     const y = level.height + VR_STATUS_GAP + h / 2;
     vrStatusPanel.scale.set(w, h, 1);
     vrStatusPanel.position.set(x, y, TERRAIN_DEPTH + 2);
@@ -1721,7 +1726,7 @@
     dioramaRoot.updateMatrixWorld(true);
     // the level's bottom edge, under the focus, on the terrain's front face
     const edge = dioramaRoot.localToWorld(
-      new THREE.Vector3(level.screenPositionX + 200, 0, TERRAIN_DEPTH));
+      new THREE.Vector3(levelFocusX(level), 0, TERRAIN_DEPTH));
     const guiW = VR_GUI_WIDTH * panelWidthScale();
     const cv = session.gui.canvas;
     const barH = guiW * (cv.width ? cv.height / cv.width : 40 / 320);
@@ -1929,6 +1934,7 @@
   };
   function applyFlat(on) {
     const presenting = renderer.xr.isPresenting;
+    cancelViewTween(); // an instant switch overrides one in progress
     flatActive = !!on && !presenting;
     document.body.classList.toggle("flat", flatActive);
     controls.enabled = !flatActive && !presenting;
@@ -1941,13 +1947,164 @@
     state.flat = !state.flat;
     try { localStorage.setItem("lem3d-flat", state.flat ? "on" : "off"); } catch (e) {}
     renderFlatBtn();
-    // keep the place: the level point in the middle stays there after the switch
-    const centre = session && !renderer.xr.isPresenting ? currentViewCentre() : null;
+    if (session && !renderer.xr.isPresenting) {
+      transitionFlat(state.flat); // animated, about the point in the middle
+      return;
+    }
     applyFlat(state.flat);
-    if (centre) centerViewOn(centre.x, centre.y);
   }
-  flatBtn.addEventListener("click", toggleFlat);
+  flatBtn.addEventListener("click", () => { if (!viewTween) toggleFlat(); });
   renderFlatBtn();
+
+  // ------------------------------------------ the change of view, animated
+  // The two views meet in one camera: a perspective camera far away with a
+  // very narrow field of view is, to the eye, the orthographic one. So the
+  // change is a tween of that camera between the head-on pose that shows
+  // the 2D view and the diorama's framing - the width of view at the target
+  // and the field of view each running straight, the distance following
+  // from them, so the picture neither jumps nor breathes - while the slab
+  // grows out of the picture: its chunks scaled up from the quad's plane
+  // (terrain.setExtrusion). The openings and the water simply appear
+  // midway going up and vanish at the start coming down.
+  const VIEW_TWEEN_MS = 800;
+  const VIEW_TWEEN_FOV_FLAT = 3;      // narrow enough to pass for orthographic
+  const VIEW_TWEEN_COLLAPSE = 0.02;   // the slab's depth at the flat end (at 0 its faces would fight)
+  const DIORAMA_OFFSET = new THREE.Vector3(0, 120, 420 - TERRAIN_DEPTH / 2); // frameDesktopCamera's
+  let viewTween = null; // { on, from, to, t0 }: toward the 2D view (on) or the diorama
+
+  /** A pose: where the camera looks, from which side, how much of the board
+   *  it sees there (world units, vertically) and through what field of view. */
+  function cameraPoseNow() {
+    const dist = camera.position.distanceTo(controls.target);
+    return {
+      target: controls.target.clone(),
+      dir: camera.position.clone().sub(controls.target).normalize(),
+      height: 2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)),
+      fov: camera.fov,
+    };
+  }
+  /** The perspective pose that shows the 2D view: head-on, narrow and far,
+   *  aimed where the flat camera's middle is (half the toolbar's band below
+   *  the play area's), seeing the whole window's height. */
+  function flatPerspectivePose(level) {
+    const z = flatView.zoom, band = flatToolbarPx().top;
+    return {
+      target: new THREE.Vector3(flatView.cx, level.height - flatView.cy - band / 2 / z, FLAT_TERRAIN_Z),
+      dir: new THREE.Vector3(0, 0, 1),
+      height: window.innerHeight / z,
+      fov: VIEW_TWEEN_FOV_FLAT,
+    };
+  }
+  /** The diorama's standard framing (frameDesktopCamera's), about a level point. */
+  function dioramaPose(level, cx, cy) {
+    const dir = DIORAMA_OFFSET.clone();
+    const dist = dir.length();
+    return {
+      target: new THREE.Vector3(cx, level.height - cy, TERRAIN_DEPTH / 2),
+      dir: dir.normalize(),
+      height: 2 * dist * Math.tan(THREE.MathUtils.degToRad(50 / 2)),
+      fov: 50,
+    };
+  }
+  function poseBetween(a, b, t) {
+    const fov = THREE.MathUtils.lerp(a.fov, b.fov, t);
+    const height = THREE.MathUtils.lerp(a.height, b.height, t);
+    const dist = height / (2 * Math.tan(THREE.MathUtils.degToRad(fov / 2)));
+    const target = a.target.clone().lerp(b.target, t);
+    const dir = a.dir.clone().lerp(b.dir, t).normalize();
+    return { fov, dist, target, position: target.clone().addScaledVector(dir, dist) };
+  }
+  /** Put the camera in a pose. The far pose is thousands of units out, so
+   *  the near plane goes out with it for the depth buffer's sake - but no
+   *  further than the toolbar, which rides 600 in front of the camera. */
+  function setCameraPose(p) {
+    camera.fov = p.fov;
+    camera.near = THREE.MathUtils.clamp(p.dist * 0.5, 1, 300);
+    camera.far = Math.max(desktopClip.far, p.dist * 4);
+    camera.position.copy(p.position);
+    camera.lookAt(p.target);
+    camera.updateProjectionMatrix();
+  }
+  function restoreCameraClip() {
+    camera.fov = 50;
+    camera.near = desktopClip.near;
+    camera.far = desktopClip.far;
+    camera.updateProjectionMatrix();
+  }
+
+  /** Start the change: to the 2D view (on) or back to the diorama. */
+  function transitionFlat(on) {
+    if (!session || renderer.xr.isPresenting || viewTween) { applyFlat(on); return; }
+    const level = session.level;
+    let from, to;
+    if (on) {
+      // the 2D view about the point in the middle now, at its usual zoom
+      const c = currentViewCentre();
+      const play = flatPlayPx();
+      flatView.zoom = THREE.MathUtils.clamp(0.6 * play.h / level.height, FLAT_ZOOM_MIN, FLAT_ZOOM_MAX);
+      flatView.cx = c ? c.x : levelFocusX(level);
+      flatView.cy = c ? c.y : level.height / 2;
+      clampFlatView(level);
+      from = cameraPoseNow();
+      to = flatPerspectivePose(level);
+      session.setPortalsVisible(false); // they go at once
+    } else {
+      // the diorama takes over at once, collapsed flat under the far camera
+      flatActive = false;
+      document.body.classList.remove("flat");
+      session.setFlat(false);
+      session.setPortalsVisible(false); // ...until the slab has half its depth
+      session.terrain.setExtrusion(VIEW_TWEEN_COLLAPSE);
+      resetBar(); // the bar onto the perspective camera
+      from = flatPerspectivePose(level);
+      to = dioramaPose(level, flatView.cx, flatView.cy);
+    }
+    controls.enabled = false;
+    viewTween = { on, from, to, t0: performance.now() };
+    setCameraPose(poseBetween(from, to, 0));
+    layoutGuiPanel();
+  }
+
+  /** One frame of the change; the last one settles the view it was going to. */
+  function stepViewTween(now) {
+    const tw = viewTween;
+    if (!session) { viewTween = null; return; }
+    const u = Math.min(1, (now - tw.t0) / VIEW_TWEEN_MS);
+    const t = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; // ease in and out
+    setCameraPose(poseBetween(tw.from, tw.to, t));
+    const s = tw.on
+      ? THREE.MathUtils.lerp(1, VIEW_TWEEN_COLLAPSE, t)
+      : THREE.MathUtils.lerp(VIEW_TWEEN_COLLAPSE, 1, t);
+    session.terrain.setExtrusion(s);
+    if (!tw.on && s > 0.5) session.setPortalsVisible(true);
+    if (u < 1) return;
+    viewTween = null;
+    session.terrain.setExtrusion(1);
+    restoreCameraClip();
+    if (tw.on) {
+      flatActive = true;
+      document.body.classList.add("flat");
+      session.setFlat(true); // the quad for the chunks, the bar flat
+      resetBar();            // the bar onto the flat camera
+      applyFlatView(session.level);
+    } else {
+      session.setPortalsVisible(true);
+      const end = poseBetween(tw.from, tw.to, 1);
+      camera.position.copy(end.position);
+      controls.target.copy(end.target);
+      controls.enabled = true;
+      controls.update();
+    }
+    layoutGuiPanel();
+  }
+
+  /** Drop a change in progress: whoever calls settles the view itself. */
+  function cancelViewTween() {
+    if (!viewTween) return;
+    viewTween = null;
+    restoreCameraClip();
+    if (session) session.terrain.setExtrusion(1);
+  }
 
   audio.configureSpatial({
     isActive: () => renderer.xr.isPresenting,
@@ -2037,6 +2194,7 @@
   }
 
   async function loadLevel() {
+    cancelViewTween(); // the new level opens in the view meant, at once
     disposeSession();
     hud.loading.classList.remove("hidden");
     hud.state.textContent = "";
@@ -2201,6 +2359,7 @@
     }
 
     let flatOn = false; // the 2D view on this level (session.setFlat)
+    let portalsShown = true; // the openings as geometry; else as the original's sprites
     const lemmingPool = new BillboardPool(worldGroup, materialCache);
     const objectPool = new BillboardPool(worldGroup, materialCache);
     const particles = new ParticleCloud(worldGroup, LEMMING_Z + 1);
@@ -2275,8 +2434,9 @@
         return !!g && (g.effectBase === "BACKGROUND" || g.effectBase === "PAINT" || g.onlyOnTerrain);
       };
       const cpmOn = !!(cpmOverlay && game.clearPhysics);
-      // (the 2D view draws the openings as the original's sprites again)
-      const dropPortals = portalIndices.size > 0 && !flatOn;
+      // (with their geometry hidden - the 2D view, a change of view under
+      // way - the openings are drawn as the original's sprites again)
+      const dropPortals = portalIndices.size > 0 && portalsShown;
       const objectItems = !dropPortals && !cpmOn ? objCapture.items
         : objCapture.items.filter((_, i) => !(dropPortals && portalIndices.has(i)) && !(cpmOn && cpmHides(i)));
       if (cpmOverlay) {
@@ -2482,7 +2642,7 @@
     }
     syncPauseLabel();
 
-    // Camera: frame the level's intended start position - but never during a
+    // Camera: frame the middle of the board - but never during a
     // session, where the camera is the headset. Writing desktop coordinates
     // into it there is read straight back as a head pose, and the next level
     // gets placed hundreds of metres away. Leaving VR reframes anyway.
@@ -2519,6 +2679,19 @@
           for (const w of waterMeshes) if (w.mesh.material.color.getHex() !== w.colour) w.mesh.material.color.setHex(w.colour);
         }
       },
+      // the openings' geometry and the water bodies shown, or the openings
+      // as the original's sprites (the 2D view; a change of view under way)
+      setPortalsVisible: (v) => {
+        v = !!v;
+        for (const portal of portals) {
+          portal.mesh.visible = v;
+          if (portal.flaps) for (const flap of portal.flaps) flap.mesh.visible = v;
+        }
+        for (const w of waterMeshes) w.mesh.visible = v;
+        if (portalsShown === v) return;
+        portalsShown = v;
+        syncScene(true); // the sprites drawn again, whether the clock runs or not
+      },
       // re-derive the colour-keyed relief (master switch or a per-piece tag)
       rebuildRelief: () => {
         session.terrain.setRelief(
@@ -2531,13 +2704,8 @@
         if (flatOn === on) return;
         flatOn = on;
         terrain.setFlat(on, FLAT_TERRAIN_Z);
-        for (const portal of portals) {
-          portal.mesh.visible = !on;
-          if (portal.flaps) for (const flap of portal.flaps) flap.mesh.visible = !on;
-        }
-        for (const w of waterMeshes) w.mesh.visible = !on;
+        session.setPortalsVisible(!on);
         gui.setRelief(state.skillBar && !on);
-        syncScene(true); // the sprites drawn again, whether the clock runs or not
       },
     };
     session.editor = new PieceEditor(session, profileFiles, timer, { confirm: askConfirm });
@@ -2816,7 +2984,7 @@
     return null;
   }
 
-  /** Default desktop framing: the level's intended start area, slightly above. */
+  /** Default desktop framing: the middle of the board, slightly above. */
   /**
    * A Lemmix game jumped to another frame (the replay button, a frame back,
    * a loaded replay): the state went back into the level's own arrays, so
@@ -2843,7 +3011,7 @@
   }
 
   function frameDesktopCamera(level) {
-    const startX = level.screenPositionX + 200;
+    const startX = levelFocusX(level);
     const targetY = level.height / 2;
     controls.target.set(startX, targetY, TERRAIN_DEPTH / 2);
     camera.position.set(startX, targetY + 120, 420);
@@ -2921,14 +3089,13 @@
     flatCamera.updateProjectionMatrix();
   }
 
-  /** The level's start as the original shows it: scrolled to its screen
-   *  position (the same middle the 3D framing uses) and zoomed so the level
-   *  stands about three fifths of the play area high. */
+  /** The level's start: the middle of the board (as the 3D framing has it)
+   *  and zoomed so the level stands about three fifths of the play area high. */
   function frameFlatView(level) {
     const play = flatPlayPx();
     flatView.zoom = THREE.MathUtils.clamp(
       0.6 * play.h / level.height, FLAT_ZOOM_MIN, FLAT_ZOOM_MAX);
-    flatView.cx = level.screenPositionX + 200;
+    flatView.cx = levelFocusX(level);
     flatView.cy = level.height / 2;
     clampFlatView(level);
     applyFlatView(level);
@@ -3055,7 +3222,7 @@
    *  centre is held back by half the view where the view is narrower than
    *  the level, and a view wider than the level just sees it whole. */
   function centerViewOn(simX, simY) {
-    if (!session) return;
+    if (!session || viewTween) return;
     const { width, height } = session.level;
     const r = visibleLevelRect();
     const rw = r ? r.x1 - r.x0 : 0, rh = r ? r.y1 - r.y0 : 0;
@@ -3420,7 +3587,7 @@
 
   /** World position of the level's focus point (the wheel/orbit pivot). */
   function dioramaFocusWorld() {
-    const startX = session.level.screenPositionX + 200;
+    const startX = levelFocusX(session.level);
     return dioramaRoot.localToWorld(new THREE.Vector3(
       startX, session.level.height / 2, TERRAIN_DEPTH / 2));
   }
@@ -3797,7 +3964,7 @@
     dioramaRoot.rotation.set(0, Math.atan2(-fwd.x, -fwd.z), 0);
     dioramaRoot.scale.setScalar(s);
 
-    const startX = session.level.screenPositionX + 200;
+    const startX = levelFocusX(session.level);
     const focusLocal = new THREE.Vector3(
       startX, session.level.height / 2, TERRAIN_DEPTH / 2);
     const target = headPos.clone().addScaledVector(fwd, 0.9);
@@ -4284,7 +4451,7 @@
 
   /** One zoom step in or out: the camera along its line of sight, or the diorama about its focus. */
   function zoomView(zoomIn) {
-    if (!session) return;
+    if (!session || viewTween) return;
     if (renderer.xr.isPresenting) {
       const cur = dioramaRoot.scale.x;
       const next = THREE.MathUtils.clamp(
@@ -4307,7 +4474,7 @@
 
   /** The view back to its start: the desktop camera framed, the headset recentred. */
   function resetView() {
-    if (!session) return;
+    if (!session || viewTween) return;
     if (renderer.xr.isPresenting) vr.recenterNow();
     else frameDesktopView(session.level);
   }
@@ -4409,6 +4576,7 @@
 
   /** The view keys that are not in the table: arrows pan, shift+arrows orbit. */
   function viewKey(e) {
+    if (viewTween) return false; // the view is on its way somewhere
     switch (e.key) {
       case "ArrowLeft":
       case "ArrowRight":
@@ -4603,7 +4771,8 @@
       // the sign is parked over the level, so it has nowhere to be without one
       vrWarningSign.visible = vrMouseFallback() && !!session;
     } else {
-      if (!flatActive) controls.update();
+      if (viewTween) stepViewTween(now);
+      else if (!flatActive) controls.update();
       vrWarningSign.visible = false;
     }
     if (!vrMouseFallback()) {
@@ -4792,7 +4961,9 @@
   window.__lem3d = {
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
     // the 2D view: its camera, its numbers, and the switch
-    flatCamera, flatView, applyFlat, toggleFlat, flatPlayPx, get flatActive() { return flatActive; },
+    flatCamera, flatView, applyFlat, toggleFlat, transitionFlat, flatPlayPx,
+    get flatActive() { return flatActive; }, get viewTween() { return viewTween; },
+    stepViewTween, // one frame of a change of view, for checks without a frame loop
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
