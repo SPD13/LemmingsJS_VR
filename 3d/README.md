@@ -51,7 +51,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   button or the arrows to scroll (the view stops at the level's edges, as
   the original's does), wheel or PgUp/PgDn to zoom about the pointer, Home
   or a double right-click to start over. The button then reads **3D** and
-  takes the diorama back, from the same place. The choice is remembered
+  takes the diorama back, from the same place. The change is animated
+  either way, under a second: the slab grows out of the picture (or sinks
+  back into it) while the camera swings from square-on to the diorama's
+  framing - one perspective camera does both ends, since far away and
+  narrow enough it passes for the orthographic one; the doors and the
+  water simply appear halfway up and go at the start of the way down. The
+  choice is remembered
   (`lem3d-flat`; `?flat=1` asks for it in the URL). The "3D effects" fold
   is out of the way in 2D, since none of them shows there, and its settings
   are kept for the diorama. A headset always gets the diorama, whatever the
@@ -232,8 +238,8 @@ The same page is the VR build: an ENTER VR button appears bottom-center when
 WebXR is available. In the headset the diorama is scaled to 2.5&nbsp;mm per
 game pixel (a 1600&nbsp;px level is a 4&nbsp;m tabletop strip) and placed just
 below eye level, 0.9&nbsp;m in front of wherever you are actually standing
-and facing (not the room-calibration origin), focused on the level's
-intended start area.
+and facing (not the room-calibration origin), focused on the middle of the
+board - where the desktop's 3D and 2D views start too.
 
 - **trigger** — the desktop click: aim the ray at a lemming to assign the
   selected skill, or at the skill panel to use it as in the game. One hand
