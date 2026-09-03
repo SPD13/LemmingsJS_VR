@@ -482,8 +482,8 @@ run written as `.nxrp` and played back gives the same outcome.
 
 **Play** is the game and is the default. **Edit** is the tagging workbench: it
 bills itself as validation mode, opens the piece editor, and turns the catalog
-over to tagging status. The mode is remembered, and `?edit=1` or `e` selects
-it.
+over to tagging status. Every session starts in play: the mode is not
+remembered, `?edit=1`, the mode button or `e` selects editing.
 
 The piece editor (`editor.js`) is one way depth profiles are authored: click a
 terrain piece to select it — every placement of that piece id highlights —
@@ -568,7 +568,7 @@ paused stays paused and two overlapping dialogs do not resume it between them.
 | where | what |
 |---|---|
 | URL | `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?doors= ?edit=` |
-| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-doors` `lem3d-edit` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
+| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
 
 The URL overrides both for one load. This matters more than it sounds: the
 switches are DOM buttons, invisible inside a session, and the headset is
