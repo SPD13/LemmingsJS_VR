@@ -3036,7 +3036,7 @@
     /**
      * Where a level's music may be: its MUSIC line (a ;-separated list of
      * fallbacks), else the pack's rotation by level ordinal; each name tried
-     * in the pack's music folder and then the repo's music/ (the NeoLemmix
+     * in the pack's music folder and then neolemmix/music/ (the NeoLemmix
      * music packs), with the extensions NeoLemmix tries.
      */
     musicCandidates(where, level) {
@@ -3056,7 +3056,7 @@
       }
       const dirs = [];
       if (where.pack && where.pack.musicDir) dirs.push(where.pack.musicDir);
-      dirs.push("music");
+      dirs.push(Lemmix.ASSET_DIR + "music");
       const urls = [];
       for (const name of names) {
         for (const dir of dirs) {

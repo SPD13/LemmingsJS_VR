@@ -24,7 +24,7 @@ away instead.
 
 URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `lemmings/0/3` or
-`LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv`; the old
+`LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Just_Walk!.nxlv`; the old
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings

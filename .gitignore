@@ -21,11 +21,10 @@ levels/*
 !levels/README.md
 
 # NeoLemmix assets (styles, panel/mask graphics, sound effects, music packs):
-# downloaded, not committed - see README "Levels and assets".
-styles/
-gfx/
-sound/
-music/
+# the NeoLemmix zip and the styles package unpacked into neolemmix/, not
+# committed - see neolemmix/README.md.
+neolemmix/*
+!neolemmix/README.md
 
 # NeoLemmix source, fetched for reference (see README) - not committed
 Doc/neolemmix-src/

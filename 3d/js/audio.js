@@ -226,7 +226,8 @@ class GameAudio {
 
   // ------------------------------------------------------- files (Lemmix)
 
-  /** Where sound/ and music/ are, relative to the page ("../" from 3d/). */
+  /** Where the repo root is, relative to the page ("../" from 3d/): the
+   *  NeoLemmix sound/ and music/ folders are under its neolemmix/. */
   setFileRoot(root) { this.fileRoot = root; }
 
   _fileContext() {
@@ -235,14 +236,14 @@ class GameAudio {
     return this._fctx;
   }
 
-  /** A decoded effect from sound/<name>.wav|ogg|mp3, or null; kept once found. */
+  /** A decoded effect from neolemmix/sound/<name>.wav|ogg|mp3, or null; kept once found. */
   _fileSfxBuffer(name) {
     if (this._fileSfx.has(name)) return this._fileSfx.get(name);
     const ctx = this._fileContext();
     const p = (async () => {
       for (const ext of ["wav", "ogg", "mp3"]) {
         try {
-          const res = await fetch(this.fileRoot + "sound/" + encodeURIComponent(name) + "." + ext);
+          const res = await fetch(this.fileRoot + "neolemmix/sound/" + encodeURIComponent(name) + "." + ext);
           if (!res.ok) continue;
           return await ctx.decodeAudioData(await res.arrayBuffer());
         } catch (e) { /* try the next */ }

@@ -50,7 +50,8 @@ levels/               level packs, one folder each (classic games committed, the
 lemmix/js/            the Lemmix engine: NeoLemmix levels, styles, physics, panel (§2.9)
 tools/                levels-index (the catalog tree), nx-check / nx-render / nx-run /
                       nx-physics-test (the Lemmix engine's checks), lemmix-node (node loader)
-styles/ gfx/ sound/   NeoLemmix assets, downloaded and ignored by git (README, "Levels and assets")
+neolemmix/            the NeoLemmix zip and styles package unpacked (styles/ gfx/ sound/ music/),
+                      ignored by git except its README
 ```
 
 About 6,900 lines of JavaScript plus a 205-line page, in 136 commits on top
@@ -291,7 +292,7 @@ The DOM panel and the VR window are two views of the same `WorldLibrary`
 state (`navigate`, `up`, `currentNode`), remembered in localStorage and
 opened on the directory of the level being played. A level is addressed by
 its id, its path in the tree (`lemmings/0/3`,
-`LemmingsPlus_All_20201114/Lemmings_Plus_I/Wimpy/Just_Walk!.nxlv`); `?level=`
+`LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Just_Walk!.nxlv`); `?level=`
 takes it, the old `?type=&group=&level=` are mapped onto classic ids, and
 prev/next walk the pack's play order. Progress records are keyed by id, with
 a one-time migration of the old `<game>/<group>/<level>` keys.
@@ -320,7 +321,7 @@ the DOS engine's generic parts by reference — `DisplayImage`, `Frame`,
 |---|---|
 | `parser.js` | the NeoLemmix text format (nxlv, nxmi, nxmo, nxmt, nxtm, scheme) |
 | `pixels.js` | bitmaps and LemRendering.pas's combine rules: no-overwrite, erase, the solidity/steel/one-way channels, nine-slice |
-| `styles.js` | terrain, gadget and background pieces from `styles/`, with their metadata, aliases and rotated/flipped variations |
+| `styles.js` | terrain, gadget and background pieces from `neolemmix/styles/`, with their metadata, aliases and rotated/flipped variations |
 | `level.js` | `.nxlv` → `Lemmix.Level`: the picture, the physics map cut at NeoLemmix's alpha cutoff, one-way arrows stamped, gadgets with trigger rectangles, receivers paired, spawn order and save requirement as PrepareForUse computes them |
 | `lemgame.js` | `TLemmingGame` from LemGame.pas, method for method: all 21 skills (jumper, shimmier, slider and laserer included), every gadget effect including portals, spawning, nuke, time, talismans; records what the player did |
 | `replay.js` | NeoLemmix `.nxrp` replays read (`?nxrp=<url>`, `nx-run --nxrp`) and written (the `r` key, `nx-run --save-nxrp`) |
@@ -333,10 +334,10 @@ reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
 NeoLemmix commit the port follows. Terrain changes go through the level's
 `setGroundAt`/`clearGroundAt`, which is why the diorama's terrain hooks
 (§2.3) need nothing new. Sound cues come out of the simulation by name
-(`game.sounds`) and play from `sound/` through the same gain and VR panner
+(`game.sounds`) and play from `neolemmix/sound/` through the same gain and VR panner
 as the AdLib effects (`GameAudio.playCue`, with an AdLib stand-in when a
 file is missing); a level's music - its `MUSIC` line or the pack's rotation
-- plays from the pack's music folder or `music/`, tracker modules through
+- plays from the pack's music folder or `neolemmix/music/`, tracker modules through
 libopenmpt (chiptune3, `lemmix/vendor/`) in an AudioWorklet, other files
 decoded and looped, the AdLib track when nothing is found. Pre-level text
 shows in the status line, post-level text and talismans with the result
