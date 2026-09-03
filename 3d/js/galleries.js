@@ -34,6 +34,7 @@
   const dom = {
     filter: document.getElementById("gal-filter"),
     note: document.getElementById("gal-note"),
+    collapse: document.getElementById("gal-collapse"),
     list: document.getElementById("gal-list"),
     head: document.getElementById("gal-head"),
     title: document.getElementById("gal-title"),
@@ -571,6 +572,12 @@
   // ---- boot
 
   dom.filter.addEventListener("input", renderList);
+  dom.collapse.addEventListener("click", () => {
+    openDirs.clear();
+    saveOpen();
+    dom.filter.value = "";
+    renderList();
+  });
   dom.save.addEventListener("click", save);
   dom.export.addEventListener("click", exportFile);
   dom.reset.addEventListener("click", resetAll);
