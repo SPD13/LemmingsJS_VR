@@ -3784,7 +3784,7 @@
       const add = (id, label, mod) => { const n = hotkeys.keyNameFor(id, mod); if (n) parts.push("<b>" + n + "</b> " + label); };
       add("pause", "pause"); add("skip", "step", 1); add("restart", "restart"); add("fastforward", "fast forward");
       add("previous_skill", "prev skill"); add("next_skill", "next skill"); add("quit", "library"); add("save_replay", "save replay");
-      hint.innerHTML = parts.join(" &middot; ") + (parts.length ? " &middot; " : "") + "<b>hotkeys</b> (top left) sets them all";
+      hint.innerHTML = parts.join(" &middot; ") + (parts.length ? " &middot; " : "") + "<b>configure hotkeys</b> (below) sets them all";
     }
   }
   for (const [id, action] of [["btn-prev", "previous_level"], ["btn-next", "next_level"], ["btn-pause", "pause"],

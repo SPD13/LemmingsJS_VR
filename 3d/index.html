@@ -45,10 +45,12 @@
   .fold-close:hover { color: #f0f3f8; background: #263043; border-color: #33405a; }
   #hud-keys { top: 12px; color: #8fa1bb; text-align: right; }
   #hud-keys b { color: #cdd6e4; font-weight: 600; }
-  #hud-fx { top: 46px; }
+  /* the hotkeys button, second down the right edge, under "controls" */
+  #hud-hotkeys { position: absolute; top: 46px; right: 12px; z-index: 10; }
+  #hud-fx { top: 80px; }
   #hud-fx .btnrow { margin-top: 0; }
-  /* the mode switch, third down the right edge */
-  #hud-mode { position: absolute; top: 80px; right: 12px; z-index: 10; }
+  /* the mode switch, fourth down the right edge */
+  #hud-mode { position: absolute; top: 114px; right: 12px; z-index: 10; }
   .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btnrow button { white-space: nowrap; }
   button {
@@ -200,7 +202,6 @@
     <button id="btn-view" class="icon"></button>
     <input id="replay-file" type="file" accept=".nxrp" hidden>
   </div>
-  <div class="btnrow"><button id="btn-hotkeys" title="the keys: NeoLemmix's, and yours to change">configure hotkeys</button></div>
 </div>
 
 <div id="library" hidden>
@@ -225,6 +226,8 @@
   <span id="hud-keys-hotkeys"></span>
   </div>
 </div>
+
+<div id="hud-hotkeys"><button id="btn-hotkeys" title="the keys: NeoLemmix's, and yours to change">configure hotkeys</button></div>
 
 <div id="hud-mode"><button id="btn-mode">mode: play</button></div>
 
