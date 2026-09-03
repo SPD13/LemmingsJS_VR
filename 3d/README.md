@@ -55,8 +55,11 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   control at any point and the rest of the attempt is dropped), frame back
   over frame forward (right-click 17 frames, middle-click 85, hold to
   repeat), direction left over direction right (pick only lemmings facing
-  that way), and load replay (a `.nxrp` file; the clear-physics half above
-  it does nothing yet). An R in the info strip means the attempt is
+  that way), and load replay (a `.nxrp` file picked from the desktop, with
+  a warning first when it names another level, then played from the start
+  at normal speed; in a headset the button only says to load it from the
+  desktop; the clear-physics half above it does nothing yet). An R in the
+  info strip means the attempt is
   replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
   replay-insert mode (your actions add to the replay instead of cutting it)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
