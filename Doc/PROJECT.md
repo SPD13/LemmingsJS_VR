@@ -37,7 +37,7 @@ Everything the port adds lives in `3d/`:
     gui.js      703   the original skill panel, extruded and made pickable
     minimap.js  227   the minimap in the panel's last box: map, dots, view frame
     cursor.js   121   NeoLemmix's cursor: a cross, a square over a lemming, for both engines
-    hotkeys.js  740   the controls: NeoLemmix's hotkeys and the headset's inputs, one table, the dialog
+    hotkeys.js  834   the controls: NeoLemmix's hotkeys and the headset's inputs, one table, the dialog
     vr.js       549   WebXR: session, placement, controllers, thumbsticks
     terrain.js  469   destructible extruded terrain, greedy-meshed in chunks
     library.js  441   the world catalog, level progress, level miniatures
@@ -240,7 +240,11 @@ on their edges and while held (`onVrButton`, `onVrButtonHeld`) and the
 thumbsticks by role (`onStick`), and `app.js` looks each up - a button runs
 its function like a key (the held filters through the same set of inputs
 down, the dollies while held), a stick pans, tilts or dollies. The dialog's
-VR tab edits them, offering a stick only the stick functions.
+VR tab edits them, offering a stick only the stick functions. `exportJSON`
+/ `importJSON` carry the whole table as a file (`{format:
+"lemmings-3d-controls", version, keys}`), an import replacing the table and
+skipping what it cannot place; the dialog's export and import buttons are
+these through a download and a file picker.
 
 **The cursor** (`cursor.js`) is NeoLemmix's whenever its pictures are
 installed (`neolemmix/gfx/cursor`, with the 32 px twins of `cursor-hr` for

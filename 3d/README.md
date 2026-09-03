@@ -110,7 +110,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   is the controls as they were: the pointing hand's A/X recentres and its
   stick pans, the free hand's B/Y and A/X dolly in and out and its stick
   tilts; "back to the default controls" restores it. The trigger (click,
-  drag), the grips (drag, scale) and the bar's buttons stay fixed
+  drag), the grips (drag, scale) and the bar's buttons stay fixed. "export"
+  saves both tabs' bindings as a JSON file (`lemmings-3d-controls.json`)
+  and "import" loads one in their place, skipping any entry it does not
+  know and saying how many it took
 - the prev, restart and next icons ask before throwing away a level in progress —
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
