@@ -52,6 +52,11 @@ const VR_MARK_ORDER = 60;
 const VR_STICK_DEADZONE = 0.15;
 const VR_STICK_PAN = 0.8;   // metres per second at full deflection
 const VR_STICK_TILT = 1.0;  // radians per second at full deflection
+// The face buttons of the hand that is not pointing zoom the board: the
+// upper one (B/Y) in, the lower one (A/X) out, for as long as it is held.
+const VR_ZOOM_RATE = 2.0;   // scale factor per second held
+const VR_BTN_LOWER = 4;     // A or X in the standard gamepad mapping
+const VR_BTN_UPPER = 5;     // B or Y
 // How far the hand has to travel with the trigger held before it counts as a
 // drag rather than a click. A trigger pull moves the hand a little on its own.
 const VR_DRAG_THRESHOLD = 0.02; // metres
@@ -103,6 +108,7 @@ class VRManager {
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
    *  - cursorSprite()               -> a sprite for the beam's landing on the board, or null
    *  - dressCursor(sprite)          -> its picture and size for this frame
+   *  - onZoom(dir, dt)              -> (optional) a zoom button held: dir +1 in, -1 out
    *  - onStick("pan"|"tilt", x, y, dt) -> thumbstick, already resolved to a
    *                                    role, y flipped to "away is positive"
    *  - onBarDragStart(), onBarDrag(worldDelta) -> dragging the toolbar by its
@@ -243,18 +249,33 @@ class VRManager {
 
   /** A/X button (xr-standard button 4) on either controller = recenter:
    *  snap the diorama back to its session-start placement and scale. */
-  _pollRecenter() {
+  /**
+   * The face buttons. On the pointing hand the lower one (A/X) recentres,
+   * once per press. On the other hand the two zoom the board for as long as
+   * they are held: the upper one (B/Y) in, the lower one (A/X) out. When
+   * the left hand points, that puts the zoom on the right controller.
+   */
+  _pollButtons(dt) {
     const session = this.renderer.xr.getSession();
     if (!session) return;
     let pressed = false;
+    let zoom = 0;
     for (const source of session.inputSources) {
-      const b = source.gamepad && source.gamepad.buttons && source.gamepad.buttons[4];
-      if (b && b.pressed) pressed = true;
+      const buttons = source.gamepad && source.gamepad.buttons;
+      if (!buttons) continue;
+      const lower = buttons[VR_BTN_LOWER], upper = buttons[VR_BTN_UPPER];
+      if (this._handPoints(source.handedness)) {
+        if (lower && lower.pressed) pressed = true;
+      } else {
+        if (upper && upper.pressed) zoom += 1;
+        if (lower && lower.pressed) zoom -= 1;
+      }
     }
     if (pressed && !this._recenterHeld) {
       this.recenterNow();
     }
     this._recenterHeld = pressed;
+    if (zoom && dt && this.hooks.onZoom) this.hooks.onZoom(zoom, dt);
   }
 
   get presenting() {
@@ -499,7 +520,7 @@ class VRManager {
         this._needsPlacement = false;
       }
     }
-    this._pollRecenter();
+    this._pollButtons(dt);
     this._pollSticks(dt);
     this._updateDrag();
     const g = this._grab;
