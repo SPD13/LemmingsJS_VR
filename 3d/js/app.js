@@ -67,8 +67,10 @@
     shadows: setting("shadows", "lem3d-shadows", true),  // NeoLemmix's skill shadows (a hotkey toggles them)
     music: setting("music", "lem3d-music", true),        // the music, apart from the sound (a hotkey toggles it)
     // Editing is the tagging workbench: the piece editor, the tagging marks
-    // in the catalog, the "validation mode" billing. Playing is the game.
-    edit: setting("edit", "lem3d-edit", false),
+    // in the catalog, the "validation mode" billing. Playing is the game,
+    // and every session starts on it: the mode is not remembered, only
+    // ?edit=1 (or the button, the key) selects editing.
+    edit: params.has("edit") ? setting("edit", "", false) : false,
     // The level, by its id in the tree (see library.js). A bare number in
     // ?level= is the old addressing, resolved with ?type= and ?group=.
     levelId: /\//.test(params.get("level") || "") ? params.get("level") : null,
@@ -1809,6 +1811,7 @@
   });
 
   const factory = new Lemmings.GameFactory("../");
+  const profileFiles = new ProfileFiles(); // the depth profiles, one file per sprite gallery
   const raycaster = new THREE.Raycaster();
 
   const audio = new GameAudio();
@@ -1849,7 +1852,11 @@
       ? "Lemmings 3D — validation mode" : "Lemmings 3D";
     hud.modeBtn.textContent = "mode: " + (state.edit ? "edit" : "play");
     library.setEditMode(state.edit);
-    if (!state.edit && session && session.editor) session.editor.disable();
+    // edit mode is the tagging workbench: the piece editor comes up with it
+    // (holding the sim) and goes away with it
+    if (session && session.editor) {
+      if (state.edit) session.editor.enable(); else session.editor.disable();
+    }
   }
   // the view back to where a level starts: the same as Home or a double
   // right-click (in a headset, the board is re-placed in front of the player)
@@ -1860,7 +1867,6 @@
 
   document.getElementById("btn-mode").addEventListener("click", () => {
     state.edit = !state.edit;
-    try { localStorage.setItem("lem3d-edit", state.edit ? "on" : "off"); } catch (e) {}
     renderMode();
   });
 
@@ -2055,23 +2061,21 @@
       window.__lem3dGroundData = lemmixEngine.groundData(level);
     }
 
-    // depth compositing (plan §5.1): per-tileset profile + per-pixel classes
+    // depth compositing (plan §5.1): per-gallery profiles + per-pixel classes.
+    // A DOS level's pieces are tagged in its tileset's file, named after the
+    // pack's folder; a Lemmix level's by name in the file of each style its
+    // pieces come from, merged into one view (profile-store.js)
     const config = await factory.getConfig(state.gameType);
     const groundData = window.__lem3dGroundData;
-    let profile = null;
     let profileUrl = null;
-    if (state.engine === "lemmix") {
-      // a Lemmix level's pieces are tagged by name, in a profile per theme style
-      profileUrl = "profiles/nx-" + (level.themeName || "default").replace(/[^a-z0-9_]/gi, "") + ".json";
-      profile = await DepthProfiles.load(profileUrl);
-    } else if (groundData && groundData.lr) {
-      // the profile is named after the pack's folder, wherever it lives
+    if (state.engine !== "lemmix" && groundData && groundData.lr) {
       const slug = (config.path || "game").split("/").pop()
         .replace(/[^a-z0-9]/gi, "").toLowerCase();
       const setId = groundData.lr.graphicSet1 != null ? groundData.lr.graphicSet1 : 0;
       profileUrl = "profiles/" + slug + "-g" + setId + ".json";
-      profile = await DepthProfiles.load(profileUrl);
     }
+    const profileUrls = ProfileStore.urlsForGroundData(groundData, profileUrl);
+    const profile = await profileFiles.loadAll(profileUrls);
     const depthMap = buildDepthMap(level, groundData, profile);
     const pieceMap = buildPieceMap(level, groundData);
     const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss, groundData);
@@ -2500,7 +2504,7 @@
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
       lemmingPool, objectPool, particles, resources, depthMap, profile,
-      groundData, profileUrl, musicTrack, playMusic, pieceMap,
+      groundData, profileUrl, profileUrls, musicTrack, playMusic, pieceMap,
       getLastTickTime: () => lastTickTime,
       syncScene, resetSceneMemory, shadowOverlay,
       // clear physics: the gadgets' one colour walks the hues every five
@@ -2536,7 +2540,8 @@
         syncScene(true); // the sprites drawn again, whether the clock runs or not
       },
     };
-    session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
+    session.editor = new PieceEditor(session, profileFiles, timer, { confirm: askConfirm });
+    if (state.edit) session.editor.enable(); // a level loaded in edit mode opens on its editor
     if (flatActive) {
       // the 2D view, framed once the quad is there (and again once the bar is)
       session.setFlat(true);
@@ -4311,8 +4316,8 @@
   function openPieceEditor() {
     if (!state.edit) {
       state.edit = true;
-      try { localStorage.setItem("lem3d-edit", "on"); } catch (err) {}
-      renderMode();
+      renderMode(); // opens the editor with the mode
+      return;
     }
     if (session && session.editor) session.editor.toggle();
   }

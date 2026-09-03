@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lemmings 3D — sprite galleries</title>
+<style>
+  /* The look of index.html's HUD, restated: there is no shared stylesheet
+     (the 3D page keeps its styles inline), so the ground, buttons, rows and
+     badges below are copies of its rules. */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c; }
+  body { font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; font-size: 12px; line-height: 1.6; }
+  a { color: #7fd6e8; text-decoration: none; }
+  a:hover { color: #a9e6f4; }
+  h1 { font-size: 15px; color: #6fce7e; letter-spacing: 0.08em; margin: 0; }
+  h2 { font-size: 14px; color: #f0f3f8; margin: 0; }
+  button {
+    font: inherit; font-size: 11px; color: #cdd6e4; background: #1c2432;
+    border: 1px solid #33405a; border-radius: 4px; padding: 3px 10px; cursor: pointer;
+  }
+  button:hover { background: #263043; }
+  button.active { background: #4a4326; border-color: #ffd866; color: #ffd866; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .btnrow button { white-space: nowrap; }
+  input {
+    font: inherit; font-size: 12px; color: #f0f3f8; background: #0b0f16;
+    border: 1px solid #33405a; border-radius: 4px; padding: 5px 8px; width: 100%; box-sizing: border-box;
+  }
+  input:focus { outline: none; border-color: #6fce7e; }
+  .lib-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #161c28; border: 1px solid #2a3446; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-size: 12px;
+  }
+  .lib-row[hidden] { display: none; } /* the filter hides rows; flex would win otherwise */
+  .lib-row:hover { border-color: #6fce7e; background: #1a2231; }
+  .lib-row.here { border-color: #ffd866; background: #1e2130; }
+  .lib-row.empty { opacity: 0.5; }
+  /* the tree: a directory row unfolds its children, indented one step */
+  .lib-row.gal-dir { background: transparent; border-color: transparent; padding-top: 5px; padding-bottom: 5px; }
+  .lib-row.gal-dir:hover { background: #161c28; border-color: #2a3446; }
+  .lib-row.gal-dir .lib-row-name { color: #cdd6e4; }
+  .lib-row.gal-dir.open .lib-row-name { color: #f0f3f8; }
+  .gal-caret { color: #8fa1bb; width: 10px; flex: none; font-size: 11px; }
+  #gal-none { color: #8fa1bb; font-size: 11px; padding: 6px 12px; }
+  .lib-row-name { color: #f0f3f8; font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lib-row-sub { color: #8fa1bb; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lib-badge {
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 3px; padding: 1px 6px; border: 1px solid;
+  }
+  .lib-badge.classic { color: #7fd6e8; border-color: #2f5f6b; }
+  .lib-badge.lemmix { color: #ffb066; border-color: #6b4a2f; }
+  .lib-count { color: #8fa1bb; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 24px; text-align: right; }
+  .lib-mark { font-size: 11px; color: #5a6a7c; white-space: nowrap; min-width: 28px; text-align: right; }
+  .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
+
+  /* the page: the galleries down the left, the open one's sprites on the right */
+  #gal { display: flex; height: 100%; }
+  #gal-side {
+    width: 340px; flex: none; display: flex; flex-direction: column; gap: 8px;
+    padding: 14px; box-sizing: border-box; border-right: 1px solid #2a3446; background: rgba(10, 14, 22, 0.82);
+  }
+  #gal-side-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  #gal-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; padding-right: 2px; }
+  #gal-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #gal-tools button { white-space: nowrap; flex: none; }
+  #gal-note { color: #8fa1bb; font-size: 11px; min-height: 16px; }
+  #gal-main { flex: 1; min-width: 0; overflow-y: auto; padding: 14px 18px; box-sizing: border-box; }
+  #gal-head { position: sticky; top: -14px; z-index: 2; margin: -14px -18px 10px; padding: 14px 18px 8px;
+    background: #10141c; border-bottom: 1px solid #2a3446; }
+  #gal-head[hidden], #gal-empty[hidden], #gal-msg:empty { display: none; }
+  #gal-status { color: #8fa1bb; min-height: 16px; }
+  #gal-status b { color: #cdd6e4; font-weight: 600; }
+  #gal-msg { min-height: 16px; margin-top: 6px; font-size: 11px; }
+  #gal-msg.ok { color: #6fce7e; }
+  #gal-msg.err { color: #e07a6a; }
+  #gal-empty { color: #8fa1bb; margin-top: 20px; }
+  #gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .gal-sprite {
+    background: #161c28; border: 1px solid #2a3446; border-radius: 6px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  }
+  .gal-sprite.gal-hit { border-color: #ffd866; box-shadow: 0 0 0 1px #ffd866 inset; }
+  .gal-sprite.tagged { border-color: #2f6b3d; }
+  .gal-sprite.missing { opacity: 0.5; }
+  .gal-pic {
+    height: 104px; display: flex; align-items: center; justify-content: center; border-radius: 4px;
+    background-color: #05070c;
+    background-image: linear-gradient(45deg, #0d1119 25%, transparent 25%, transparent 75%, #0d1119 75%),
+      linear-gradient(45deg, #0d1119 25%, transparent 25%, transparent 75%, #0d1119 75%);
+    background-size: 16px 16px; background-position: 0 0, 8px 8px;
+  }
+  .gal-pic canvas { image-rendering: pixelated; max-width: 100%; max-height: 100%; height: auto; }
+  .gal-name { color: #f0f3f8; margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gal-name .gal-key { color: #8fa1bb; }
+  .gal-size { color: #8fa1bb; font-size: 11px; }
+  .gal-size .gal-steel { color: #7fd6e8; margin-left: 6px; }
+  .gal-sprite .btnrow { margin-top: 6px; gap: 4px; }
+  .gal-sprite .btnrow button { padding: 2px 7px; font-size: 10px; }
+</style>
+</head>
+<body>
+<div id="gal">
+  <div id="gal-side">
+    <div id="gal-side-head">
+      <h1>SPRITE GALLERIES</h1>
+      <a id="gal-back" href="index.html" title="back to the 3D page">‹ 3D view</a>
+    </div>
+    <input id="gal-filter" type="search" placeholder="filter galleries" autocomplete="off">
+    <div id="gal-tools">
+      <div id="gal-note">loading…</div>
+      <button id="gal-collapse" title="close every directory">collapse all</button>
+    </div>
+    <div id="gal-list"></div>
+  </div>
+  <div id="gal-main">
+    <div id="gal-head" hidden>
+      <h2 id="gal-title"></h2>
+      <div id="gal-status"></div>
+      <div class="btnrow">
+        <button id="gal-save">save</button>
+        <button id="gal-export">export JSON</button>
+        <button id="gal-reset">reset all</button>
+      </div>
+      <div id="gal-msg"></div>
+    </div>
+    <div id="gal-empty">Pick a gallery on the left: every sprite of a DOS tileset or a NeoLemmix style,
+      each with the depth class and 3D shade the diorama gives it. A tag belongs to the sprite, so it
+      applies wherever the sprite is placed, in every level.</div>
+    <div id="gal-grid"></div>
+  </div>
+</div>
+
+<script src="../js/lemmings.js"></script>
+<script src="../lemmix/js/parser.js"></script>
+<script src="../lemmix/js/pixels.js"></script>
+<script src="../lemmix/js/styles.js"></script>
+<script src="js/depth.js"></script>
+<script src="js/profile-store.js"></script>
+<script src="js/library.js"></script>
+<script src="js/galleries.js"></script>
+</body>
+</html>

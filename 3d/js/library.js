@@ -243,6 +243,7 @@ class WorldLibrary {
     try { saved = localStorage.getItem(ORDER_KEY); } catch (e) {}
     this.order = saved === "world" ? "world" : "level";
     this._renderOrderBtn();
+    this._renderGalleriesBtn();
     this.dom.order.addEventListener("click", () => {
       this.order = this.order === "level" ? "world" : "level";
       try { localStorage.setItem(ORDER_KEY, this.order); } catch (e) {}
@@ -314,7 +315,22 @@ class WorldLibrary {
   setEditMode(on) {
     if (this.editMode === on) return;
     this.editMode = on;
+    this._renderGalleriesBtn();
     if (this.isOpen) this._render(); // redraw with the other labels
+  }
+
+  /** Editing, a way to the sprite galleries (galleries.html) from the head. */
+  _renderGalleriesBtn() {
+    if (!this.dom.galleries) {
+      const b = document.createElement("button");
+      b.id = "lib-galleries";
+      b.textContent = "sprite galleries";
+      b.title = "tag the sprites of every tileset and style";
+      b.addEventListener("click", () => { window.location.href = "galleries.html"; });
+      this.dom.order.parentNode.insertBefore(b, this.dom.order);
+      this.dom.galleries = b;
+    }
+    this.dom.galleries.hidden = !this.editMode;
   }
 
   /** The level being played: the library opens on its directory. */
@@ -514,13 +530,31 @@ class WorldLibrary {
       this.dom.status.textContent =
         "these levels need the Lemmix engine, which is not built yet";
     } else if (this.editMode) {
-      // a Lemmix profile is per theme style: say which of this rank's are tagged
-      const themes = Array.from(new Set(node.levels.map((l) => l.theme).filter(Boolean)));
-      Promise.all(themes.map((t) => fetch("profiles/nx-" + t + ".json", { method: "HEAD" })
+      // a Lemmix profile is per style: say which of the styles this rank's
+      // pieces come from (the index lists them; the theme stands in for an
+      // older index) have one, each a link to its gallery
+      const styles = Array.from(new Set(node.levels.flatMap(
+        (l) => (l.styles && l.styles.length ? l.styles : [l.theme]).filter(Boolean))));
+      Promise.all(styles.map((t) => fetch("profiles/nx-" + t + ".json", { method: "HEAD", cache: "no-store" })
         .then((r) => [t, r.ok]).catch(() => [t, false]))).then((marks) => {
-        this.dom.status.textContent = "styles tagged: " +
-          (marks.filter((m) => m[1]).map((m) => m[0]).join(", ") || "none") +
-          " · not tagged: " + (marks.filter((m) => !m[1]).map((m) => m[0]).join(", ") || "none");
+        if (!this.isOpen || this.currentNode() !== node) return;
+        const status = this.dom.status;
+        status.textContent = "";
+        const part = (label, list) => {
+          status.appendChild(document.createTextNode(label));
+          if (!list.length) { status.appendChild(document.createTextNode("none")); return; }
+          list.forEach((m, i) => {
+            if (i) status.appendChild(document.createTextNode(", "));
+            const a = document.createElement("a");
+            a.className = "lib-style";
+            a.href = "galleries.html?gallery=" + encodeURIComponent("nx:" + m[0]);
+            a.textContent = m[0];
+            a.title = "tag this style's sprites";
+            status.appendChild(a);
+          });
+        };
+        part("styles tagged: ", marks.filter((m) => m[1]));
+        part(" · not tagged: ", marks.filter((m) => !m[1]));
       });
     }
 
