@@ -44,6 +44,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   of the camera)
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
+- with the NeoLemmix assets installed the pointer is NeoLemmix's cursor on
+  every level: a cross, a square over a lemming, an arrow beside it while
+  the direction filter is on (in VR, at the end of the beam)
 - the minimap at the panel's right end shows the level, the lemmings as
   green dots and a frame around what is in view; click or drag on it to
   centre the view there, keeping the zoom (in VR, the trigger held on it)

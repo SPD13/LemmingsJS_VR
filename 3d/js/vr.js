@@ -101,6 +101,8 @@ class VRManager {
    *  - pickWithRaycaster(raycaster) -> {panelUv}|{simX,simY}|null
    *  - onSelectPick(pick)           -> act on a trigger pull
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
+   *  - cursorSprite()               -> a sprite for the beam's landing on the board, or null
+   *  - dressCursor(sprite)          -> its picture and size for this frame
    *  - onStick("pan"|"tilt", x, y, dt) -> thumbstick, already resolved to a
    *                                    role, y flipped to "away is positive"
    *  - onBarDragStart(), onBarDrag(worldDelta) -> dragging the toolbar by its
@@ -112,6 +114,7 @@ class VRManager {
     this.renderer = renderer;
     this.dioramaRoot = dioramaRoot;
     this.hooks = hooks;
+    this.scene = scene;
     this.raycaster = new THREE.Raycaster();
     this._tempMatrix = new THREE.Matrix4();
     this._grab = null;
@@ -542,6 +545,7 @@ class VRManager {
       for (const b of c.userData.beams) b.scale.z = len;
       c.userData.dot.visible = !!hit;
       if (hit) c.userData.dot.position.copy(hit.point);
+      c.userData.lastHit = hit;
       // the pointing hand drives the highlight while it is on the board; the
       // one already doing so keeps it, so a second pointer (an unnamed hand,
       // say) cannot take it away frame by frame
@@ -558,6 +562,31 @@ class VRManager {
       this._aiming = aiming;
       this.hooks.onHoverPick(aiming
         ? this.hooks.pickWithRaycaster(this._rayFrom(aiming)) : null);
+    }
+    this._updateBoardCursors(aiming);
+  }
+
+  /**
+   * NeoLemmix's cursor at the beam's landing on the board - a cross, a
+   * square once it is over a lemming - in place of the dot there; the dot
+   * stays for the toolbar and the in-scene windows. Nothing until the
+   * page has the pictures (cursorSprite() returns null without them).
+   */
+  _updateBoardCursors(aiming) {
+    for (const c of this.controllers) {
+      const hit = c.userData.lastHit;
+      const onBoard = c === aiming && hit && hit.object && hit.object.name === "pick-plane";
+      if (onBoard && !c.userData.cursor && this.hooks.cursorSprite) {
+        const sprite = this.hooks.cursorSprite();
+        if (sprite) { c.userData.cursor = sprite; this.scene.add(sprite); }
+      }
+      const sprite = c.userData.cursor;
+      if (!sprite) continue;
+      sprite.visible = !!onBoard;
+      if (!onBoard) continue;
+      sprite.position.copy(hit.point);
+      if (this.hooks.dressCursor) this.hooks.dressCursor(sprite);
+      c.userData.dot.visible = false;
     }
   }
 }
