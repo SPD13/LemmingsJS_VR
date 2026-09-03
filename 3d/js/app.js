@@ -259,10 +259,23 @@
       c.stroke();
     });
   });
-  // Over the play area: pause (which becomes play once it is paused) and
-  // restart. They ride the toolbar, so they keep station with the bar
-  // wherever it is dragged or unpinned to.
+  // a board over a bar, with an arrow between: put the bar back where a
+  // session starts it, below the board
+  const barParkBtn = makeIconButton("vr-park", guiRoot, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
+      c.strokeRect(17, 12, 30, 16);        // the board
+      c.fillStyle = "#cdd6e4";
+      c.fillRect(13, 44, 38, 7);           // the bar
+      c.beginPath();                        // the arrow down to it
+      c.moveTo(32, 30); c.lineTo(32, 41);
+      c.moveTo(26, 36); c.lineTo(32, 41); c.lineTo(38, 36);
+      c.stroke();
+    });
+  });
 
+  // Over the play area: pause (which becomes play once it is paused) and
+  // restart. They ride the diorama, so they pan and scale with the board they
+  // belong to, and they are sized in game pixels like everything under it.
   const vrPauseBtn = makeIconButton("vr-pause", guiRoot, (cx, st) => {
     const paused = st.on;
     barToolIcon(cx, st.hovered, st.hovered ? "#1d5030" : "#12331d", "#6fce7e", (c) => {
@@ -450,7 +463,7 @@
     });
   });
 
-  const vrLeftTools = [barLockBtn, barMoveBtn, vrSettingsBtn];
+  const vrLeftTools = [barLockBtn, barMoveBtn, barParkBtn, vrSettingsBtn];
   const vrRightTools = [vrWorldsBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
   const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
 
@@ -3035,6 +3048,10 @@
   function actOnPick(p) {
     if (p.barTool === "lock") {
       setBarLocked(!barLocked);
+    } else if (p.barTool === "park") {
+      // back where a session starts it: in the room, below the board
+      barParked = null;
+      placeBarBelowDiorama();
     } else if (p.barTool === "move") {
       // nothing on a tap; it is the drag that moves the bar
     } else if (p.barTool === "volume") {
@@ -3131,6 +3148,15 @@
       if (!session) return;
       if (role === "tilt") tiltDioramaBy(x, y, seconds);
       else panDioramaBy(x, y, seconds);
+    },
+    // the free hand's face buttons zoom the board about its focus, as the
+    // PgUp/PgDn keys do - not while a window is up, which owns the hands
+    onZoom: (dir, seconds) => {
+      if (!session || anyVrWindowUp()) return;
+      const next = THREE.MathUtils.clamp(
+        dioramaRoot.scale.x * Math.pow(VR_ZOOM_RATE, dir * seconds),
+        VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
+      scaleDioramaAbout(next, dioramaFocusWorld());
     },
     placeDiorama: placeDioramaForXR,
     // a recentre brings the windows to the new view along with the board
