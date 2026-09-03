@@ -23,7 +23,11 @@
   const { NxParser } = Lemmix;
   const { Bitmap, Pixels } = Lemmix;
 
-  const STYLES_DIR = "styles/";
+  // The NeoLemmix assets - styles, gfx, sound, music - live under one folder
+  // at the repo root, laid out as a NeoLemmix install is, so the player's
+  // zip and the styles package unpack straight into it (neolemmix/README.md).
+  Lemmix.ASSET_DIR = "neolemmix/";
+  const STYLES_DIR = Lemmix.ASSET_DIR + "styles/";
   const PICKUP_AUTO_GFX_SIZE = 24;
   const SKILL_BUTTON_COUNT = 21; // TSkillPanelButton, walker .. cloner
   const THEME_DEFAULT_COLOR = 0x808080; // TNeoTheme DEFAULT_COLOR

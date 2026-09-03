@@ -39,10 +39,10 @@
     }
 
     async load(setName) {
-      const dir = "styles/" + setName + "/lemmings/";
+      const dir = Lemmix.ASSET_DIR + "styles/" + setName + "/lemmings/";
       let text = await this.io.text(dir + "scheme.nxmi");
       let base = dir;
-      if (text === null) { base = "styles/default/lemmings/"; text = await this.io.text(base + "scheme.nxmi"); }
+      if (text === null) { base = Lemmix.ASSET_DIR + "styles/default/lemmings/"; text = await this.io.text(base + "scheme.nxmi"); }
       const nx = NxParser.parse(text);
       const animsSec = nx.section("ANIMATIONS");
       const recolor = nx.section("STATE_RECOLORING");
@@ -203,8 +203,8 @@
   async function loadMasks(io) {
     const names = ["bomber", "stoner", "basher", "fencer", "miner", "laser", "countdown"];
     const masks = {};
-    await Promise.all(names.map(async (n) => { masks[n] = await io.image("gfx/mask/" + n + ".png"); }));
-    for (const n of names) if (!masks[n]) throw new Error("missing gfx/mask/" + n + ".png - see README, Levels and assets");
+    await Promise.all(names.map(async (n) => { masks[n] = await io.image(Lemmix.ASSET_DIR + "gfx/mask/" + n + ".png"); }));
+    for (const n of names) if (!masks[n]) throw new Error("missing " + Lemmix.ASSET_DIR + "gfx/mask/" + n + ".png - see neolemmix/README.md");
     Lemmix.digitFont = masks.countdown; // 4x5 digits, used on gadgets and over nuked lemmings
     return masks;
   }

@@ -66,11 +66,11 @@
         const out = {};
         await Promise.all(PANEL_FILES.map(async (n) => {
           let bmp = packDir ? await io.image(packDir + "/" + n + ".png") : null;
-          if (!bmp) bmp = await io.image("gfx/panel/" + n + ".png");
+          if (!bmp) bmp = await io.image(Lemmix.ASSET_DIR + "gfx/panel/" + n + ".png");
           out[n] = bmp;
         }));
         for (const n of PANEL_FILES) {
-          if (!out[n] && !OPTIONAL_FILES.has(n)) throw new Error("missing gfx/panel/" + n + ".png - see README, Levels and assets");
+          if (!out[n] && !OPTIONAL_FILES.has(n)) throw new Error("missing " + Lemmix.ASSET_DIR + "gfx/panel/" + n + ".png - see neolemmix/README.md");
         }
         return out;
       })());

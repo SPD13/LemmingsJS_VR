@@ -56,17 +56,12 @@ is **not** committed: `.gitignore` excludes everything else under `levels/`.
   packs by namida are published on the NeoLemmix site and the Lemmings
   Forums (https://www.neolemmix.com, https://www.lemmingsforums.net,
   "NeoLemmix Level Packs").
-- **NeoLemmix styles** (the graphics those levels reference, ~90 MB): the
-  styles package from https://www.neolemmix.com/download.php?program=52,
-  unpacked so that `styles/orig_dirt/`, `styles/namida_abstract/` ... sit at
-  the repo root. Not committed (`styles/` is ignored).
-- **NeoLemmix panel graphics, masks and sound effects**: the `gfx/` and
-  `sound/` folders of a NeoLemmix player install, or of
-  https://github.com/andersmelander/neolemmixplayer (`data/external/`),
-  placed at the repo root. Not committed.
-- **Music packs** (`orig_01`.. and `ohno_01`.. that the packs' rotations
-  name): https://www.neolemmix.com/?page=music_packs, unpacked into `music/`.
-  Not committed.
+- **NeoLemmix itself** (styles, panel graphics, masks, sound effects and
+  music): the `neolemmix/` folder is laid out like a NeoLemmix install, so
+  the NeoLemmix zip and the styles package from
+  https://www.neolemmix.com/?page=neolemmix unpack straight into it, giving
+  `neolemmix/styles/`, `neolemmix/gfx/`, `neolemmix/sound/` and
+  `neolemmix/music/`. See `neolemmix/README.md`. Nothing in it is committed.
 
 Tracker music (`.it/.xm/.mod`) plays through libopenmpt via chiptune3,
 vendored under `lemmix/vendor/chiptune3/` (MIT, libopenmpt BSD).
