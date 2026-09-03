@@ -108,13 +108,33 @@
   /**
    * A level's own text - a NeoLemmix opening text, or its closing text once
    * it is won - sits folded behind a "detail" label, since it can run to a
-   * paragraph. No lines, no label.
+   * paragraph. No lines, no label. A headset reads it in its own window,
+   * behind the status strip's detail button (setVrDetail).
    */
+  let levelTextLines = null;
+  /**
+   * A level's text comes hard-wrapped for the game's own 320-px screen. Run
+   * the lines together into paragraphs - a blank line is a break - so it
+   * flows to whatever width it is shown at instead of stopping short.
+   */
+  function flowLevelText(lines) {
+    const paragraphs = [];
+    let cur = "";
+    for (const raw of lines) {
+      const line = String(raw).trim();
+      if (!line) { if (cur) { paragraphs.push(cur); cur = ""; } continue; }
+      cur = cur ? cur + " " + line : line;
+    }
+    if (cur) paragraphs.push(cur);
+    return paragraphs;
+  }
   function setLevelText(lines) {
     const has = !!(lines && lines.length);
+    levelTextLines = has ? flowLevelText(lines) : null;
+    if (!has) setVrDetail(false);
     hud.text.hidden = !has;
     hud.textBody.hidden = true;
-    hud.textBody.textContent = has ? lines.join("\n") : "";
+    hud.textBody.textContent = has ? levelTextLines.join("\n\n") : "";
     hud.textToggle.innerHTML = "detail &#9656;";
   }
   hud.textToggle.addEventListener("click", (e) => {
@@ -520,7 +540,18 @@
   };
   // the sound column keeps its own place, so it is not in the row above, but
   // it is pressed like the rest
-  const vrWidgets = vrButtons.concat([vrMuteBtn]);
+  // three lines of text: the level's own text, off the status strip's end (laid out with it)
+  const vrDetailBtn = makeIconButton("vr-detail", dioramaRoot, (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#26485c" : "#152a36", "#7fd6e8", (c) => {
+      c.beginPath();
+      c.moveTo(16, 20); c.lineTo(48, 20);
+      c.moveTo(16, 32); c.lineTo(48, 32);
+      c.moveTo(16, 44); c.lineTo(36, 44);
+      c.stroke();
+    });
+  });
+
+  const vrWidgets = vrButtons.concat([vrMuteBtn, vrDetailBtn]);
 
   // The in-scene windows - the restart question, the world catalog and the
   // settings - hang off this root, which is fixed in the world: when a
@@ -595,7 +626,7 @@
   /** Whether any of the three windows is up: a second one opening while
    *  another is up shares its frame rather than moving it. */
   function anyVrWindowUp() {
-    return vrModal.visible || vrCatalog.visible || vrSettings.visible;
+    return vrModal.visible || vrCatalog.visible || vrSettings.visible || vrDetail.visible;
   }
 
   /**
@@ -1114,6 +1145,7 @@
     mute: () => audio.enabled ? "sound off" : "sound on",
     catclose: () => "close the library",
     setclose: () => "close the settings",
+    detail: () => "the level's text",
   };
   let vrTipName = null;   // the icon button under the beam, by bare name
   let vrTipSince = 0;     // when the beam arrived on it
@@ -1189,6 +1221,136 @@
       .addScaledVector(up, size / 2 + VR_TIP_HEIGHT / 2 + 0.012);
     vrTip.quaternion.copy(q);
     vrTip.visible = true;
+  }
+
+  // ------------------------------------------------------ level text (VR)
+  /**
+   * A level's own text - the opening text, or the closing text once it is
+   * won - behind the strip's detail button: a window in the dialogs' plane
+   * with the text on the author's lines, word-wrapped, and an OK to close
+   * it. It holds the clock like the other windows, and gives it back the
+   * way it found it.
+   */
+  const VR_DETAIL_W = 768, VR_DETAIL_PAD = 36;   // canvas px
+  const VR_DETAIL_LINE = 34, VR_DETAIL_FONT = "26px monospace";
+  const VR_DETAIL_MAX_LINES = 16;
+  const VR_DETAIL_OK = { w: 168, h: 58 };        // the OK button
+  const VR_DETAIL_WIDTH = 0.5;                   // metres
+  const vrDetail = new THREE.Group();
+  vrDetail.visible = false;
+  vrWindowRoot.add(vrDetail);
+  let vrDetailOkHot = false;
+  let vrDetailOkRect = { x: 0, y: 0, w: 0, h: 0 };
+  let vrDetailLines = [];
+  const vrDetailPanel = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = VR_DETAIL_W; cv.height = 256;
+    const cx = cv.getContext("2d");
+    let tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = "vr-detailpanel";
+    mesh.renderOrder = GUI_ORDER_MODAL;
+    /** Break the author's lines at words to the window's width. */
+    const wrap = (lines) => {
+      cx.font = VR_DETAIL_FONT;
+      const max = VR_DETAIL_W - 2 * VR_DETAIL_PAD;
+      const out = [];
+      for (const line of lines) {
+        let cur = "";
+        for (const word of String(line).split(/\s+/)) {
+          const next = cur ? cur + " " + word : word;
+          if (cur && cx.measureText(next).width > max) { out.push(cur); cur = word; }
+          else cur = next;
+        }
+        out.push(cur);
+      }
+      if (out.length > VR_DETAIL_MAX_LINES) {
+        out.length = VR_DETAIL_MAX_LINES;
+        out[VR_DETAIL_MAX_LINES - 1] += " \u2026";
+      }
+      return out;
+    };
+    mesh.userData.paint = (lines) => {
+      vrDetailLines = wrap(lines || []);
+      const textTop = 40;
+      const okTop = textTop + vrDetailLines.length * VR_DETAIL_LINE + 24;
+      const h = okTop + VR_DETAIL_OK.h + 30;
+      if (cv.height !== h) cv.height = h; // resizing clears the canvas
+      cx.clearRect(0, 0, VR_DETAIL_W, h);
+      cx.fillStyle = "rgba(10, 14, 22, 0.96)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, VR_DETAIL_W - 4, h - 4, 16) : cx.rect(2, 2, VR_DETAIL_W - 4, h - 4);
+      cx.fill();
+      cx.strokeStyle = "#ffd866";
+      cx.lineWidth = 4;
+      cx.stroke();
+      cx.fillStyle = "#cdd6e4";
+      cx.font = VR_DETAIL_FONT;
+      cx.textAlign = "left";
+      cx.textBaseline = "alphabetic";
+      vrDetailLines.forEach((line, i) => {
+        cx.fillText(line, VR_DETAIL_PAD, textTop + (i + 1) * VR_DETAIL_LINE - 8);
+      });
+      vrDetailOkRect = {
+        x: (VR_DETAIL_W - VR_DETAIL_OK.w) / 2, y: okTop, w: VR_DETAIL_OK.w, h: VR_DETAIL_OK.h,
+      };
+      const r = vrDetailOkRect;
+      cx.fillStyle = vrDetailOkHot ? "#1d5030" : "#12331d";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(r.x, r.y, r.w, r.h, 12) : cx.rect(r.x, r.y, r.w, r.h);
+      cx.fill();
+      cx.strokeStyle = vrDetailOkHot ? "#ffffff" : "#6fce7e";
+      cx.lineWidth = 3;
+      cx.stroke();
+      cx.fillStyle = "#6fce7e";
+      cx.font = "bold 30px monospace";
+      cx.textAlign = "center";
+      cx.textBaseline = "middle";
+      cx.fillText("OK", r.x + r.w / 2, r.y + r.h / 2 + 1);
+      // a resized canvas needs a fresh texture
+      tex.dispose();
+      tex = new THREE.CanvasTexture(cv);
+      mesh.material.map = tex;
+      mesh.material.needsUpdate = true;
+      mesh.scale.set(VR_DETAIL_WIDTH, VR_DETAIL_WIDTH * h / VR_DETAIL_W, 1);
+    };
+    mesh.userData.paint([]);
+    vrDetail.add(mesh);
+    return mesh;
+  })();
+
+  /** Is this UV on the window's OK? */
+  function vrDetailOkAt(uv) {
+    if (!uv) return false;
+    const x = uv.x * VR_DETAIL_W, y = (1 - uv.y) * vrDetailPanel.material.map.image.height;
+    const r = vrDetailOkRect;
+    return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+  }
+
+  function setVrDetailHover(hot) {
+    if (vrDetailOkHot === hot) return;
+    vrDetailOkHot = hot;
+    if (vrDetail.visible) vrDetailPanel.userData.paint(levelTextLines);
+  }
+
+  /** Show or hide the level's text, holding the clock while it is read. */
+  function setVrDetail(open) {
+    const show = open && renderer.xr.isPresenting && !!(levelTextLines && levelTextLines.length);
+    if (show === vrDetail.visible) return;
+    if (show && !anyVrWindowUp()) placeVrWindows();
+    vrDetail.visible = show;
+    if (show) { vrDetailOkHot = false; vrDetailPanel.userData.paint(levelTextLines); holdSim("vr-detail"); }
+    else releaseSim("vr-detail");
+    syncBarForWindows();
+  }
+
+  /** In the dialogs' plane, like every other window. */
+  function layoutVrDetail() {
+    vrDetailPanel.position.set(0, VR_MODAL_Y, VR_MODAL_Z);
   }
 
   // --------------------------------------------------------- settings (VR)
@@ -1391,9 +1553,43 @@
       tex.needsUpdate = true;
     };
     mesh.userData.paint();
-    guiRoot.add(mesh);
+    dioramaRoot.add(mesh); // over the board, in its own pixels: see layoutVrStatus
     return mesh;
   })();
+
+  /**
+   * The strip stands over the board, centred on the level's focus, in the
+   * board's own pixels - as wide as the bar is at the board's default scale
+   * - so it stays with the level however the board is moved or scaled. The
+   * detail button sits off its right end when the level has a text, and
+   * the REPLAY plate above it while an attempt is replaying.
+   */
+  const VR_STATUS_GAP = 14; // px between the level's top edge and the strip
+  const vrStatusPx = () => {
+    const w = VR_GUI_WIDTH / VR_PIXEL_SCALE;
+    return { w, h: w * VR_STATUS_H / VR_STATUS_W };
+  };
+  function layoutVrStatus() {
+    if (!session) return;
+    const level = session.level;
+    const { w, h } = vrStatusPx();
+    const x = level.screenPositionX + 200;
+    const y = level.height + VR_STATUS_GAP + h / 2;
+    vrStatusPanel.scale.set(w, h, 1);
+    vrStatusPanel.position.set(x, y, TERRAIN_DEPTH + 2);
+    vrStatusPanel.visible = true;
+    const size = VR_BAR_TOOL_SIZE / VR_PIXEL_SCALE;
+    const hot = vrDetailBtn.userData.state.hovered;
+    vrDetailBtn.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
+    vrDetailBtn.position.set(
+      x + w / 2 + size * 0.7, y, TERRAIN_DEPTH + 3 + (hot ? size * 0.25 : 0));
+    vrDetailBtn.visible = !!(levelTextLines && levelTextLines.length);
+    if (vrReplayLabel) {
+      const rw = w * 0.3, rh = rw * VR_REPLAY_H / VR_REPLAY_W;
+      vrReplayLabel.scale.set(rw, rh, 1);
+      vrReplayLabel.position.set(x, y + h / 2 + 5 + rh / 2, TERRAIN_DEPTH + 2);
+    }
+  }
 
   /** Update the strip. Any field left undefined keeps what it had. */
   function setVrStatus(patch) {
@@ -1439,6 +1635,7 @@
   layoutVrModal();
   layoutVrCatalog();
   layoutVrSettings();
+  layoutVrDetail();
 
   /**
    * The toolbar is the scene's by default, placed below the board (see
@@ -1497,9 +1694,8 @@
     const guiW = VR_GUI_WIDTH * panelWidthScale();
     const cv = session.gui.canvas;
     const barH = guiW * (cv.width ? cv.height / cv.width : 40 / 320);
-    // the row of controls and the status strip stand over the bar
-    const statusH = guiW * VR_STATUS_H / VR_STATUS_W;
-    const above = VR_BAR_TOOL_SIZE * 1.55 + statusH;
+    // the row of controls stands over the bar
+    const above = VR_BAR_TOOL_SIZE * 1.55;
     const centre = edge.clone();
     centre.y -= 0.02 + above + barH / 2;
     guiRoot.quaternion.setFromAxisAngle(
@@ -1680,7 +1876,7 @@
     vrReplayLabel.name = "vr-replaybadge";
     vrReplayLabel.renderOrder = GUI_ORDER_BAR_TOOL;
     vrReplayLabel.visible = false;
-    guiRoot.add(vrReplayLabel);
+    dioramaRoot.add(vrReplayLabel); // over the strip, over the board
     return vrReplayLabel;
   }
   function setReplayBadge(on) {
@@ -2227,18 +2423,9 @@
       // the level at the right end.
       const barTop = VR_GUI_Y + session.gui.mesh.scale.y / 2;
       const y = barTop + VR_BAR_TOOL_SIZE * 0.8;
-      // the status strip sits over the row, as wide as the bar itself
-      const statusH = guiW * VR_STATUS_H / VR_STATUS_W;
-      vrStatusPanel.scale.set(guiW, statusH, 1);
-      vrStatusPanel.position.set(
-        0, y + VR_BAR_TOOL_SIZE * 0.75 + statusH / 2, VR_GUI_Z);
-      vrStatusPanel.visible = true;
-      // the REPLAY plate above the strip, when it is up
-      if (vrReplayLabel) {
-        const w = guiW * 0.3, h = w * VR_REPLAY_H / VR_REPLAY_W;
-        vrReplayLabel.scale.set(w, h, 1);
-        vrReplayLabel.position.set(0, vrStatusPanel.position.y + statusH / 2 + 0.012 + h / 2, VR_GUI_Z);
-      }
+      // the status strip, its detail button and the REPLAY plate stand
+      // over the board instead
+      layoutVrStatus();
       const step = VR_BAR_TOOL_SIZE * 1.15;
       const end = guiW / 2 - VR_BAR_TOOL_SIZE * 0.6;
       vrLeftTools.forEach((b, i) => { b.position.x = -end + i * step; });
@@ -2667,6 +2854,11 @@
       }
       return null;
     }
+    // the level's text owns it the same way: its window alone
+    if (vrDetail.visible) {
+      const onPanel = rc.intersectObject(vrDetailPanel, false);
+      return onPanel.length ? onPanel[0] : null;
+    }
     if (vrSettings.visible) {
       const onClose = rc.intersectObject(vrSettingsClose, false);
       if (onClose.length) return onClose[0];
@@ -2710,6 +2902,9 @@
     if (hit.object.name === "vr-volume") {
       // up the track is the value: the plane's own V, 0 at the bottom
       return { barTool: "volume", volume: hit.uv ? hit.uv.y : audio.volume };
+    }
+    if (hit.object.name === "vr-detailpanel") {
+      return { barTool: vrDetailOkAt(hit.uv) ? "detailok" : "detailpanel" };
     }
     if (hit.object.name === "vr-setpanel") {
       return { barTool: "setpanel", row: vrSettingsRowAt(hit.uv) };
@@ -2838,6 +3033,7 @@
     setVrCatalogHover(p && p.barTool === "worldpanel"
       ? (p.scrollBar ? -2 : p.tile) : -1);
     setVrSettingsHover(p && p.barTool === "setpanel" ? p.row : -1);
+    setVrDetailHover(!!(p && p.barTool === "detailok"));
     if (!session) return;
     session.gui.setHover(p && p.panelUv ? p.panelUv : null);
     if (p && p.simX !== undefined) {
@@ -3266,8 +3462,9 @@
     // park the no-controller warning above the play area, outside the level
     const signW = 230, signH = signW * 224 / 512;
     vrWarningSign.scale.set(signW, signH, 1);
+    const strip = vrStatusPx();
     vrWarningSign.position.set(
-      startX, session.level.height + signH / 2 + 30, 40);
+      startX, session.level.height + VR_STATUS_GAP + strip.h * 1.35 + 24 + signH / 2, 40);
     // the bar goes with the board, unless it is riding the head by choice
     if (barAutoPlace || !barLocked) placeBarBelowDiorama();
     barAutoPlace = false;
@@ -3302,6 +3499,7 @@
     setVrModal(false);
     setVrCatalog(false);
     setVrSettings(false);
+    setVrDetail(false);
     noteVrTipHover(null); // and no label lingers from a headset beam
     // an unlocked bar is a VR notion: on the desktop it rides the camera
     resetBar();
@@ -3346,6 +3544,10 @@
     } else if (p.barTool === "setpanel") {
       const row = vrSettingRows[p.row];
       if (row) { row.act(); paintVrSettings(); }
+    } else if (p.barTool === "detail") {
+      setVrDetail(true);
+    } else if (p.barTool === "detailok") {
+      setVrDetail(false);
     } else if (p.barTool === "worlds") {
       setVrCatalog(true);
     } else if (p.barTool === "catclose") {
@@ -3741,11 +3943,13 @@
       layoutVrModal();
       layoutVrCatalog();
       layoutVrSettings();
+      layoutVrDetail();
       updateVrTip();
-    } else if (vrCatalog.visible || vrModal.visible || vrSettings.visible) {
+    } else if (anyVrWindowUp()) {
       setVrModal(false);
       setVrCatalog(false);
       setVrSettings(false);
+      setVrDetail(false);
     }
     if (renderer.xr.isPresenting) {
       // grabs, sticks and hover; the headset pose drives the camera

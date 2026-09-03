@@ -69,8 +69,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   level, then played from the start at normal speed; in a headset the
   button only says to load it from the desktop). An R in the info strip
   and a red REPLAY over the play area (in a headset, above the status
-  strip) mean the attempt is
-  replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
+  strip, which stands over the board) mean the attempt is replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
   replay-insert mode (your actions add to the replay instead of cutting it)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `R` dump the replay string to the console
@@ -220,6 +219,13 @@ intended start area.
   whatever you are looking at stays dead centre and comes closer or
   recedes, wherever the board has been panned to, and the rest grows or
   shrinks with it in perspective.
+- **the status strip** — the level's name, its pack and rank, and the
+  outcome, standing over the board just above the level, centred on where
+  the play starts, so it moves and scales with the board. When the level
+  has a text of its own (a NeoLemmix opening text, or its closing text
+  once the level is won), a three-lines icon off the strip's right end
+  opens it in a window with an OK to close; like every window it holds
+  the clock while it is up and gives it back the way it found it.
 - **A/X** (the pointing hand) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale. The in-scene windows -
   the world catalog, the restart question, the settings - open centred in
