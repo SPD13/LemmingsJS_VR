@@ -27,6 +27,11 @@ let GUI_BUTTONS = 13;         // the DOS panel; a Lemmix game states its own (pa
 // Crop it short and don't grow it, or the raised copy lifts the box's border
 // along with it.
 let GUI_LAST_BUTTON = GUI_BUTTONS - 1;
+// A Lemmix panel's split cells are two buttons, one over the other (frame
+// back over frame forward, and so on): each half hovers as its own tile,
+// the rows above `lowerTop` with the upper one.
+let GUI_SPLIT = new Set();
+let GUI_HALF = { upperBottom: 26, lowerTop: 28 };
 // The DOS panel's last box, inside its red border (x 207..312, y 17..38):
 // the minimap goes there, at the DOS scale of 16 px across and 8 down, so a
 // 1600x160 level is 100x20 and fits with no room for a frame outside it.
@@ -101,6 +106,9 @@ class GuiPanel {
     GUI_SHARED_BORDER = !(layout && layout.sharedBorder === false);
     GUI_CROP_H = GUI_SHARED_BORDER ? GUI_TILE_H + 1 : GUI_TILE_H;
     GUI_CROP_CY = GUI_TILE_TOP + GUI_CROP_H / 2;
+    GUI_SPLIT = new Set((layout && layout.splitCells) || []);
+    GUI_HALF = (layout && layout.halfRows) || { upperBottom: 26, lowerTop: 28 };
+    this.hoverHalf = null;     // "upper" / "lower" on a split cell, else null
     // the minimap's window: where a Lemmix panel put it, or the DOS box
     this.minimapSpec = layout ? layout.minimap || null : GUI_DOS_MINIMAP;
     this.minimap = null;
@@ -128,7 +136,7 @@ class GuiPanel {
     // Whether the artwork and counters stand off the panel at all: off, the
     // bar is the flat original. See setRelief.
     this.reliefOn = true;
-    this._tileGeoms = [];
+    this._tileGeoms = new Map();
   }
 
   /** A Lemmix panel says which pixels are pictures and which are digits
@@ -181,13 +189,19 @@ class GuiPanel {
     }));
     this._emptyGeom = this.resources.track(new THREE.BufferGeometry());
 
+    // one mesh per button - two for a split cell, one per half - so raising
+    // a button hides exactly its own artwork
     this.tileReliefs = [];
+    this.reliefParts = [];
     for (let i = 0; i < GUI_BUTTONS; i++) {
-      const mesh = new THREE.Mesh(this._tileGeometry(i) || this._emptyGeom,
-        this.reliefMaterial);
-      mesh.renderOrder = GUI_ORDER_RELIEF;
-      this.scene.add(mesh);
-      this.tileReliefs.push(mesh);
+      for (const half of (GUI_SPLIT.has(i) ? ["upper", "lower"] : [null])) {
+        const mesh = new THREE.Mesh(this._tileGeometry(i, half) || this._emptyGeom,
+          this.reliefMaterial);
+        mesh.renderOrder = GUI_ORDER_RELIEF;
+        this.scene.add(mesh);
+        this.tileReliefs.push(mesh);
+        this.reliefParts.push({ index: i, half });
+      }
     }
 
     this.hoverRelief = new THREE.Mesh(this._emptyGeom, this.reliefMaterial);
@@ -252,16 +266,17 @@ class GuiPanel {
     if (sum === this._digitSum) return;
     this._digitSum = sum;
     this.digitMask = this._buildDigitMask();
-    for (const geom of this._tileGeoms) {
+    for (const geom of this._tileGeoms.values()) {
       if (geom) geom.dispose();
     }
-    this._tileGeoms.length = 0;
+    this._tileGeoms.clear();
     for (let i = 0; i < this.tileReliefs.length; i++) {
-      this.tileReliefs[i].geometry = this._tileGeometry(i) || this._emptyGeom;
+      const part = this.reliefParts[i];
+      this.tileReliefs[i].geometry = this._tileGeometry(part.index, part.half) || this._emptyGeom;
     }
     if (this.hoverIndex != null) {
       this.hoverRelief.geometry =
-        this._tileGeometry(this.hoverIndex) || this._emptyGeom;
+        this._tileGeometry(this.hoverIndex, this.hoverHalf) || this._emptyGeom;
     }
   }
 
@@ -351,19 +366,49 @@ class GuiPanel {
     this.textMesh.visible = this.reliefOn && !!geom;
   }
 
-  /** Per-tile relief geometry (cached), for the raised hovered button. */
-  _tileGeometry(index) {
-    if (this._tileGeoms[index]) return this._tileGeoms[index];
+  /** The rows a raised copy of a button takes: its cell, or on a split cell
+   *  one of the halves (the line between them goes with the upper one). */
+  _vcrop(half) {
+    if (half === "upper") {
+      const y0 = GUI_TILE_TOP, y1 = GUI_HALF.lowerTop;
+      return { y0, h: y1 - y0, cy: (y0 + y1) / 2 };
+    }
+    if (half === "lower") {
+      const y0 = GUI_HALF.lowerTop, y1 = GUI_TILE_TOP + GUI_CROP_H;
+      return { y0, h: y1 - y0, cy: (y0 + y1) / 2 };
+    }
+    return { y0: GUI_TILE_TOP, h: GUI_CROP_H, cy: GUI_CROP_CY };
+  }
+
+  /** Which half of a split cell a panel row falls in; null on an ordinary cell. */
+  _halfAt(index, py) {
+    if (!GUI_SPLIT.has(index)) return null;
+    return py >= GUI_HALF.lowerTop ? "lower" : "upper";
+  }
+
+  /** Per-button relief geometry (cached), for the raised hovered button. */
+  _tileGeometry(index, half) {
+    const key = index + "/" + (half || "");
+    if (this._tileGeoms.has(key)) return this._tileGeoms.get(key);
     const W = this.canvas.width, H = this.canvas.height;
     const x0 = index * GUI_TILE_W, x1 = x0 + GUI_TILE_W;
+    const v = this._vcrop(half);
     const geom = buildExtrudedSpriteGeometry(
-      (x, y) => x >= x0 && x < x1 &&
+      (x, y) => x >= x0 && x < x1 && y >= v.y0 && y < v.y0 + v.h &&
         (this.iconMask[y * W + x] !== 0 ||
          (this.digitMask && this.digitMask[y * W + x] !== 0)),
       W, H, GUI_ICON_DEPTH);
     if (geom) this.resources.track(geom);
-    this._tileGeoms[index] = geom;
+    this._tileGeoms.set(key, geom);
     return geom;
+  }
+
+  /** Show or hide the artwork of one button (a half of a split cell) in its slot. */
+  _setPartVisible(index, half, visible) {
+    if (!this.tileReliefs || index == null) return;
+    this.reliefParts.forEach((p, i) => {
+      if (p.index === index && p.half === half) this.tileReliefs[i].visible = visible;
+    });
   }
 
   _layoutRelief() {
@@ -381,8 +426,8 @@ class GuiPanel {
         this.mesh.position.z + 0.2 * sx);
     }
     if (this.hoverIndex != null) {
-      this._layoutSocket(this.hoverIndex);
-      this._layoutHoverRelief(this.hoverIndex);
+      this._layoutSocket(this.hoverIndex, this.hoverHalf);
+      this._layoutHoverRelief(this.hoverIndex, this.hoverHalf);
     }
   }
 
@@ -413,26 +458,26 @@ class GuiPanel {
     return { x0, w: x1 - x0, cx: (x0 + x1) / 2 };
   }
 
-  _layoutSocket(index) {
+  _layoutSocket(index, half) {
     if (!this.socket || !this.mesh) return;
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
-    const crop = this._crop(index);
-    this.socket.scale.set((crop.w / cw) * pw, (GUI_CROP_H / ch) * ph, 1);
+    const crop = this._crop(index), v = this._vcrop(half);
+    this.socket.scale.set((crop.w / cw) * pw, (v.h / ch) * ph, 1);
     this.socket.position.set(
       this.mesh.position.x + (crop.cx / cw - 0.5) * pw,
-      this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * ph,
+      this.mesh.position.y + (0.5 - v.cy / ch) * ph,
       this.mesh.position.z + 0.1 * this._unit);
   }
 
   /** Same transform, grown about the tile centre and raised with the tile. */
-  _layoutHoverRelief(index) {
+  _layoutHoverRelief(index, half) {
     if (!this.hoverRelief || !this.mesh) return;
     const pw = this.mesh.scale.x, ph = this.mesh.scale.y;
     const sx = pw / this.canvas.width, sy = ph / this.canvas.height;
     const g = GUI_GROW_FOR(index);
     const cx = this._crop(index).cx; // same pivot as the raised copy
-    const cy = GUI_CROP_CY;
+    const cy = this._vcrop(half).cy;
     this.hoverRelief.scale.set(sx * g, -sy * g, sx * g * this.reliefDepth);
     this.hoverRelief.position.set(
       this.mesh.position.x - pw / 2 + cx * sx * (1 - g),
@@ -503,12 +548,12 @@ class GuiPanel {
   setHover(uv) {
     if (!this._ensureMesh()) return;
     const index = this._buttonIndexAt(uv);
-    if (index === this.hoverIndex) return;
+    const half = index == null ? null : this._halfAt(index, (1 - uv.y) * this.canvas.height);
+    if (index === this.hoverIndex && half === this.hoverHalf) return;
     // put the previously raised button back in its slot
-    if (this.tileReliefs && this.hoverIndex != null && this.tileReliefs[this.hoverIndex]) {
-      this.tileReliefs[this.hoverIndex].visible = this.reliefOn;
-    }
+    this._setPartVisible(this.hoverIndex, this.hoverHalf, this.reliefOn);
     this.hoverIndex = index;
+    this.hoverHalf = half;
     this.hoverTile.visible = index != null;
     if (this.socket) this.socket.visible = index != null;
     if (index == null) {
@@ -516,34 +561,33 @@ class GuiPanel {
       return;
     }
     // the button leaves its slot: hide it there, show the raised copy
-    if (this.tileReliefs && this.tileReliefs[index]) {
-      this.tileReliefs[index].visible = false;
-    }
+    this._setPartVisible(index, half, false);
     if (this.hoverRelief) {
-      const geom = this._tileGeometry(index);
+      const geom = this._tileGeometry(index, half);
       this.hoverRelief.visible = this.reliefOn && !!geom;
       if (geom) this.hoverRelief.geometry = geom;
     }
-    this._layoutHoverTile(index);
-    this._layoutSocket(index);
-    this._layoutHoverRelief(index);
+    this._layoutHoverTile(index, half);
+    this._layoutSocket(index, half);
+    this._layoutHoverRelief(index, half);
   }
 
-  _layoutHoverTile(index) {
+  _layoutHoverTile(index, half) {
     const cw = this.canvas.width, ch = this.canvas.height;
     const pw = this.mesh.scale.x, phh = this.mesh.scale.y;
-    // crop the texture to this button, with the frame edges that are its own
-    const crop = this._crop(index);
-    this.hoverTexture.repeat.set(crop.w / cw, GUI_CROP_H / ch);
-    this.hoverTexture.offset.set(crop.x0 / cw, 1 - (GUI_TILE_TOP + GUI_CROP_H) / ch);
+    // crop the texture to this button (or this half of a split cell), with
+    // the frame edges that are its own
+    const crop = this._crop(index), v = this._vcrop(half);
+    this.hoverTexture.repeat.set(crop.w / cw, v.h / ch);
+    this.hoverTexture.offset.set(crop.x0 / cw, 1 - (v.y0 + v.h) / ch);
     this.hoverTexture.needsUpdate = true;
     // match the button's footprint on the panel, grown a touch
     const grow = GUI_GROW_FOR(index);
     this.hoverTile.scale.set(
-      (crop.w / cw) * pw * grow, (GUI_CROP_H / ch) * phh * grow, 1);
+      (crop.w / cw) * pw * grow, (v.h / ch) * phh * grow, 1);
     this.hoverTile.position.set(
       this.mesh.position.x + (crop.cx / cw - 0.5) * pw,
-      this.mesh.position.y + (0.5 - GUI_CROP_CY / ch) * phh,
+      this.mesh.position.y + (0.5 - v.cy / ch) * phh,
       this.mesh.position.z + GUI_TILE_POP * this._unit
     );
   }
@@ -573,10 +617,13 @@ class GuiPanel {
   _applyReliefVisibility() {
     if (!this.tileReliefs) return; // applied once the relief is built
     const on = this.reliefOn;
-    this.tileReliefs.forEach((m, i) => { m.visible = on && i !== this.hoverIndex; });
+    this.tileReliefs.forEach((m, i) => {
+      const p = this.reliefParts[i];
+      m.visible = on && !(p.index === this.hoverIndex && p.half === this.hoverHalf);
+    });
     if (this.hoverRelief) {
       this.hoverRelief.visible =
-        on && this.hoverIndex != null && !!this._tileGeometry(this.hoverIndex);
+        on && this.hoverIndex != null && !!this._tileGeometry(this.hoverIndex, this.hoverHalf);
     }
     if (this.textMesh) {
       this.textMesh.visible = on && this.textMesh.geometry !== this._emptyGeom;
@@ -599,9 +646,9 @@ class GuiPanel {
     this.mesh.position.set(0, y, z);
     this._placed = true;
     if (this.hoverIndex != null) {
-      this._layoutHoverTile(this.hoverIndex);   // the selection may have moved a frame edge
-      this._layoutSocket(this.hoverIndex);
-      this._layoutHoverRelief(this.hoverIndex);
+      this._layoutHoverTile(this.hoverIndex, this.hoverHalf);   // the selection may have moved a frame edge
+      this._layoutSocket(this.hoverIndex, this.hoverHalf);
+      this._layoutHoverRelief(this.hoverIndex, this.hoverHalf);
     }
     this._layoutRelief();
     if (this.minimap) this.minimap.layout();
