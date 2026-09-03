@@ -60,8 +60,10 @@
     shadows: setting("shadows", "lem3d-shadows", true),  // NeoLemmix's skill shadows (a hotkey toggles them)
     music: setting("music", "lem3d-music", true),        // the music, apart from the sound (a hotkey toggles it)
     // Editing is the tagging workbench: the piece editor, the tagging marks
-    // in the catalog, the "validation mode" billing. Playing is the game.
-    edit: setting("edit", "lem3d-edit", false),
+    // in the catalog, the "validation mode" billing. Playing is the game,
+    // and every session starts on it: the mode is not remembered, only
+    // ?edit=1 (or the button, the key) selects editing.
+    edit: params.has("edit") ? setting("edit", "", false) : false,
     // The level, by its id in the tree (see library.js). A bare number in
     // ?level= is the old addressing, resolved with ?type= and ?group=.
     levelId: /\//.test(params.get("level") || "") ? params.get("level") : null,
@@ -1837,7 +1839,6 @@
 
   document.getElementById("btn-mode").addEventListener("click", () => {
     state.edit = !state.edit;
-    try { localStorage.setItem("lem3d-edit", state.edit ? "on" : "off"); } catch (e) {}
     renderMode();
   });
 
@@ -4048,7 +4049,6 @@
   function openPieceEditor() {
     if (!state.edit) {
       state.edit = true;
-      try { localStorage.setItem("lem3d-edit", "on"); } catch (err) {}
       renderMode(); // opens the editor with the mode
       return;
     }

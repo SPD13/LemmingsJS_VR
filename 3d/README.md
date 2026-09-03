@@ -123,8 +123,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   the default; editing is the tagging workbench — it bills itself as
   validation mode, opens the piece editor, and turns the catalog over to
   tagging status. `?edit=1` selects it too, and the piece-editor hotkey (J
-  by default) enters it, since the piece editor is its tool. Remembered in
-  localStorage.
+  by default) enters it, since the piece editor is its tool. The mode is
+  not remembered: every session starts on play.
 - Esc (the quit hotkey) or the globe icon opens the world library, which is also where
   the page starts when its URL names no level (at the root, and without a
   close until a level is picked). It is browsed the way the
