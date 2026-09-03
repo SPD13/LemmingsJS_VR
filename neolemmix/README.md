@@ -2,8 +2,16 @@
 
 The Lemmix engine (`lemmix/`) needs NeoLemmix's own files: the `styles/`
 graphics that levels reference, the panel and mask graphics in `gfx/`, the
-sound effects in `sound/`, and the music packs in `music/`. This folder is
-laid out like a NeoLemmix install so the downloads unpack straight into it.
+sound effects in `sound/`, and the music packs in `music/`.
+
+The easy way is the **setup page** (`3d/setup.html`, the Setup button of the
+3D page): it unpacks the NeoLemmix zip and the styles package into the
+browser's own storage and the game plays from there (the *static* asset
+mode, see the root README). Nothing lands in this folder then.
+
+For the *server* asset mode - the files on disk, served by the launcher or
+any web server - this folder is laid out like a NeoLemmix install so the
+downloads unpack straight into it.
 
 1. Download NeoLemmix and the styles package from
    https://www.neolemmix.com/?page=neolemmix (the music packs are linked

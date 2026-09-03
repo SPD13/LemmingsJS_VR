@@ -20,7 +20,7 @@
  * remembered; the filter searches the whole tree and opens whatever holds
  * a match; opening a gallery opens its branch.
  */
-(function () {
+Vfs.boot("../").then(function () {
   const ROOT = "../";
   const STYLES_INDEX = ROOT + "neolemmix/styles/index.json";
   const CARD_PX = 96;       // the miniature's larger side, before integer zoom
@@ -598,4 +598,4 @@
   }).catch((e) => { dom.note.textContent = "could not list the galleries: " + e.message; });
 
   window.__galleries = { files, get galleries() { return galleries; }, get current() { return current; }, openGallery, cards };
-})();
+});

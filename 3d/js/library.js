@@ -180,14 +180,26 @@ const LevelProgress = {
     return rec && typeof rec.best === "number" ? rec.best : null;
   },
 
-  /** Record a clear, keeping the fastest. Returns true if it is a new best. */
-  record(levelId, seconds) {
+  /**
+   * Record a clear, keeping the fastest time and the most lemmings saved
+   * (`saved`, when known). Returns true if the time is a new best.
+   */
+  record(levelId, seconds, saved) {
     const all = this.all();
     const rec = all[levelId] || { best: null, clears: 0 };
     const better = rec.best === null || seconds < rec.best;
-    all[levelId] = { best: better ? seconds : rec.best, clears: rec.clears + 1 };
+    const next = { best: better ? seconds : rec.best, clears: rec.clears + 1 };
+    const most = Math.max(rec.saved || 0, typeof saved === "number" ? saved : 0);
+    if (most) next.saved = most;
+    all[levelId] = next;
     this._write(all);
     return better;
+  },
+
+  /** The most lemmings saved on a level, or null. */
+  saved(levelId) {
+    const rec = this.all()[levelId];
+    return rec && typeof rec.saved === "number" ? rec.saved : null;
   },
 
   /** How many levels under a node are cleared. */
@@ -705,8 +717,9 @@ class WorldLibrary {
         tile.classList.add("cleared");
         const time = document.createElement("span");
         time.className = "lib-best";
-        time.textContent = "✔ " + LevelProgress.format(best);
-        time.title = "best clearing time";
+        const saved = LevelProgress.saved(level.id);
+        time.textContent = "✔ " + LevelProgress.format(best) + (saved !== null ? " · " + saved : "");
+        time.title = "best clearing time" + (saved !== null ? ", most lemmings saved" : "");
         label.appendChild(time);
       }
     }

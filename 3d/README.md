@@ -29,7 +29,9 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
 `?emboss=`, `?smooth=`, `?doors=`, `?skillbar=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
-`0`/`off`/`false`). Those are normally toggled with the buttons and
+`0`/`off`/`false`), and `?assets=static|server` - where `neolemmix/` and
+`levels/` come from: this browser's storage, filled on the setup page, or
+the web server (see "Setup" below). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them
 on a headset — its browser is a different machine with its own empty
 localStorage, and the buttons are DOM, so they cannot be reached from inside
@@ -63,6 +65,11 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   are kept for the diorama. A headset always gets the diorama, whatever the
   desktop shows, and the desktop comes back to its own view when the
   session ends.
+- the **Setup** button under it opens `setup.html` (see "Setup" below); the
+  footer at the bottom right says which asset mode is in force (`assets:
+  static` or `server`) with a link that reloads the page in the other one.
+  The world library shows the same footer, and a "setup" button next to
+  "rescan".
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
 - on a NeoLemmix level, with a skill selected and a lemming under the
@@ -231,6 +238,61 @@ Anything you have to deal with holds the clock while it is up: the catalog and
 either restart question, in both views. Only what was stopped gets restarted,
 so a game you had already paused stays paused, and two of them overlapping do
 not resume it between them.
+
+## Setup
+
+`setup.html` (the *Setup* button on the right edge; the page the 3D page
+sends you to by itself when nothing is installed yet) manages the two
+**asset modes** and the player's files.
+
+- **Assets**: *server* - `neolemmix/` and `levels/` are folders on the web
+  server, today's layout (the launcher, or the folders on disk with the
+  indexes written by `tools/`); *static* - they live in this browser's
+  storage, installed on this page, and `../sw.js`, a service worker at the
+  repo root, serves them to the game. `?assets=static|server` in the URL
+  chooses and is remembered (`lem3d-assets`); without a choice the page
+  takes *server* when the server answers for `levels/index.json`, *static*
+  otherwise - so a static host such as GitHub Pages needs no parameter. The
+  worker is registered in both modes and only intercepts in static mode: it
+  reads the mode from the database and is told when it changes, so a filled
+  store never shadows the server's files. A service worker needs
+  `localhost` or HTTPS (the launcher's, for a headset on the LAN); a hard
+  reload bypasses it for that load.
+- **NeoLemmix**: two rows, the engine zip (`gfx/`, `sound/`, `music/`, the
+  classic styles and its two level packs) and the styles package, each with
+  a red/green dot, a "get" button that saves the official zip through the
+  browser - neolemmix.com sends no CORS headers, so the page cannot download
+  it itself - and an "install zip…" button (or drop the zip on the row) that
+  unpacks it with fflate straight into the store, ~1 s for NeoLemmix, ~20 s
+  for the 92 MB styles package. Installed, the button reads "re-install
+  zip…" and a confirm precedes the replacement. Each zip entry is stored
+  under its repo path (`neolemmix/styles/…`, `levels/<dir>/…`) tagged with
+  the install that wrote it, so a re-install removes exactly the old files.
+- **Levels**: the installed level directories (name, engine, level count,
+  size, where from) with a delete button each (confirmed), and the ways in:
+  the Lemmings Plus packs (official zip, same two-step), the classic games
+  in one click from https://github.com/oklemenz/LemmingsJS (`lemmings/`
+  and `lemmings_ohNo/` file by file through jsDelivr), any zip, any folder.
+  A zip lands under the one folder its entries share, else under a folder
+  named after it; a collection wrapping packs in `levels/` and `music/`
+  keeps that layout, which the index collapses. After every change the page
+  rebuilds `levels/index.json` and `neolemmix/styles/index.json` in the
+  store with the same generators the launcher uses (`tools/levels-index.js`,
+  `tools/styles-index.js`, loaded as plain scripts here).
+- **Configuration**: download / upload of three JSON files - the controls
+  (`lemmings-3d-controls.json`, the hotkey dialog's own format), the
+  preferences (`lemmings-3d-preferences.json`: every `lem3d-*` setting the
+  page keeps - 3D effects, the 2D/3D default, sound and music, the VR bar's
+  place, the library's order and place, the asset mode) and the progress
+  (`lemmings-3d-progress.json`: the levels cleared with best time, most
+  lemmings saved and clear count, and the NeoLemmix talismans; an upload
+  merges, keeping the best of both and never dropping a clear).
+- The notice at the top says it: everything installed here is in this
+  browser's storage for this site address, and goes with the site's data
+  when the browser clears it. The page asks for persistent storage and shows
+  the usage. A red box appears when no service worker runs (not a secure
+  origin): installs still land in the store, but the game cannot play from
+  it there.
 
 ## VR (Phase 4)
 

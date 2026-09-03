@@ -14,7 +14,10 @@
  * the URL loads straight away, as a headset's bookmark or a replay link needs.
  */
 
-(function () {
+// Nothing runs before the asset store is settled: the service worker in
+// control, the asset mode known, and - static mode with nothing installed -
+// the setup page shown instead (see vfs.js).
+Vfs.boot("../", "setup.html").then(function (booted) {
   // lemmings live embedded mid-slab (sprite centered at TERRAIN_DEPTH/2), so
   // they walk inside the carved space rather than floating in front of it;
   // normal objects (hatch/exit/traps) sit just behind them at the same depth
@@ -76,6 +79,9 @@
     // and every session starts on it: the mode is not remembered, only
     // ?edit=1 (or the button, the key) selects editing.
     edit: params.has("edit") ? setting("edit", "", false) : false,
+    // where neolemmix/ and levels/ come from: "server" (the web server) or
+    // "static" (this browser's storage, through the service worker)
+    assets: booted.mode,
     // The level, by its id in the tree (see library.js). A bare number in
     // ?level= is the old addressing, resolved with ?type= and ?group=.
     levelId: /\//.test(params.get("level") || "") ? params.get("level") : null,
@@ -1815,6 +1821,20 @@
     layoutGuiPanel(); // the toolbar is sized to the viewport
   });
 
+  // the footers (the game view's, the world library's): the asset mode in
+  // force, and a link that reloads in the other one (the URL parameter is
+  // remembered, see vfs.js)
+  {
+    const other = state.assets === "static" ? "server" : "static";
+    const url = new URL(location.href);
+    url.searchParams.set(Vfs.PARAM, other);
+    for (const el of document.querySelectorAll(".assets-name")) el.textContent = state.assets;
+    for (const link of document.querySelectorAll(".assets-switch")) {
+      link.textContent = "switch to " + other;
+      link.href = url.href;
+    }
+  }
+
   const factory = new Lemmings.GameFactory("../");
   const profileFiles = new ProfileFiles(); // the depth profiles, one file per sprite gallery
   const raycaster = new THREE.Raycaster();
@@ -2600,7 +2620,7 @@
       if (won) {
         // the clock counts down; how long it took is the elapsed time
         const seconds = game.getGameTimer().getGameTime();
-        const record = LevelProgress.record(state.levelId, seconds);
+        const record = LevelProgress.record(state.levelId, seconds, result.survivors);
         best = " — " + LevelProgress.format(seconds) +
           (record ? " (best)" : "");
       }
@@ -4988,10 +5008,15 @@
     hud.loading.classList.add("hidden");
     hud.name.textContent = "no level loaded";
     hud.state.textContent = "choose a level in the world library";
+    if (state.assets === "static") {
+      Vfs.playable("../").then((ok) => {
+        if (!ok) hud.state.textContent = "nothing installed — open Setup (right edge) to add NeoLemmix and levels";
+      });
+    }
     setVrStatus({ name: "choose a level", meta: "", note: "", kind: "" });
     library.open({ path: "", locked: true });
   }
   // setAnimationLoop instead of window rAF: inside an XR session the
   // headset's frame loop (90Hz) drives the same fixed-step accumulator
   renderer.setAnimationLoop(animate);
-})();
+});
