@@ -21,12 +21,15 @@ class PieceEditor {
   /**
    * session: the app's per-level session object (session.profile is the
    * merged view of session.profileUrls; session.profileUrl the DOS
-   * tileset's file, null for a Lemmix level); files: the page's ProfileFiles.
+   * tileset's file, null for a Lemmix level); files: the page's ProfileFiles;
+   * opts.confirm(title, verb, action, body) asks before leaving the page
+   * with unsaved tags.
    */
-  constructor(session, files, timer) {
+  constructor(session, files, timer, opts) {
     this.s = session;
     this.files = files;
     this.timer = timer;
+    this.confirm = (opts && opts.confirm) || null;
     this.enabled = false;
     this.selectedId = null;
     this._wasRunning = false;
@@ -43,6 +46,7 @@ class PieceEditor {
     this.dom = {
       panel: document.getElementById("hud-editor"),
       info: document.getElementById("ed-info"),
+      files: document.getElementById("ed-files"),
       classBtns: Array.from(document.querySelectorAll("#hud-editor [data-class]")),
       autoBtn: document.getElementById("ed-auto"),
       embossBtn: document.getElementById("ed-emboss"),
@@ -60,7 +64,7 @@ class PieceEditor {
     this._onResetBtn = () => this.resetAll();
     this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
-    this._onGalleriesBtn = () => { window.location.href = this.galleriesUrl(); };
+    this._onGalleriesBtn = () => this.leaveTo(this.galleriesUrl());
     this.dom.classBtns.forEach((b) => b.addEventListener("click", this._onClassBtn));
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
@@ -255,7 +259,60 @@ class PieceEditor {
     return "galleries.html?gallery=" + encodeURIComponent(gallery) + "&piece=" + encodeURIComponent(key);
   }
 
+  /** Go to another page, asking first when a file holds unsaved tags. */
+  leaveTo(href) {
+    const dirty = this.files.dirtyUrls();
+    if (!dirty.length || !this.confirm) { window.location.href = href; return; }
+    this.confirm("Leave with unsaved tags?", "leave",
+      () => { window.location.href = href; },
+      "Unsaved changes in " + dirty.map(ProfileStore.fileName).join(", ") +
+      " are lost when this page is left. Save or export them first to keep them.");
+  }
+
+  /** The galleries this level's pieces come from: a link, an unsaved mark, a download each. */
+  _renderFiles() {
+    const box = this.dom.files;
+    if (!box) return;
+    box.textContent = "";
+    const urls = this._urls;
+    if (!urls.length) return;
+    for (const url of urls) {
+      const gallery = ProfileStore.galleryForUrl(url);
+      const dirty = this.files.isDirty(url);
+      const profile = this.files.get(url);
+      const tags = Object.keys(profile.terrain.byId).length + Object.keys(profile.emboss.byId).length;
+      const line = document.createElement("div");
+      line.className = "ed-file";
+      const a = document.createElement("a");
+      a.href = "galleries.html?gallery=" + encodeURIComponent(gallery);
+      a.textContent = gallery.startsWith("nx:") ? gallery.slice(3) : gallery;
+      a.title = "open this gallery (" + ProfileStore.fileName(url) + ")";
+      a.addEventListener("click", (e) => { e.preventDefault(); this.leaveTo(a.href); });
+      line.appendChild(a);
+      if (dirty) {
+        const m = document.createElement("span");
+        m.className = "ed-dirty";
+        m.textContent = "● unsaved";
+        m.title = "changed since it was last saved";
+        line.appendChild(m);
+      }
+      const c = document.createElement("span");
+      c.className = "ed-count";
+      c.textContent = tags + (tags === 1 ? " tag" : " tags") + (this.files.exists(url) ? "" : " · no file yet");
+      line.appendChild(c);
+      const dl = document.createElement("a");
+      dl.className = "ed-dl";
+      dl.href = "#";
+      dl.textContent = "⤓ json";
+      dl.title = "download " + ProfileStore.fileName(url);
+      dl.addEventListener("click", (e) => { e.preventDefault(); this.files.download(url); });
+      line.appendChild(dl);
+      box.appendChild(line);
+    }
+  }
+
   _renderInfo() {
+    this._renderFiles();
     const selected = this.selectedId != null;
     const key = selected ? this._key(this.selectedId) : null;
     renderTagButtons(this.dom, key, this.s.profile, selected);

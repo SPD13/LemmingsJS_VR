@@ -177,10 +177,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   (`profiles/<pack>-g<set>.json`) or a NeoLemmix style folder's
   (`profiles/nx-<style>.json`, pieces keyed `<style>:<piece>`), and covers
   every level that draws the sprite. A Lemmix level reads the file of each
-  style its pieces come from (the editor's info line names the file);
-  "save" posts every changed file to the launcher, "export JSON" downloads
-  them for `profiles/`. "galleries" (or "this piece in its gallery") opens
-  the sprite galleries page.
+  style its pieces come from: the panel lists them, each a link to its
+  gallery, with an "unsaved" mark once its file has changes and a "json"
+  link that downloads that file alone (the editor's info line names the
+  selected piece's file). "save" posts every changed file to the launcher,
+  "export JSON" downloads them all for `profiles/`. "galleries" (or "this
+  piece in its gallery") opens the sprite galleries page; leaving for it
+  with unsaved tags asks first, since they only live in this page.
 - `galleries.html` is the sprite galleries page, web only: down the left a
   tree of every gallery — the classic games, a directory per pack holding
   its tilesets; the NeoLemmix styles, a directory per author (the prefix of
