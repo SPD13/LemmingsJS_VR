@@ -167,6 +167,7 @@
     mesh.renderOrder = GUI_ORDER_BAR_TOOL;
     mesh.visible = false;
     mesh.userData.state = { on: false, hovered: false };
+    mesh.userData.draw = draw; // shared with the HUD's twin of this button
     mesh.userData.repaint = () => {
       draw(cx, mesh.userData.state);
       tex.needsUpdate = true;
@@ -262,9 +263,6 @@
   // restart. They ride the toolbar, so they keep station with the bar
   // wherever it is dragged or unpinned to.
 
-  // Over the play area: pause (which becomes play once it is paused) and
-  // restart. They ride the diorama, so they pan and scale with the board they
-  // belong to, and they are sized in game pixels like everything under it.
   const vrPauseBtn = makeIconButton("vr-pause", guiRoot, (cx, st) => {
     const paused = st.on;
     barToolIcon(cx, st.hovered, st.hovered ? "#1d5030" : "#12331d", "#6fce7e", (c) => {
@@ -455,6 +453,57 @@
   const vrLeftTools = [barLockBtn, barMoveBtn, vrSettingsBtn];
   const vrRightTools = [vrWorldsBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
   const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
+
+  /**
+   * A HUD button wearing an icon in the VR bar's style: a painter (usually
+   * a VR button's own, so the two views share one look) on a small canvas.
+   * Returns a repaint that takes the icon's state (on: paused, muted);
+   * hover comes from the mouse.
+   */
+  function iconizeHudButton(button, draw, title) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 64;
+    const cx = cv.getContext("2d");
+    button.textContent = "";
+    button.appendChild(cv);
+    button.classList.add("icon");
+    button.title = title;
+    const st = { on: false, hovered: false };
+    const repaint = (patch) => {
+      Object.assign(st, patch || {});
+      draw(cx, st);
+    };
+    button.addEventListener("mouseenter", () => repaint({ hovered: true }));
+    button.addEventListener("mouseleave", () => repaint({ hovered: false }));
+    repaint();
+    return repaint;
+  }
+  // a crosshair: the view back to where the level starts (desktop only;
+  // in a headset that is the recentre, which has no button on the bar)
+  const resetViewIcon = (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
+      c.beginPath();
+      c.arc(32, 32, 13, 0, Math.PI * 2);
+      c.moveTo(32, 10); c.lineTo(32, 20);
+      c.moveTo(32, 44); c.lineTo(32, 54);
+      c.moveTo(10, 32); c.lineTo(20, 32);
+      c.moveTo(44, 32); c.lineTo(54, 32);
+      c.stroke();
+      c.fillStyle = "#cdd6e4";
+      c.beginPath();
+      c.arc(32, 32, 3.5, 0, Math.PI * 2);
+      c.fill();
+    });
+  };
+  const hudIcons = {
+    prev: iconizeHudButton(document.getElementById("btn-prev"), vrPrevBtn.userData.draw, "previous level (,)"),
+    restart: iconizeHudButton(document.getElementById("btn-restart"), vrRestartBtn.userData.draw, "restart the level"),
+    next: iconizeHudButton(document.getElementById("btn-next"), vrNextBtn.userData.draw, "next level (.)"),
+    pause: iconizeHudButton(hud.pauseBtn, vrPauseBtn.userData.draw, "pause / resume (space)"),
+    worlds: iconizeHudButton(document.getElementById("btn-library"), vrWorldsBtn.userData.draw, "world library (w)"),
+    sound: iconizeHudButton(document.getElementById("btn-sound"), vrMuteBtn.userData.draw, "sound on / off"),
+    view: iconizeHudButton(document.getElementById("btn-view"), resetViewIcon, "reset the view (Home)"),
+  };
   // the sound column keeps its own place, so it is not in the row above, but
   // it is pressed like the rest
   const vrWidgets = vrButtons.concat([vrMuteBtn]);
@@ -1366,9 +1415,7 @@
   audio.setFileRoot("../");
   const audioResources = {}; // one GameResources per game type for ADLIB data
   const soundBtn = document.getElementById("btn-sound");
-  const renderSoundBtn = () => {
-    soundBtn.textContent = "sound: " + (audio.enabled ? "on" : "off");
-  };
+  const renderSoundBtn = () => hudIcons.sound({ on: !audio.enabled });
   soundBtn.addEventListener("click", () => {
     audio.setEnabled(!audio.enabled);
     renderSoundBtn();
@@ -1925,6 +1972,7 @@
       simWasRunning = true;
       game.getGameTimer().suspend();
     }
+    syncPauseLabel();
 
     // Camera: frame the level's intended start position - but never during a
     // session, where the camera is the headset. Writing desktop coordinates
@@ -3093,7 +3141,7 @@
     if (!session) return;
     const timer = session.game.getGameTimer();
     timer.toggle();
-    hud.pauseBtn.textContent = timer.isRunning() ? "pause" : "resume";
+    hudIcons.pause({ on: !timer.isRunning() });
   }
 
   // ------------------------------------------------------- holding the sim
@@ -3112,8 +3160,7 @@
 
   function syncPauseLabel() {
     if (!session) return;
-    hud.pauseBtn.textContent =
-      session.game.getGameTimer().isRunning() ? "pause" : "resume";
+    hudIcons.pause({ on: !session.game.getGameTimer().isRunning() });
   }
 
   function holdSim(who) {
