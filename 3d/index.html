@@ -31,32 +31,18 @@
     color: #ff3b3b; border: 2px solid #ff3b3b; border-radius: 6px; background: rgba(40, 8, 8, 0.75);
     padding: 4px 14px; font: bold 15px monospace; letter-spacing: 3px; pointer-events: none; z-index: 5; }
   #replay-badge[hidden] { display: none; }
-  /* the folding panels down the right edge: each is a button that unfolds
-     into its panel, which folds back once the mouse has left it */
-  .fold { right: 12px; padding-top: 26px; }
-  .fold.folded { padding: 0; border: none; background: transparent; }
-  /* over the next panel's button, and opaque so it does not show through */
-  .fold:not(.folded) { z-index: 11; background: #0e121a; }
-  .fold.folded .fold-body, .fold:not(.folded) .fold-open { display: none; }
-  .fold-close {
-    position: absolute; top: 5px; right: 6px; padding: 0 6px; line-height: 16px;
-    color: #8fa1bb; border-color: transparent; background: transparent;
-  }
-  .fold-close:hover { color: #f0f3f8; background: #263043; border-color: #33405a; }
-  #hud-keys { top: 12px; color: #8fa1bb; text-align: right; }
+  /* the panel down the right edge: the page's own switches as icon buttons
+     (the left panel's look), two of which open a drawer under the row - the
+     key hints and the 3D effects - that closes once the mouse has left */
+  #hud-right { top: 12px; right: 12px; max-width: 560px; text-align: right; }
+  #hud-right .btnrow { margin-top: 0; justify-content: flex-end; }
+  #hud-right a { text-decoration: none; }
+  .drawer { margin-top: 8px; padding-top: 8px; border-top: 1px solid #2a3446; }
+  .drawer[hidden] { display: none; }
+  #hud-keys { color: #8fa1bb; }
   #hud-keys b { color: #cdd6e4; font-weight: 600; }
-  /* the controls configuration button, second down the right edge, under "controls" */
-  #hud-controls { position: absolute; top: 46px; right: 12px; z-index: 10; }
-  #hud-fx { top: 80px; }
-  #hud-fx .btnrow { margin-top: 0; }
-  /* the mode switch, fourth down the right edge */
-  #hud-mode { position: absolute; top: 114px; right: 12px; z-index: 10; }
-  /* the 2D/3D switch, fifth down: the flat view of the original, or the diorama */
-  #hud-view { position: absolute; top: 148px; right: 12px; z-index: 10; }
-  #hud-setup { position: absolute; top: 182px; right: 12px; z-index: 10; }
-  #hud-setup a { text-decoration: none; }
   /* in 2D the 3D effects have nothing to show, and the controls read differently */
-  body.flat #hud-fx { display: none; }
+  body.flat #btn-fx, body.flat #hud-fx { display: none; }
   body.flat .k3d, body:not(.flat) .k2d { display: none; }
   .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btnrow button { white-space: nowrap; }
@@ -188,7 +174,7 @@
   .assets-foot a:hover { color: #a9e6f4; text-decoration: underline; }
   #hud-editor:not([hidden]) ~ #hud-assets { display: none; } /* the editor panel takes that corner */
   #lib-assets { position: fixed; z-index: 16; }
-  #lib-setup a { text-decoration: none; }
+
   #hud-editor h1 { font-size: 13px; margin: 0 0 4px; color: #ffd866; letter-spacing: 0.06em; }
   #ed-info { color: #cdd6e4; min-height: 16px; margin-bottom: 4px; }
   #hud-editor button.active { background: #4a4326; border-color: #ffd866; color: #ffd866; }
@@ -228,6 +214,7 @@
     <button id="btn-library" class="icon"></button>
     <button id="btn-sound" class="icon"></button>
     <button id="btn-view" class="icon"></button>
+    <button id="btn-flat" class="icon"></button>
     <input id="replay-file" type="file" accept=".nxrp" hidden>
   </div>
 </div>
@@ -239,7 +226,7 @@
     <span class="lib-spacer"></span>
     <button id="lib-order">order: level</button>
     <button id="lib-rescan">rescan</button>
-    <span id="lib-setup"><a href="setup.html"><button title="NeoLemmix, the level packs and your configuration">setup</button></a></span>
+    <button id="lib-setup" title="NeoLemmix, the level packs and your configuration">setup</button>
     <button id="lib-close">close</button>
   </div>
   <div id="lib-status">&nbsp;</div>
@@ -247,33 +234,26 @@
   <div id="lib-assets" class="hud assets-foot" title="where NeoLemmix and the levels come from (see Setup)">assets: <b class="assets-name">…</b> · <a class="assets-switch" href="#">switch</a></div>
 </div>
 
-<div id="hud-keys" class="hud fold folded">
-  <button class="fold-open">controls</button>
-  <div class="fold-body">
-  <button class="fold-close" title="hide">&times;</button>
-  <span class="k3d"><b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br></span>
-  <span class="k2d"><b>drag</b>/<b>right-drag</b>/<b>arrows</b> scroll &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br></span>
-  <b>click</b> lemming: assign skill &middot; panel: as in game<br>
-  <span id="hud-keys-hotkeys"></span>
+<div id="hud-right" class="hud">
+  <div class="btnrow">
+    <button id="btn-hints" class="icon"></button>
+    <button id="btn-controls" class="icon"></button>
+    <button id="btn-fx" class="icon"></button>
+    <button id="btn-mode" class="icon"></button>
+    <button id="btn-setup" class="icon"></button>
   </div>
-</div>
-
-<div id="hud-controls"><button id="btn-controls" title="the keyboard's keys and the headset's controllers: NeoLemmix's, and yours to change">configure controls</button></div>
-
-<div id="hud-mode"><button id="btn-mode">mode: play</button></div>
-
-<div id="hud-view"><button id="btn-view2d" title="the flat view of the original, or the diorama">2D</button></div>
-<div id="hud-setup"><a href="setup.html"><button id="btn-setup" title="NeoLemmix, the level packs and your configuration">Setup</button></a></div>
-
-<div id="hud-fx" class="hud fold folded">
-  <button class="fold-open">3D effects</button>
-  <div class="fold-body">
-    <button class="fold-close" title="hide">&times;</button>
+  <div id="hud-keys" class="drawer" hidden>
+    <span class="k3d"><b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br></span>
+    <span class="k2d"><b>drag</b>/<b>right-drag</b>/<b>arrows</b> scroll &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br></span>
+    <b>click</b> lemming: assign skill &middot; panel: as in game<br>
+    <span id="hud-keys-hotkeys"></span>
+  </div>
+  <div id="hud-fx" class="drawer" hidden>
     <div class="btnrow">
-      <button id="btn-emboss">3D terrain: on</button>
-      <button id="btn-doors">3D doors: on</button>
-      <button id="btn-smooth">smooth: on</button>
-      <button id="btn-skillbar">3D skills bar: on</button>
+      <button id="btn-emboss" class="icon"></button>
+      <button id="btn-doors" class="icon"></button>
+      <button id="btn-smooth" class="icon"></button>
+      <button id="btn-skillbar" class="icon"></button>
     </div>
   </div>
 </div>

@@ -44,7 +44,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   reset view (all of these
   also work inside a controller-less VR session, moving the diorama instead
   of the camera)
-- **2D**: the button fifth down the right edge switches to the flat view of
+- **2D**: the last icon of the top-left panel (a flat card) switches to the flat view of
   the original - the level square on, one screen pixel per level pixel at
   the zoom, the terrain the level's picture, entrances and exits the
   sprites the original draws - with everything else of this page: the
@@ -52,7 +52,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   and the skill shadows (drawn flat over the picture). Drag with either
   button or the arrows to scroll (the view stops at the level's edges, as
   the original's does), wheel or PgUp/PgDn to zoom about the pointer, Home
-  or a double right-click to start over. The button then reads **3D** and
+  or a double right-click to start over. The icon then shows a cube and
   takes the diorama back, from the same place. The change is animated
   either way, under a second: the slab grows out of the picture (or sinks
   back into it) while the camera swings from square-on to the diorama's
@@ -60,12 +60,17 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   narrow enough it passes for the orthographic one; the doors and the
   water simply appear halfway up and go at the start of the way down. The
   choice is remembered
-  (`lem3d-flat`; `?flat=1` asks for it in the URL). The "3D effects" fold
+  (`lem3d-flat`; `?flat=1` asks for it in the URL). The "3D effects" icon
   is out of the way in 2D, since none of them shows there, and its settings
   are kept for the diorama. A headset always gets the diorama, whatever the
   desktop shows, and the desktop comes back to its own view when the
   session ends.
-- the **Setup** button under it opens `setup.html` (see "Setup" below); the
+- the **right panel**, the left one's twin: five icons - the key hints (a
+  keyboard) and the 3D effects (a relief profile) each open a drawer under
+  the row that closes a couple of seconds after the mouse has left, the
+  gamepad opens the controls configuration, the pencil switches play and
+  edit mode (yellow while editing), the gear opens `setup.html` (see
+  "Setup" below); the
   footer at the bottom right says which asset mode is in force (`assets:
   static` or `server`) with a link that reloads the page in the other one.
   The world library shows the same footer, and a "setup" button next to
@@ -118,7 +123,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   Alt the athlete info in the panel while held, Esc the world library; the
   page's own view keys sit on keys the layout leaves free (Home reset the
   view, PgUp/PgDn zoom, V recentre in VR, J the piece editor, K its class
-  cycle). "configure controls" (top right, under "controls") opens the
+  cycle). The gamepad icon of the right panel opens the
   configuration. Its Keyboard tab is laid out
   like NeoLemmix's: the list of keys with their functions, a function and
   its detail for the chosen key, "show unassigned keys", "find key" (press
@@ -146,7 +151,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
   stops to ask is no longer a shortcut.
-- "mode" (top right, under "3D effects") switches between playing and
+- the pencil icon of the right panel switches between playing and
   editing. Playing is the game and is
   the default; editing is the tagging workbench — it bills itself as
   validation mode, opens the piece editor, and turns the catalog over to
@@ -175,8 +180,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   NeoLemmix's own mechanics, with NeoLemmix's skill panel in place of the
   DOS one; they need the styles and player assets described in the root
   README under "Levels and assets".
-- "3D effects" (top right, under "configure controls") unfolds the four render
-  switches. "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
+- the relief icon of the right panel opens the four render switches, icons
+  green when on and grey when off. "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
   count, so turn it off if the frame rate suffers; individual pieces can
@@ -241,7 +246,7 @@ not resume it between them.
 
 ## Setup
 
-`setup.html` (the *Setup* button on the right edge; the page the 3D page
+`setup.html` (the gear icon of the right panel; the page the 3D page
 sends you to by itself when nothing is installed yet) manages the two
 **asset modes** and the player's files.
 
