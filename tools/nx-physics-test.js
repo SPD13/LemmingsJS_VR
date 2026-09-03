@@ -49,6 +49,8 @@ function makeGame(level, x, y, dx, skills) {
   return game;
 }
 
+const BASH_END_COUNT = 11; // BasherEnd's pixels
+
 function run(game, frames, onFrame) {
   for (let f = 0; f < frames; f++) { game.update(); if (onFrame && onFrame(f) === false) break; }
 }
@@ -421,6 +423,31 @@ async function main() {
     check("a new action at 120 replaces the future", game.recorded.length === 1 && game.recorded[0].skill === "BUILDER" && game.recorded[0].frame === 120);
     run(game, 100);
     check("...and the old digger never fires", game.skillCount("DIGGER") === 5 && game.skillCount("BUILDER") === 4);
+  }
+
+  // ================= skill shadows (shadows.js)
+
+  // --- a builder's shadow: twelve bricks of six pixels, the terrain untouched
+  {
+    const level = makeLevel(200, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["BUILDER", "BASHER", "DIGGER", "BOMBER"]);
+    run(game, 30);
+    const L = game.lemmings[0], before = solidCount(level), x0 = L.x, y0 = L.y, action = L.action;
+    const sh = Lemmix.Shadows.compute(game, L, "BUILDER");
+    check("builder shadow: 12 bricks x 6 low pixels rising a row each", sh.low.length === 72 && sh.high.length === 0 &&
+      sh.low.every(([x, y]) => y < y0 && y >= y0 - 12) && Math.max(...sh.low.map((p) => p[0])) === x0 + 2 * 11 + 5 && Math.min(...sh.low.map((p) => p[1])) === y0 - 12, { n: sh.low.length, maxX: Math.max(...sh.low.map((p) => p[0])) - x0 });
+    check("...and leaves the game as it was", solidCount(level) === before && L.x === x0 && L.y === y0 && L.action === action);
+    // --- a digger through the 40-px floor: a hole outline, high pixels only
+    const dig = Lemmix.Shadows.compute(game, L, "DIGGER");
+    check("digger shadow: the sides and the bottom of the hole, over terrain", dig.high.length > 20 && dig.low.length === 0 &&
+      dig.high.every(([x, y]) => Math.abs(x - x0) === 4 || y === Math.max(...dig.high.map((p) => p[1]))), { n: dig.high.length });
+    // --- a bomber: the crater outline, 72 pixels
+    const bomb = Lemmix.Shadows.compute(game, L, "BOMBER");
+    check("bomber shadow: the crater's outline", bomb.high.length > 0 && bomb.high.every(([x, y]) => Math.abs(x - x0) <= 8 && y >= y0 - 14 && y <= y0 + 7), { n: bomb.high.length });
+    // --- a walker on flat ground bashes nothing: the tunnel's end only
+    const bash = Lemmix.Shadows.compute(game, L, "BASHER");
+    check("basher shadow on open ground: one stroke and the tunnel's end", bash.high.length === 12 + BASH_END_COUNT, { n: bash.high.length });
+    check("no shadow for a skill without one", Lemmix.Shadows.compute(game, L, "CLIMBER").high.length === 0 && Lemmix.Shadows.compute(game, L, "CLIMBER").low.length === 0);
   }
 
   console.log(passed + " passed, " + failed + " failed");
