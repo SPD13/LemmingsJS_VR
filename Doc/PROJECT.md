@@ -37,7 +37,7 @@ Everything the port adds lives in `3d/`:
     gui.js      703   the original skill panel, extruded and made pickable
     minimap.js  227   the minimap in the panel's last box: map, dots, view frame
     cursor.js   121   NeoLemmix's cursor: a cross, a square over a lemming, for both engines
-    hotkeys.js  628   NeoLemmix's configurable hotkeys: the table, its three layouts, the dialog
+    hotkeys.js  740   the controls: NeoLemmix's hotkeys and the headset's inputs, one table, the dialog
     vr.js       549   WebXR: session, placement, controllers, thumbsticks
     terrain.js  469   destructible extruded terrain, greedy-meshed in chunks
     library.js  441   the world catalog, level progress, level miniatures
@@ -233,7 +233,14 @@ there. The dialog (`HotkeyDialog`, FEditHotkeys.pas) lists keys and
 functions with a Lemmix or 3D view tag, edits the chosen key's function and
 detail, finds a key by pressing it, shows unassigned keys and the keyboard's
 own labels (`navigator.keyboard.getLayoutMap`), and applies a layout; the
-table lives in localStorage (`lem3d-hotkeys`).
+table lives in localStorage (`lem3d-hotkeys`). The headset's controllers
+are in the same table under their own codes (`VrPointA`, `VrFreeStick`,
+...): `vr.js` reports the face buttons and stick clicks by the hand's role
+on their edges and while held (`onVrButton`, `onVrButtonHeld`) and the
+thumbsticks by role (`onStick`), and `app.js` looks each up - a button runs
+its function like a key (the held filters through the same set of inputs
+down, the dollies while held), a stick pans, tilts or dollies. The dialog's
+VR tab edits them, offering a stick only the stick functions.
 
 **The cursor** (`cursor.js`) is NeoLemmix's whenever its pictures are
 installed (`neolemmix/gfx/cursor`, with the 32 px twins of `cursor-hr` for

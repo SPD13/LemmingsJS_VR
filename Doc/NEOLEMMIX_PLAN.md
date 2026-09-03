@@ -191,7 +191,9 @@ From `3d/js/app.js`, `gui.js`, `bridge.js`, `portals.js`, `depth.js`, `terrain.j
   table with its three layouts (traditional by default), the held filters
   (direction, walkers only, athlete info), save/load state, the special
   skips, save replay as a file, and the configuration dialog with Lemmix /
-  3D view tags, kept in localStorage; both engines, keys in VR too.
+  3D view tags, kept in localStorage; both engines, keys in VR too. The
+  same table holds the headset's controllers (face buttons, stick clicks,
+  thumbsticks by the hand's role), edited on the dialog's VR tab.
 
 Done on branch `lemmix`: Phase 0 (assets fetched, ignored by git; README
 says where from), Phase 1 (`levels/` directory, index, directory-style

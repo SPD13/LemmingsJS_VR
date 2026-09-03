@@ -3627,45 +3627,72 @@
       guiRoot.position.copy(barDragFrom)
         .add(worldDelta.clone().applyQuaternion(q.invert()));
     },
-    // the pointing hand's stick pans, the other tilts (vr.js decides which) -
+    // a thumbstick does what the controls table says (pan, tilt or dolly) -
     // except while the catalog is up, when either stick scrolls its list and
     // neither one moves the board behind it
-    onStick: (role, x, y, seconds) => {
+    onStick: (code, x, y, seconds) => {
       if (vrCatalog.visible) {
         scrollVrCatalog(-y * VR_CAT_SCROLL * seconds);
         return;
       }
       if (!session) return;
-      if (role === "tilt") tiltDioramaBy(x, y, seconds);
-      else panDioramaBy(x, y, seconds);
+      const b = hotkeys.get(code);
+      if (!b) return;
+      if (b.action === "vr_tilt") tiltDioramaBy(x, y, seconds);
+      else if (b.action === "vr_pan") panDioramaBy(x, y, seconds);
+      else if (b.action === "vr_zoom" && y) dollyVr(Math.sign(y), Math.abs(y) * seconds);
     },
-    // The free hand's face buttons dolly the board along the line of sight:
-    // the point of it being looked at - wherever the board has been panned
-    // to - comes closer or recedes, staying dead centre, and the rest grows
-    // or shrinks with it in perspective. (Scaling about the level's focus,
-    // as the keys do, pulls a panned board toward its middle instead.) A
-    // gaze off the board dollies its focus point. Not while a window is up,
-    // which owns the hands.
-    onZoom: (dir, seconds) => {
-      if (!session || anyVrWindowUp()) return;
-      const head = vr.lastHeadPose;
-      if (!head) return;
-      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(head.quat);
-      const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(dioramaRoot.quaternion);
-      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, dioramaFocusWorld());
-      const point = new THREE.Ray(head.pos, gaze).intersectPlane(plane, new THREE.Vector3())
-        || dioramaFocusWorld();
-      const line = point.sub(head.pos);
-      const dist = line.length();
-      if (dist < 1e-4) return;
-      const next = THREE.MathUtils.clamp(
-        dist / Math.pow(VR_ZOOM_RATE, dir * seconds), VR_ZOOM_NEAR, VR_ZOOM_FAR);
-      dioramaRoot.position.addScaledVector(line.normalize(), next - dist);
+    // the face buttons and stick clicks: a function from the controls table
+    // on the press, the held filters through the set of inputs down, the
+    // dollies for as long as the button stays down
+    onVrButton: (code, down) => {
+      if (down) {
+        const b = hotkeys.get(code);
+        if (!b) return;
+        const a = Hotkeys.ACTION_BY_ID.get(b.action);
+        heldCodes.add(code);
+        if (a && a.held) checkShifts();
+        else if (b.action !== "vr_dolly_in" && b.action !== "vr_dolly_out") {
+          // a window up owns the hands; a recentre is the way out of anything
+          if (!anyVrWindowUp() || b.action === "recenter_vr") runHotkey(b);
+        }
+      } else keyUp(code);
+    },
+    onVrButtonHeld: (code, seconds) => {
+      const b = hotkeys.get(code);
+      if (!b) return;
+      if (b.action === "vr_dolly_in") dollyVr(1, seconds);
+      else if (b.action === "vr_dolly_out") dollyVr(-1, seconds);
     },
     placeDiorama: placeDioramaForXR,
     // a recentre brings the windows to the new view along with the board
     onRecenter: (headPose) => placeVrWindows(headPose),
   });
+
+  /**
+   * A dolly: the board slides along the line of sight, so the point of it
+   * being looked at - wherever the board has been panned to - comes closer
+   * or recedes, staying dead centre, and the rest grows or shrinks with it
+   * in perspective. (Scaling about the level's focus, as the keys do, pulls
+   * a panned board toward its middle instead.) A gaze off the board dollies
+   * its focus point. Not while a window is up, which owns the hands.
+   */
+  function dollyVr(dir, seconds) {
+    if (!session || anyVrWindowUp()) return;
+    const head = vr.lastHeadPose;
+    if (!head) return;
+    const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(head.quat);
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(dioramaRoot.quaternion);
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, dioramaFocusWorld());
+    const point = new THREE.Ray(head.pos, gaze).intersectPlane(plane, new THREE.Vector3())
+      || dioramaFocusWorld();
+    const line = point.sub(head.pos);
+    const dist = line.length();
+    if (dist < 1e-4) return;
+    const next = THREE.MathUtils.clamp(
+      dist / Math.pow(VR_ZOOM_RATE, dir * seconds), VR_ZOOM_NEAR, VR_ZOOM_FAR);
+    dioramaRoot.position.addScaledVector(line.normalize(), next - dist);
+  }
 
   function togglePause() {
     if (!session) return;
@@ -3760,12 +3787,12 @@
    * this browser. A headset gets the keys too: the keyboard still reaches
    * the page while it presents.
    */
-  const hotkeys = new Hotkeys.HotkeyManager();
+  const hotkeys = new Hotkeys.HotkeyManager(); // the keyboard's keys and the headset's inputs
   const hotkeyDialog = new Hotkeys.HotkeyDialog(hotkeys, {
     onOpen: () => { releaseHeldKeys(); holdSim("hotkeys"); },
     onClose: () => { releaseSim("hotkeys"); refreshKeyHints(); },
   });
-  document.getElementById("btn-hotkeys").addEventListener("click", () => hotkeyDialog.open());
+  document.getElementById("btn-controls").addEventListener("click", () => hotkeyDialog.open());
   hotkeys.onChange = () => refreshKeyHints();
 
   /** The tooltips and the controls panel name the keys as they are set. */
@@ -3784,7 +3811,7 @@
       const add = (id, label, mod) => { const n = hotkeys.keyNameFor(id, mod); if (n) parts.push("<b>" + n + "</b> " + label); };
       add("pause", "pause"); add("skip", "step", 1); add("restart", "restart"); add("fastforward", "fast forward");
       add("previous_skill", "prev skill"); add("next_skill", "next skill"); add("quit", "library"); add("save_replay", "save replay");
-      hint.innerHTML = parts.join(" &middot; ") + (parts.length ? " &middot; " : "") + "<b>configure hotkeys</b> (below) sets them all";
+      hint.innerHTML = parts.join(" &middot; ") + (parts.length ? " &middot; " : "") + "<b>configure controls</b> (below) sets them all";
     }
   }
   for (const [id, action] of [["btn-prev", "previous_level"], ["btn-next", "next_level"], ["btn-pause", "pause"],
@@ -3968,7 +3995,7 @@
     if (!a || a.held) return false;
     if (!session) {
       // without a level on the board, only what does not need one
-      if (b.action === "quit") { library.open(); return true; }
+      if (b.action === "quit") { if (renderer.xr.isPresenting) setVrCatalog(true); else library.open(); return true; }
       if (b.action === "previous_level") { moveLevel(-1); return true; }
       if (b.action === "next_level") { moveLevel(1); return true; }
       return false;
@@ -4016,7 +4043,7 @@
       case "toggle_sound": soundBtn.click(); break;
       case "zoom_in": zoomView(true); break;
       case "zoom_out": zoomView(false); break;
-      case "quit": library.open(); break;
+      case "quit": if (renderer.xr.isPresenting) setVrCatalog(true); else library.open(); break;
       case "cheat": game.getGameSkills().cheat(); if (game.gui && game.gui.render) game.gui.render(true); break;
       case "reset_view": resetView(); break;
       case "recenter_vr": if (renderer.xr.isPresenting) vr.recenterNow(); break;
