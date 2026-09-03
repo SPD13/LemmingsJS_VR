@@ -1822,7 +1822,11 @@
       ? "Lemmings 3D — validation mode" : "Lemmings 3D";
     hud.modeBtn.textContent = "mode: " + (state.edit ? "edit" : "play");
     library.setEditMode(state.edit);
-    if (!state.edit && session && session.editor) session.editor.disable();
+    // edit mode is the tagging workbench: the piece editor comes up with it
+    // (holding the sim) and goes away with it
+    if (session && session.editor) {
+      if (state.edit) session.editor.enable(); else session.editor.disable();
+    }
   }
   // the view back to where a level starts: the same as Home or a double
   // right-click (in a headset, the board is re-placed in front of the player)
@@ -2459,6 +2463,7 @@
       },
     };
     session.editor = new PieceEditor(session, profileFiles, timer);
+    if (state.edit) session.editor.enable(); // a level loaded in edit mode opens on its editor
     layoutGuiPanel();
     if (renderer.xr.isPresenting) placeDioramaForXR();
 
@@ -4044,7 +4049,8 @@
     if (!state.edit) {
       state.edit = true;
       try { localStorage.setItem("lem3d-edit", "on"); } catch (err) {}
-      renderMode();
+      renderMode(); // opens the editor with the mode
+      return;
     }
     if (session && session.editor) session.editor.toggle();
   }
