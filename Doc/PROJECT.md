@@ -36,6 +36,7 @@ Everything the port adds lives in `3d/`:
     portals.js  898   objects that are not flat sprites: openings and water
     gui.js      703   the original skill panel, extruded and made pickable
     minimap.js  227   the minimap in the panel's last box: map, dots, view frame
+    cursor.js   121   NeoLemmix's cursor: a cross, a square over a lemming, for both engines
     vr.js       549   WebXR: session, placement, controllers, thumbsticks
     terrain.js  469   destructible extruded terrain, greedy-meshed in chunks
     library.js  441   the world catalog, level progress, level miniatures
@@ -213,6 +214,17 @@ the camera and its orbit target move on the desktop, the board moves in the
 headset — so zoom, tilt and scale are kept. Held and moved, the press keeps
 centring; moved off the map, it lets go. In VR the map is a scrubber like
 the volume slider: the trigger held on it keeps re-picking.
+
+**The cursor** (`cursor.js`) is NeoLemmix's whenever its pictures are
+installed (`neolemmix/gfx/cursor`, with the 32 px twins of `cursor-hr` for
+dense screens), on both engines: a cross over the level, a square once a
+lemming is under it, and a small arrow beside either while the direction
+filter is on — the six cursors `GameWindow.pas` composes, chosen the way
+`SetCurrentCursor` chooses them, hot spot at the cross's centre. On the
+desktop it is the canvas's CSS cursor; in a headset it is a sprite sixteen
+level pixels wide where the beam lands on the board, the impact dot staying
+for the toolbar and the windows. With the cursor in use the yellow ring is
+not drawn; without the pictures the page keeps its own pointer and ring.
 
 Render orders matter here and are worth knowing, because three draws *all*
 opaque objects before *any* transparent one — an overlay needs both a render

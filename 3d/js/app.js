@@ -1470,10 +1470,18 @@
 
   // per-level session state, rebuilt on every level load
   let session = null;
+  // NeoLemmix's cursor (cross, square over a lemming), once its pictures are
+  // in; until then, and without them, the page's own pointer and ring
+  let gameCursor = null;
+  GameCursor.load("../").then((c) => { gameCursor = c; });
+  const cursorReady = () => !!(gameCursor && gameCursor.ok);
+  const selectDxNow = () => (session && session.game.sim ? session.game.sim.selectDx : 0);
   let endTimeout = null; // the level's end moving on to the next, unless the game is rewound
 
   function disposeSession() {
     if (!session) return;
+    if (gameCursor) gameCursor.clear(renderer.domElement);
+    if (mouseCursorSprite) mouseCursorSprite.visible = false;
     if (endTimeout) { clearTimeout(endTimeout); endTimeout = null; }
     try {
       if (session.game && session.game.getGameTimer()) session.game.stop();
@@ -2311,6 +2319,13 @@
   mouseCursor.renderOrder = 20;
   mouseCursor.visible = false;
   scene.add(mouseCursor);
+  // ...and, on the board, NeoLemmix's cursor as a sprite where the ray lands
+  let mouseCursorSprite = null;
+  const boardCursorSprite = () => {
+    if (!cursorReady()) return null;
+    if (!mouseCursorSprite) { mouseCursorSprite = gameCursor.makeSprite(VR_MARK_ORDER); scene.add(mouseCursorSprite); }
+    return mouseCursorSprite;
+  };
 
   // warning sign shown beside the play area when a session has no controllers
   const vrWarningSign = (() => {
@@ -2399,7 +2414,8 @@
     hoveredLemming = lem;
     if (session.game.sim) session.game.cursorLemming = lem; // the info strip names it
     if (lem) {
-      session.ring.visible = true;
+      // with NeoLemmix's cursor in use the square is the mark; the ring is the page's own
+      session.ring.visible = !cursorReady();
       session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
       hud.hover.textContent =
         "lemming " + lem.id + " — " + actionName(lem);
@@ -2407,6 +2423,8 @@
       session.ring.visible = false;
       hud.hover.innerHTML = "&nbsp;";
     }
+    // the desktop pointer: a cross, a square over a lemming, an arrow with the direction filter
+    if (cursorReady() && !renderer.xr.isPresenting) gameCursor.apply(renderer.domElement, !!lem, selectDxNow());
   }
 
   // while a session has controllers, they own the pointer and stray desktop
@@ -2648,7 +2666,14 @@
       // yellow at the hit point, dimmed mid-air along the ray when off it
       mouseCursor.visible = true;
       mouseCursorOnBoard = !!hit;
-      if (hit) {
+      const sprite = hit && hit.object.name === "pick-plane" ? boardCursorSprite() : null;
+      if (mouseCursorSprite) mouseCursorSprite.visible = !!sprite;
+      if (sprite) {
+        // the cursor picture on the board, the dot elsewhere
+        mouseCursor.visible = false;
+        sprite.position.copy(hit.point);
+        gameCursor.dressSprite(sprite, !!hoveredLemming, selectDxNow(), dioramaRoot.scale.x);
+      } else if (hit) {
         mouseCursor.position.copy(hit.point);
         mouseCursor.material.color.setHex(0xffd866);
       } else {
@@ -2863,6 +2888,9 @@
   const vr = new VRManager(renderer, scene, camera, dioramaRoot, {
     pickWithRaycaster,
     raycastHit,
+    // NeoLemmix's cursor where the beam lands on the board (null until its pictures are in)
+    cursorSprite: () => (cursorReady() ? gameCursor.makeSprite(VR_MARK_ORDER) : null),
+    dressCursor: (sprite) => gameCursor.dressSprite(sprite, !!hoveredLemming, selectDxNow(), dioramaRoot.scale.x),
     onSelectPick: actOnPick,
     onHoverPick: applyHover,
     // a hold on the minimap ends with the trigger, or when the beam leaves it
@@ -3376,6 +3404,7 @@
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
+    get cursor() { return gameCursor; },
     // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
     get session() { return session; },
