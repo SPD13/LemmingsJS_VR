@@ -94,6 +94,9 @@
     name: document.getElementById("level-name"),
     meta: document.getElementById("level-meta"),
     state: document.getElementById("game-state"),
+    text: document.getElementById("level-text"),
+    textToggle: document.getElementById("level-text-toggle"),
+    textBody: document.getElementById("level-text-body"),
     hover: document.getElementById("hud-hover"),
     loading: document.getElementById("loading"),
     pauseBtn: document.getElementById("btn-pause"),
@@ -101,6 +104,24 @@
     modeBtn: document.getElementById("btn-mode"),
     editor: document.getElementById("hud-editor"),
   };
+
+  /**
+   * A level's own text - a NeoLemmix opening text, or its closing text once
+   * it is won - sits folded behind a "detail" label, since it can run to a
+   * paragraph. No lines, no label.
+   */
+  function setLevelText(lines) {
+    const has = !!(lines && lines.length);
+    hud.text.hidden = !has;
+    hud.textBody.hidden = true;
+    hud.textBody.textContent = has ? lines.join("\n") : "";
+    hud.textToggle.innerHTML = "detail &#9656;";
+  }
+  hud.textToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    hud.textBody.hidden = !hud.textBody.hidden;
+    hud.textToggle.innerHTML = hud.textBody.hidden ? "detail &#9656;" : "detail &#9662;";
+  });
 
   // ---------------------------------------------------------------- renderer
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1476,6 +1497,7 @@
     hud.loading.classList.remove("hidden");
     hud.state.textContent = "";
     hud.state.className = "";
+    setLevelText(null);
     setVrStatus({ note: "loading…", kind: "" });
 
     window.__lem3dGroundData = null; // cleared so a VGASPEC level can't reuse a stale piece list
@@ -1839,7 +1861,8 @@
             localStorage.setItem("lem3d-talismans", JSON.stringify(all));
           } catch (e) {}
         }
-        if (won && level.posttext && level.posttext.length) extra += " — " + level.posttext.join(" ");
+        // the closing text takes the opening text's place behind "detail"
+        if (won && level.posttext && level.posttext.length) setLevelText(level.posttext);
       }
       hud.state.textContent = (won
         ? "LEVEL COMPLETE — " + Lemmings.GameStateTypes.toString(result.state) + best
@@ -1873,11 +1896,8 @@
     const meta = where.packName + " · " + where.label +
       " · save " + level.needCount + "/" + level.releaseCount;
     hud.meta.textContent = meta;
-    // a NeoLemmix level's opening text, until the first result replaces it
-    if (level.pretext && level.pretext.length) {
-      hud.state.textContent = level.pretext.join(" ");
-      hud.state.className = "";
-    }
+    // a NeoLemmix level's opening text, folded behind "detail"
+    setLevelText(level.pretext);
     hud.loading.classList.add("hidden");
     // the same, in the scene, where a headset can read it
     setVrStatus({
