@@ -42,11 +42,14 @@ Everything the port adds lives in `3d/`:
     terrain.js  469   destructible extruded terrain, greedy-meshed in chunks
     library.js  441   the world catalog, level progress, level miniatures
     bridge.js   416   the sim/scene boundary: sprite capture and voxelisation
-    editor.js   331   the piece-tagging workbench
-    depth.js    231   per-pixel depth classes, profile loading
+    editor.js   345   the piece-tagging workbench
+    galleries.js 444  the sprite galleries page (galleries.html): every tileset and style, tagged sprite by sprite
+    profile-store.js 318  the profile files: one per sprite gallery, merged per level, saved through the launcher
+    depth.js    249   per-pixel depth classes
     audio.js    224   music and SFX through the engine's own AdLib synth
     steel.js    114   steel areas, which the engine parses and never uses
-  profiles/           per-tileset depth profiles (one so far)
+  profiles/           depth profiles, one per sprite gallery: <pack>-g<set>.json (DOS), nx-<style>.json (NeoLemmix)
+  galleries.html      the sprite galleries page
 launcher/             Electron app that serves the repo over HTTPS for headsets
 levels/               level packs, one folder each (classic games committed, the rest drop-in)
 lemmix/js/            the Lemmix engine: NeoLemmix levels, styles, physics, panel (§2.9)
@@ -101,10 +104,15 @@ own Z band:
 | OVERLAY | 0 | 18 | thin decal layer |
 
 Everything drawn defaults to TERRAIN — in Lemmings almost every drawn pixel is
-standable ground — and the other classes come only from per-tileset JSON
-profiles in `3d/profiles/`, tagged per piece id in the editor. A reconcile
-pass enforces `depth > 0 ⇔ pixel-solid`, so the classification can never
-disagree with collision.
+standable ground — and the other classes come only from JSON profiles in
+`3d/profiles/`, one per sprite gallery, tagged per sprite in the editor or the
+galleries page. A tag belongs to the sprite, so it is kept with the gallery
+the sprite comes from — a DOS tileset (`<pack>-g<set>.json`, pieces keyed by
+their index in the ground set) or a NeoLemmix style folder (`nx-<style>.json`,
+pieces keyed `<style>:<piece>`) — and a level reads the files of every gallery
+its pieces use, merged into one view (`profile-store.js`). A reconcile pass
+enforces `depth > 0 ⇔ pixel-solid`, so the classification can never disagree
+with collision.
 
 The scene's own planes: `LEMMING_Z = TERRAIN_DEPTH/2 − SPRITE_DEPTH/2` (mid-slab,
 so lemmings are embedded in the ground rather than floating in front of it),
@@ -452,9 +460,12 @@ draw behind the terrain.
 
 Edit mode works on Lemmix levels too: the placed pieces go to `depth.js`
 and the piece editor as an id per distinct drawn image, and tags are kept
-by piece *name* (`namida_abstract:bar_purple_arrows`) in a profile per theme
-style, `profiles/nx-<style>.json`, which the launcher's save route accepts;
-the catalog's rank view says which styles have one.
+by piece *name* (`namida_abstract:bar_purple_arrows`) in the profile of the
+style the piece comes from, `profiles/nx-<style>.json` — not the level's
+theme, which says nothing about where its pieces are from (a level themed
+`xmas` may draw everything from `ohno_snow`, and 16 local levels mix
+styles). `levels/index.json` lists each level's `styles` for this, and the
+catalog's rank view links each to its gallery and says which have a file.
 
 Checks (all under `tools/`, run with node): `nx-check` resolves every piece
 reference of every level against `styles/`; `nx-render` draws levels
@@ -474,11 +485,22 @@ bills itself as validation mode, opens the piece editor, and turns the catalog
 over to tagging status. The mode is remembered, and `?edit=1` or `e` selects
 it.
 
-The piece editor (`editor.js`) is how depth profiles are authored: click a
+The piece editor (`editor.js`) is one way depth profiles are authored: click a
 terrain piece to select it — every placement of that piece id highlights —
-then pick a depth class, and the diorama re-meshes live. "export JSON"
-downloads the profile for `3d/profiles/`; a tag applies to the piece id, so it
-covers every level of the same tileset.
+then pick a depth class, and the diorama re-meshes live. "save" posts every
+changed file to the launcher, "export JSON" downloads them for `3d/profiles/`;
+a tag applies to the sprite, so it covers every level that draws it.
+
+The sprite galleries page (`galleries.html`, `galleries.js`) is the other:
+every DOS tileset and NeoLemmix style listed, and for the open one a
+miniature of each terrain sprite with the editor's tag buttons, the current
+tag lit, saved per gallery into the same files. `?gallery=<id>&piece=<key>`
+deep-links a sprite (the editor's "this piece in its gallery" button does).
+The DOS tilesets are found by probing each classic pack's ground files; the
+styles come from `neolemmix/styles/index.json`, built live by the launcher
+from the style folders and written by `tools/styles-index.js` for static
+hosting. `tools/profiles-test.js` covers the store, the indexes and the
+launcher's routes.
 
 ---
 
@@ -632,9 +654,10 @@ which case `fetch(url, {cache: "reload"})` before reloading is the way out.
 ### Open
 
 1. **Tagging** — only `profiles/lemmings-g0.json` exists (seven pieces of the
-   dirt set marked backdrop). The other eight tilesets fall back to
-   "everything is terrain". This is the content work the whole depth system is
-   waiting on, and the largest remaining item.
+   dirt set marked backdrop). The other eight tilesets and every NeoLemmix
+   style fall back to "everything is terrain". The galleries page makes it a
+   sprite-by-sprite pass per gallery; this is the content work the whole depth
+   system is waiting on, and the largest remaining item.
 2. **Automated replay comparison** — 2D vs 3D end states are still compared by
    hand (`r` dump plus `?replay=`). Phase 0 debt, now with the caveat in §2.6.
 3. **Remaining object shape classes** — objects that are not openings or water

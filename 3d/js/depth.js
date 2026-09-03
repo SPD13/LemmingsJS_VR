@@ -27,6 +27,8 @@ const DEPTH_BANDS = [
 // Stash the level reader + terrain images the compositor was given, so the
 // depth pass can replay the same piece list. Sim behavior is unchanged.
 (function installGroundRendererHook() {
+  // under node (tools/profiles-test.js) there is no DOS engine to hook
+  if (typeof Lemmings === "undefined" || !Lemmings.GroundRenderer) return;
   if (Lemmings.GroundRenderer.__lem3dHooked) return;
   Lemmings.GroundRenderer.__lem3dHooked = true;
   const orig = Lemmings.GroundRenderer.prototype.createGroundMap;
@@ -236,4 +238,12 @@ function buildDepthMap(level, groundData, profile) {
     depth[i] = mask[i] ? (depth[i] || DepthClass.TERRAIN) : DepthClass.EMPTY;
   }
   return depth;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    DepthClass, DepthClassByName, DEPTH_BANDS, DepthProfiles, pieceKey, depthClassForPiece,
+    RELIEF_MAX, buildPieceMap, embossModeFor, embossEnabledFor, embossInvertedFor,
+    buildReliefMap, buildDepthMap,
+  };
 }

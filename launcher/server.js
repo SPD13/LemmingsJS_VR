@@ -9,6 +9,7 @@ const https = require("https");
 const path = require("path");
 const fs = require("fs");
 const { buildIndex } = require("../tools/levels-index");
+const { buildStylesIndex } = require("../tools/styles-index");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -50,10 +51,12 @@ function createStaticServer(root, port, tls = null) {
       try {
         const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
 
-        // profile save endpoint: the piece editor POSTs its depth profile
-        // here so it lands in 3d/profiles/ and auto-loads on the next game
-        // load. The strict path suffix (any nesting depth, so serving a
-        // parent folder still works) is the only writable location.
+        // profile save endpoint: the piece editor and the galleries page
+        // POST a depth profile here - one file per DOS tileset
+        // (<pack>-g<set>.json) or per NeoLemmix style folder (nx-<style>.json)
+        // - so it lands in 3d/profiles/ and loads with the next level. The
+        // strict path suffix (any nesting depth, so serving a parent folder
+        // still works) is the only writable location.
         if ((req.method === "POST" || req.method === "PUT") &&
             /\/3d\/profiles\/([a-z0-9]+-g\d+|nx-[a-z0-9_]+)\.json$/.test(urlPath)) {
           const savePath = path.normalize(path.join(absRoot, urlPath));
@@ -94,6 +97,20 @@ function createStaticServer(root, port, tls = null) {
           return;
         }
 
+        // the sprite galleries: every style's terrain pieces, read from the
+        // style folders as they are now (tools/styles-index.js writes the
+        // same file for static hosting)
+        if (req.method === "GET" && /^\/neolemmix\/styles\/index\.json$/.test(urlPath)) {
+          const json = JSON.stringify(buildStylesIndex(absRoot));
+          res.writeHead(200, {
+            "Content-Type": MIME[".json"],
+            "Content-Length": Buffer.byteLength(json),
+            "Cache-Control": "no-cache",
+          });
+          res.end(json);
+          return;
+        }
+
         let filePath = path.normalize(path.join(absRoot, urlPath));
         if (filePath !== absRoot && !filePath.startsWith(absRoot + path.sep)) {
           res.writeHead(403);
@@ -121,11 +138,20 @@ function createStaticServer(root, port, tls = null) {
     srv.listen(port, "0.0.0.0", () => {
       srv.removeListener("error", reject);
       resolve({
-        port,
+        port: srv.address().port, // the real one when 0 asked for any free port
         close: () => new Promise((r) => srv.close(r)),
       });
     });
   });
+}
+
+// `node launcher/server.js [port]`: the same server without Electron, plain
+// HTTP, for tagging sessions and checks from a terminal (default port 8123).
+if (require.main === module) {
+  const port = parseInt(process.argv[2], 10) || 8123;
+  createStaticServer(path.join(__dirname, ".."), port).then((srv) => {
+    console.log("serving on http://localhost:" + srv.port + "/3d/  (ctrl-c stops it)");
+  }).catch((e) => { console.error(e.message); process.exit(1); });
 }
 
 module.exports = { createStaticServer };
