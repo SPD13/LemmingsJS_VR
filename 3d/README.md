@@ -47,8 +47,17 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
 - the minimap at the panel's right end shows the level, the lemmings as
   green dots and a frame around what is in view; click or drag on it to
   centre the view there, keeping the zoom (in VR, the trigger held on it)
+- on a NeoLemmix level the panel ends with NeoLemmix's own four cells:
+  replay (the level from the start, paused, your attempt replaying - take
+  control at any point and the rest of the attempt is dropped), frame back
+  over frame forward (right-click 17 frames, middle-click 85, hold to
+  repeat), direction left over direction right (pick only lemmings facing
+  that way), and load replay (a `.nxrp` file; the clear-physics half above
+  it does nothing yet). An R in the info strip means the attempt is
+  replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
+  replay-insert mode (your actions add to the replay instead of cutting it)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
-  level, `r` dump the replay string to the console
+  level, `R` dump the replay string to the console
 - "prev", "restart" and "next" ask before throwing away a level in progress —
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
