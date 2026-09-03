@@ -21,15 +21,84 @@
  * from levels/ (the collapsed levels/ wrapper is not part of it); a level's
  * `id` is that path plus its own name, and stays stable across rescans.
  *
+ * The tree is read through an `io` - {readText, exists, isDir, listDirs,
+ * listFiles} over "/"-joined repo-relative paths - so the same code lists a
+ * checkout on disk (nodeIO) and the files the setup page keeps in the
+ * browser (snapshotIO over an in-memory listing; the file is also loaded as
+ * a plain script there, as window.LevelsIndex).
+ *
  * Usage: node tools/levels-index.js [--check]   (from anywhere in the repo)
  */
-
-const fs = require("fs");
-const path = require("path");
-
+(function (root) {
 const LEVELS_DIR = "levels";
 const GAME_TYPE = { LEMMINGS: 1, OHNO: 2, XMAS91: 3, XMAS92: 4, HOLIDAY93: 5, HOLIDAY94: 6 };
 const PRETTY_NAME = { LEMMINGS: "Lemmings", OHNO: "Oh No! More Lemmings" };
+
+const isNode = typeof module !== "undefined" && module.exports;
+const natural = (a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" });
+const join = (...parts) => parts.filter((p) => p !== "" && p != null).join("/");
+const basename = (p, ext) => {
+  let b = p.slice(p.lastIndexOf("/") + 1);
+  if (ext && b.toLowerCase().endsWith(ext.toLowerCase())) b = b.slice(0, b.length - ext.length);
+  return b;
+};
+
+/** The io over a checkout on disk. */
+function nodeIO(repoRoot) {
+  const fs = require("fs");
+  const path = require("path");
+  const abs = (p) => path.join(repoRoot, ...p.split("/"));
+  const stat = (p) => { try { return fs.statSync(abs(p)); } catch (e) { return null; } };
+  return {
+    readText: (p) => fs.readFileSync(abs(p), "utf8"),
+    exists: (p) => stat(p) !== null,
+    isDir: (p) => { const s = stat(p); return !!s && s.isDirectory(); },
+    listDirs: (p) => fs.readdirSync(abs(p), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith(".")).map((d) => d.name).sort(natural),
+    listFiles: (p, ext) => fs.readdirSync(abs(p), { withFileTypes: true })
+      .filter((d) => d.isFile() && (!ext || d.name.toLowerCase().endsWith(ext))).map((d) => d.name).sort(natural),
+  };
+}
+
+/**
+ * The io over an in-memory listing: `files` maps repo-relative paths to
+ * their text (or null for a file whose content is not needed). Directories
+ * are implied by the paths.
+ */
+function snapshotIO(files) {
+  const dirs = new Set();
+  const children = new Map(); // dir -> {dirs: Set, files: Set}
+  const entry = (d) => {
+    let c = children.get(d);
+    if (!c) { c = { dirs: new Set(), files: new Set() }; children.set(d, c); }
+    return c;
+  };
+  for (const p of files.keys()) {
+    const parts = p.split("/");
+    let dir = "";
+    for (let i = 0; i < parts.length - 1; i++) {
+      const sub = join(dir, parts[i]);
+      dirs.add(sub);
+      entry(dir).dirs.add(parts[i]);
+      dir = sub;
+    }
+    entry(dir).files.add(parts[parts.length - 1]);
+  }
+  dirs.add("");
+  const norm = (p) => p.replace(/\/+$/, "");
+  return {
+    readText: (p) => {
+      const t = files.get(norm(p));
+      if (t == null) throw new Error("no such file " + p);
+      return t;
+    },
+    exists: (p) => files.has(norm(p)) || dirs.has(norm(p)),
+    isDir: (p) => dirs.has(norm(p)),
+    listDirs: (p) => Array.from((children.get(norm(p)) || entry("_")).dirs).sort(natural),
+    listFiles: (p, ext) => Array.from((children.get(norm(p)) || entry("_")).files)
+      .filter((f) => !ext || f.toLowerCase().endsWith(ext)).sort(natural),
+  };
+}
 
 /** The NeoLemmix text format: `KEY value` lines and $SECTION ... $END blocks. */
 function parseNx(text) {
@@ -60,19 +129,6 @@ const first = (node, key) => {
 };
 const all = (node, key) => node.entries.filter((x) => x.key === key).map((x) => x.value);
 
-const readText = (p) => fs.readFileSync(p, "utf8");
-const exists = (p) => { try { fs.statSync(p); return true; } catch (e) { return false; } };
-const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
-const listDirs = (p) => fs.readdirSync(p, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && !d.name.startsWith("."))
-  .map((d) => d.name)
-  .sort((a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" }));
-const listFiles = (p, ext) => fs.readdirSync(p, { withFileTypes: true })
-  .filter((d) => d.isFile() && d.name.toLowerCase().endsWith(ext))
-  .map((d) => d.name)
-  .sort((a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" }));
-const toUrl = (repoRoot, abs) => path.relative(repoRoot, abs).split(path.sep).join("/");
-
 /**
  * The styles a level's terrain pieces come from: the STYLE of every $TERRAIN
  * block, lowercased, sorted, once each. A `*group` pseudo-style (a piece
@@ -94,13 +150,13 @@ function terrainStyles(text) {
 }
 
 /** The header of a .nxlv: the keys before the first section, plus what the browser lists. */
-function readLevelHeader(file) {
-  const text = readText(file);
+function readLevelHeader(io, file) {
+  const text = io.readText(file);
   const cut = text.search(/^\s*\$/m);
   const nx = parseNx(cut < 0 ? text : text.slice(0, cut));
   const num = (k) => { const v = first(nx, k); return v === null ? null : parseInt(v, 10); };
   return {
-    title: first(nx, "TITLE") || path.basename(file, ".nxlv").replace(/_/g, " "),
+    title: first(nx, "TITLE") || basename(file, ".nxlv").replace(/_/g, " "),
     theme: first(nx, "THEME") || null,
     styles: terrainStyles(text),
     nxId: first(nx, "ID") || null,
@@ -110,10 +166,10 @@ function readLevelHeader(file) {
 }
 
 /** A classic pack from its config.json entry (skipped when its folder is absent). */
-function classicPack(repoRoot, entry) {
-  const dir = path.join(repoRoot, entry.path);
-  if (!isDir(dir)) return null;
-  const name = path.basename(entry.path);
+function classicPack(io, entry) {
+  const dir = entry.path.replace(/\/+$/, "");
+  if (!io.isDir(dir)) return null;
+  const name = basename(dir);
   const groups = entry["level.groups"] || [];
   const order = entry["level.order"] || [];
   const children = order.map((levels, g) => ({
@@ -127,7 +183,7 @@ function classicPack(repoRoot, entry) {
     kind: "pack", engine: "classic",
     name: PRETTY_NAME[entry.gametype] || entry.name || name,
     path: name,
-    dir: entry.path,
+    dir,
     gameType: GAME_TYPE[entry.gametype] || 0,
     count: children.reduce((n, c) => n + c.count, 0),
     children,
@@ -135,85 +191,85 @@ function classicPack(repoRoot, entry) {
 }
 
 /** One NeoLemmix pack: info.nxmi for its name, levels.nxmi for its ranks. */
-function lemmixPack(repoRoot, dir, logicalPath, musicDir) {
-  const nx = parseNx(readText(path.join(dir, "levels.nxmi")));
-  const info = exists(path.join(dir, "info.nxmi"))
-    ? parseNx(readText(path.join(dir, "info.nxmi"))) : null;
-  const music = exists(path.join(dir, "music.nxmi"))
-    ? all(parseNx(readText(path.join(dir, "music.nxmi"))), "TRACK") : [];
+function lemmixPack(io, dir, logicalPath, musicDir) {
+  const nx = parseNx(io.readText(join(dir, "levels.nxmi")));
+  const info = io.exists(join(dir, "info.nxmi"))
+    ? parseNx(io.readText(join(dir, "info.nxmi"))) : null;
+  const music = io.exists(join(dir, "music.nxmi"))
+    ? all(parseNx(io.readText(join(dir, "music.nxmi"))), "TRACK") : [];
   const children = [];
   for (const group of nx.sections.filter((s) => s.name === "GROUP" || s.name === "RANK")) {
     const rankName = first(group, "NAME") || first(group, "FOLDER");
     const folder = first(group, "FOLDER") || rankName;
     if (!folder) continue;
-    const rankDir = path.join(dir, folder);
-    if (!isDir(rankDir)) continue;
-    const rank = lemmixLevels(repoRoot, rankDir, logicalPath + "/" + folder, rankName);
+    const rankDir = join(dir, folder);
+    if (!io.isDir(rankDir)) continue;
+    const rank = lemmixLevels(io, rankDir, logicalPath + "/" + folder, rankName);
     if (rank.count) children.push(rank);
   }
   // levels listed straight in the pack (a pack without ranks)
   const loose = all(nx, "LEVEL");
   if (loose.length) {
-    const own = lemmixLevels(repoRoot, dir, logicalPath, path.basename(dir));
+    const own = lemmixLevels(io, dir, logicalPath, basename(dir));
     if (own.count) children.push(own);
   }
   const pack = {
     kind: "pack", engine: "lemmix",
-    name: (info && first(info, "TITLE")) || path.basename(dir).replace(/_/g, " "),
+    name: (info && first(info, "TITLE")) || basename(dir).replace(/_/g, " "),
     path: logicalPath,
-    dir: toUrl(repoRoot, dir),
+    dir,
     count: children.reduce((n, c) => n + c.count, 0),
     children,
   };
   if (info && first(info, "AUTHOR")) pack.author = first(info, "AUTHOR");
   if (info && first(info, "VERSION")) pack.version = first(info, "VERSION");
-  if (exists(path.join(dir, "logo.png"))) pack.logo = toUrl(repoRoot, path.join(dir, "logo.png"));
+  if (io.exists(join(dir, "logo.png"))) pack.logo = join(dir, "logo.png");
   if (music.length) pack.musicRotation = music;
-  if (musicDir) pack.musicDir = toUrl(repoRoot, musicDir);
+  if (musicDir) pack.musicDir = musicDir;
   return pack;
 }
 
 /** A folder of .nxlv files, in the order its levels.nxmi lists them. */
-function lemmixLevels(repoRoot, dir, logicalPath, name) {
+function lemmixLevels(io, dir, logicalPath, name) {
   let files;
-  if (exists(path.join(dir, "levels.nxmi"))) {
-    files = all(parseNx(readText(path.join(dir, "levels.nxmi"))), "LEVEL")
-      .filter((f) => exists(path.join(dir, f)));
+  if (io.exists(join(dir, "levels.nxmi"))) {
+    files = all(parseNx(io.readText(join(dir, "levels.nxmi"))), "LEVEL")
+      .filter((f) => io.exists(join(dir, f)));
   }
-  if (!files || !files.length) files = listFiles(dir, ".nxlv");
+  if (!files || !files.length) files = io.listFiles(dir, ".nxlv");
   const levels = files.map((file) => {
-    const abs = path.join(dir, file);
-    const header = readLevelHeader(abs);
-    return Object.assign({ id: logicalPath + "/" + file, file, url: toUrl(repoRoot, abs) }, header);
+    const url = join(dir, file);
+    const header = readLevelHeader(io, url);
+    return Object.assign({ id: logicalPath + "/" + file, file, url }, header);
   });
   return { kind: "dir", engine: "lemmix", name, path: logicalPath, count: levels.length, levels };
 }
 
 /** Any non-classic folder under levels/: a pack, a wrapper of packs, or loose levels. */
-function lemmixNode(repoRoot, dir, logicalPath, musicDir) {
-  const name = path.basename(dir);
-  if (exists(path.join(dir, "levels.nxmi"))) {
-    return lemmixPack(repoRoot, dir, logicalPath, musicDir);
+function lemmixNode(io, dir, logicalPath, musicDir) {
+  const name = basename(dir);
+  if (io.exists(join(dir, "levels.nxmi"))) {
+    return lemmixPack(io, dir, logicalPath, musicDir);
   }
-  const dirs = listDirs(dir);
-  const nxlv = listFiles(dir, ".nxlv");
+  const dirs = io.listDirs(dir);
+  const nxlv = io.listFiles(dir, ".nxlv");
   // the wrapper a downloaded collection ships as: levels/ (and music/) only
   if (!nxlv.length && dirs.includes("levels") && !dirs.some((d) => d !== "levels" && d !== "music")) {
-    const inner = path.join(dir, "levels");
-    const music = isDir(path.join(dir, "music")) ? path.join(dir, "music") : musicDir;
-    const children = listDirs(inner)
-      .map((d) => lemmixNode(repoRoot, path.join(inner, d), logicalPath + "/" + d, music))
+    const inner = join(dir, "levels");
+    const music = io.isDir(join(dir, "music")) ? join(dir, "music") : musicDir;
+    const children = io.listDirs(inner)
+      .map((d) => lemmixNode(io, join(inner, d), logicalPath + "/" + d, music))
       .filter((n) => n && n.count);
     return {
       kind: "dir", engine: "lemmix", name: name.replace(/_/g, " "), path: logicalPath,
       count: children.reduce((n, c) => n + c.count, 0), children,
     };
   }
-  if (nxlv.length && !dirs.length) return lemmixLevels(repoRoot, dir, logicalPath, name);
+  if (nxlv.length && !dirs.length) return lemmixLevels(io, dir, logicalPath, name);
   const children = dirs
-    .map((d) => lemmixNode(repoRoot, path.join(dir, d), logicalPath + "/" + d, musicDir))
+    .map((d) => lemmixNode(io, join(dir, d), logicalPath + "/" + d, musicDir))
     .filter((n) => n && n.count);
-  if (nxlv.length) children.unshift(lemmixLevels(repoRoot, dir, logicalPath, name));
+  if (nxlv.length) children.unshift(lemmixLevels(io, dir, logicalPath, name));
   if (!children.length) return null;
   return {
     kind: "dir", engine: "lemmix", name: name.replace(/_/g, " "), path: logicalPath,
@@ -221,21 +277,26 @@ function lemmixNode(repoRoot, dir, logicalPath, musicDir) {
   };
 }
 
-/** The whole tree for the repo at `repoRoot`. */
-function buildIndex(repoRoot) {
-  const levelsDir = path.join(repoRoot, LEVELS_DIR);
-  let config = [];
-  try { config = JSON.parse(readText(path.join(repoRoot, "config.json"))); } catch (e) {}
+/**
+ * The whole tree. `source` is a repo root on disk (a string) or an io;
+ * `config` the parsed config.json (read from the source when omitted).
+ */
+function buildIndex(source, config) {
+  const io = typeof source === "string" ? nodeIO(source) : source;
+  if (!config) {
+    config = [];
+    try { config = JSON.parse(io.readText("config.json")); } catch (e) {}
+  }
   const classicByDir = new Map();
   for (const entry of config) {
-    const pack = classicPack(repoRoot, entry);
-    if (pack) classicByDir.set(path.basename(entry.path), pack);
+    const pack = classicPack(io, entry);
+    if (pack) classicByDir.set(basename(entry.path.replace(/\/+$/, "")), pack);
   }
   const children = [];
-  if (isDir(levelsDir)) {
-    for (const d of listDirs(levelsDir)) {
+  if (io.isDir(LEVELS_DIR)) {
+    for (const d of io.listDirs(LEVELS_DIR)) {
       if (classicByDir.has(d)) { children.push(classicByDir.get(d)); continue; }
-      const node = lemmixNode(repoRoot, path.join(levelsDir, d), d, null);
+      const node = lemmixNode(io, join(LEVELS_DIR, d), d, null);
       if (node && node.count) children.push(node);
     }
   }
@@ -247,16 +308,6 @@ function buildIndex(repoRoot) {
   };
 }
 
-/** Where the repo root is, from wherever this runs. */
-function findRepoRoot(start) {
-  let dir = path.resolve(start);
-  for (let i = 0; i < 6; i++) {
-    if (exists(path.join(dir, "config.json")) && exists(path.join(dir, "js", "lemmings.js"))) return dir;
-    dir = path.dirname(dir);
-  }
-  return path.resolve(start);
-}
-
 function summarize(node, depth, out) {
   const pad = "  ".repeat(depth);
   const tag = node.engine ? " [" + node.engine + "]" : "";
@@ -264,8 +315,20 @@ function summarize(node, depth, out) {
   for (const c of node.children || []) if (c.kind !== "dir" || c.children) summarize(c, depth + 1, out);
 }
 
-if (require.main === module) {
-  const repoRoot = findRepoRoot(__dirname);
+const api = { buildIndex, nodeIO, snapshotIO, parseNx, readLevelHeader, terrainStyles, summarize, LEVELS_DIR };
+if (isNode) module.exports = api;
+else root.LevelsIndex = api;
+
+if (isNode && require.main === module) {
+  const fs = require("fs");
+  const path = require("path");
+  const exists = (p) => { try { fs.statSync(p); return true; } catch (e) { return false; } };
+  /** Where the repo root is, from wherever this runs. */
+  let repoRoot = path.resolve(__dirname);
+  for (let i = 0; i < 6; i++) {
+    if (exists(path.join(repoRoot, "config.json")) && exists(path.join(repoRoot, "js", "lemmings.js"))) break;
+    repoRoot = path.dirname(repoRoot);
+  }
   const index = buildIndex(repoRoot);
   const out = path.join(repoRoot, LEVELS_DIR, "index.json");
   if (!process.argv.includes("--check")) {
@@ -277,5 +340,4 @@ if (require.main === module) {
   console.log((process.argv.includes("--check") ? "would write " : "wrote ") + out +
     " · " + index.count + " levels");
 }
-
-module.exports = { buildIndex, parseNx, readLevelHeader, terrainStyles };
+})(typeof window !== "undefined" ? window : globalThis);

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lemmings 3D — setup</title>
+<style>
+  /* The look of index.html's HUD, restated: there is no shared stylesheet
+     (the 3D page keeps its styles inline), so the ground, buttons and rows
+     below are copies of its rules, like galleries.html's. */
+  html, body { margin: 0; min-height: 100%; background: #10141c; }
+  body { font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; font-size: 12px; line-height: 1.6; }
+  a { color: #7fd6e8; text-decoration: none; }
+  a:hover { color: #a9e6f4; }
+  h1 { font-size: 15px; color: #6fce7e; letter-spacing: 0.08em; margin: 0; }
+  h2 { font-size: 13px; color: #f0f3f8; letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 8px; }
+  button {
+    font: inherit; font-size: 11px; color: #cdd6e4; background: #1c2432;
+    border: 1px solid #33405a; border-radius: 4px; padding: 3px 10px; cursor: pointer;
+  }
+  button:hover { background: #263043; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .btnrow button { white-space: nowrap; }
+  .lib-badge {
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 3px; padding: 1px 6px; border: 1px solid; white-space: nowrap;
+  }
+  .lib-badge.classic { color: #7fd6e8; border-color: #2f5f6b; }
+  .lib-badge.lemmix { color: #ffb066; border-color: #6b4a2f; }
+  .lib-badge.none { color: #8fa1bb; border-color: #33405a; }
+  .lib-row-name { color: #f0f3f8; font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lib-count { color: #8fa1bb; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  #page { max-width: 880px; margin: 0 auto; padding: 18px 20px 40px; box-sizing: border-box; }
+  #head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .card {
+    background: rgba(10, 14, 22, 0.82); border: 1px solid #2a3446; border-radius: 6px;
+    padding: 12px 14px; margin-bottom: 12px;
+  }
+  .card.drop { border-color: #6fce7e; }
+  .notice { border-color: #4a4326; color: #ffd866; }
+  .notice b { color: #ffe9a0; }
+  .warn { border-color: #6b2f2f; color: #e07a6a; }
+  .dim { color: #8fa1bb; font-size: 11px; }
+  .row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #161c28; border: 1px solid #2a3446; border-radius: 6px; padding: 6px 12px; margin-top: 6px;
+  }
+  .row.drop { border-color: #6fce7e; }
+  .row.empty .lib-row-name { color: #8fa1bb; }
+  .row .grow { flex: 1; min-width: 200px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; }
+  .dot.on { background: #6fce7e; color: #6fce7e; }
+  .dot.off { background: #e0554a; color: #e0554a; }
+  .msg { min-height: 16px; margin-top: 6px; font-size: 11px; }
+  .msg.ok { color: #6fce7e; }
+  .msg.err { color: #e07a6a; }
+  .empty { color: #8fa1bb; padding: 6px 12px; }
+  #progress { margin-top: 10px; }
+  #progress[hidden] { display: none; }
+  #progress-track { height: 6px; background: #0b0f16; border: 1px solid #33405a; border-radius: 4px; overflow: hidden; }
+  #progress-fill { height: 100%; width: 0; background: #6fce7e; transition: width 0.15s; }
+  #progress-fill.indeterminate { width: 30% !important; animation: slide 1.2s linear infinite; }
+  @keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+  #progress-label { color: #8fa1bb; font-size: 11px; margin-top: 4px; }
+  input[type="file"] { display: none; }
+
+  #confirm {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    align-items: center; justify-content: center;
+    background: rgba(5, 7, 12, 0.72);
+  }
+  #confirm[hidden] { display: none; }
+  #confirm .dlg {
+    background: #10141c; border: 1px solid #33405a; border-radius: 8px;
+    padding: 22px 26px; min-width: 300px; max-width: 480px; text-align: center;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  }
+  #confirm h2 { margin: 0 0 6px; font-size: 15px; color: #ffd866; letter-spacing: 0.06em; text-transform: none; }
+  #confirm p { margin: 0 0 16px; font-size: 12px; color: #8fa1bb; }
+  #confirm .btnrow { justify-content: center; }
+  #confirm-yes { border-color: #ffd866; color: #ffd866; }
+  #confirm-yes:hover { background: #4a4326; }
+</style>
+</head>
+<body>
+<div id="page">
+  <div id="head">
+    <h1>LEMMINGS 3D — SETUP</h1>
+    <a id="back" href="index.html">‹ 3D view</a>
+  </div>
+
+  <div class="card notice">
+    <b>The NeoLemmix engine and the levels are stored locally, in this browser.</b>
+    Nothing installed here goes to a server: it lives in this site's storage on this device, and it is wiped
+    if you clear the browser's data for this site (each browser, and each address of the site, has its own copy).
+    <div id="storage" class="dim"></div>
+  </div>
+  <div id="sw-warning" class="card warn" hidden></div>
+
+  <div class="card">
+    <h2>Assets</h2>
+    <div class="row">
+      <span class="grow">mode: <b id="mode-name">…</b> <span id="mode-what" class="dim"></span></span>
+      <button id="btn-mode" data-busy>switch</button>
+    </div>
+    <div class="dim">The URL decides too: <code>?assets=static</code> plays from this browser's storage,
+      <code>?assets=server</code> from the web server; the choice is remembered.</div>
+    <div id="msg-mode" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>NeoLemmix</h2>
+    <div class="dim">The files come from <a id="official" href="https://www.neolemmix.com/?page=neolemmix" target="_blank" rel="noopener">neolemmix.com</a>,
+      which does not let a web page download them by itself: the first button saves the official zip through your
+      browser, the second installs the zip you saved (or drop it on the row).</div>
+    <div class="row" id="row-engine">
+      <span class="dot off" id="dot-engine"></span>
+      <span class="lib-row-name">NeoLemmix <span class="dim">gfx, sounds, music, the classic styles and its two level packs</span></span>
+      <span id="state-engine" class="dim"></span>
+      <button id="btn-get-engine" data-busy>get NeoLemmix</button>
+      <button id="btn-zip-engine" data-busy>install zip…</button>
+      <input type="file" id="file-engine" accept=".zip,application/zip">
+    </div>
+    <div class="row" id="row-styles">
+      <span class="dot off" id="dot-styles"></span>
+      <span class="lib-row-name">Styles package <span class="dim">every style the level packs use</span></span>
+      <span id="state-styles" class="dim"></span>
+      <button id="btn-get-styles" data-busy>get the styles</button>
+      <button id="btn-zip-styles" data-busy>install zip…</button>
+      <input type="file" id="file-styles" accept=".zip,application/zip">
+    </div>
+    <div id="msg-nx" class="msg"></div>
+  </div>
+
+  <div class="card" id="levels">
+    <h2>Levels</h2>
+    <div id="level-list"></div>
+    <div class="btnrow">
+      <button id="btn-get-packs" data-busy>get the Lemmings Plus packs</button>
+      <button id="btn-zip-levels" data-busy>install zip…</button>
+      <button id="btn-classic" data-busy>Lemmings &amp; Oh No! More Lemmings (LemmingsJS git)</button>
+      <button id="btn-folder-levels" data-busy>upload a folder…</button>
+      <input type="file" id="file-levels" accept=".zip,application/zip">
+      <input type="file" id="folder-levels" webkitdirectory directory multiple>
+    </div>
+    <div class="dim">A level zip or folder lands in its own directory (NeoLemmix packs, or a DOS game's files). Drop a zip anywhere on this section.</div>
+    <div id="msg-levels" class="msg"></div>
+  </div>
+
+  <div id="progress" hidden>
+    <div id="progress-track"><div id="progress-fill"></div></div>
+    <div id="progress-label"></div>
+  </div>
+
+  <div class="card">
+    <h2>Configuration</h2>
+    <div class="dim">Your settings live in this browser too. Download them to keep or move them; upload a file to bring them back.</div>
+    <div class="row">
+      <span class="lib-row-name">Controls <span class="dim">keyboard, mouse and VR controller bindings</span></span>
+      <button id="btn-dl-controls">download</button>
+      <button id="btn-ul-controls">upload…</button>
+      <input type="file" id="file-controls" accept=".json,application/json">
+    </div>
+    <div id="msg-controls" class="msg"></div>
+    <div class="row">
+      <span class="lib-row-name">Preferences <span class="dim">3D effects, default view, sound and music, the VR skills bar's place, the library's order</span></span>
+      <button id="btn-dl-prefs">download</button>
+      <button id="btn-ul-prefs">upload…</button>
+      <input type="file" id="file-prefs" accept=".json,application/json">
+    </div>
+    <div id="msg-prefs" class="msg"></div>
+    <div class="row">
+      <span class="lib-row-name">Progress <span class="dim">the levels cleared, best times, most lemmings saved, talismans</span></span>
+      <button id="btn-dl-progress">download</button>
+      <button id="btn-ul-progress">upload…</button>
+      <input type="file" id="file-progress" accept=".json,application/json">
+    </div>
+    <div id="msg-progress" class="msg"></div>
+  </div>
+</div>
+
+<div id="confirm" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">Replace?</h2>
+    <p id="confirm-body"></p>
+    <div class="btnrow">
+      <button id="confirm-yes">replace</button>
+      <button id="confirm-no">cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/vfs.js"></script>
+<script src="lib/fflate.min.js"></script>
+<script src="../tools/levels-index.js"></script>
+<script src="../tools/styles-index.js"></script>
+<script src="js/hotkeys.js"></script>
+<script src="js/setup.js"></script>
+</body>
+</html>

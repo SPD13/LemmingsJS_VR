@@ -53,6 +53,8 @@
   #hud-mode { position: absolute; top: 114px; right: 12px; z-index: 10; }
   /* the 2D/3D switch, fifth down: the flat view of the original, or the diorama */
   #hud-view { position: absolute; top: 148px; right: 12px; z-index: 10; }
+  #hud-setup { position: absolute; top: 182px; right: 12px; z-index: 10; }
+  #hud-setup a { text-decoration: none; }
   /* in 2D the 3D effects have nothing to show, and the controls read differently */
   body.flat #hud-fx { display: none; }
   body.flat .k3d, body:not(.flat) .k2d { display: none; }
@@ -178,6 +180,15 @@
   #confirm-yes { border-color: #ffd866; color: #ffd866; }
   #confirm-yes:hover { background: #4a4326; }
   #hud-editor { bottom: 12px; right: 12px; max-width: 320px; }
+  /* the footer: which asset mode is in force, and the way to the other one -
+     on the game view, and again on the world library that covers it */
+  .assets-foot { bottom: 12px; right: 12px; font-size: 10px; color: #5a6a7c; padding: 2px 8px; }
+  .assets-foot b { color: #8fa1bb; font-weight: 600; }
+  .assets-foot a { color: #7fd6e8; text-decoration: none; }
+  .assets-foot a:hover { color: #a9e6f4; text-decoration: underline; }
+  #hud-editor:not([hidden]) ~ #hud-assets { display: none; } /* the editor panel takes that corner */
+  #lib-assets { position: fixed; z-index: 16; }
+  #lib-setup a { text-decoration: none; }
   #hud-editor h1 { font-size: 13px; margin: 0 0 4px; color: #ffd866; letter-spacing: 0.06em; }
   #ed-info { color: #cdd6e4; min-height: 16px; margin-bottom: 4px; }
   #hud-editor button.active { background: #4a4326; border-color: #ffd866; color: #ffd866; }
@@ -228,10 +239,12 @@
     <span class="lib-spacer"></span>
     <button id="lib-order">order: level</button>
     <button id="lib-rescan">rescan</button>
+    <span id="lib-setup"><a href="setup.html"><button title="NeoLemmix, the level packs and your configuration">setup</button></a></span>
     <button id="lib-close">close</button>
   </div>
   <div id="lib-status">&nbsp;</div>
   <div id="lib-grid"></div>
+  <div id="lib-assets" class="hud assets-foot" title="where NeoLemmix and the levels come from (see Setup)">assets: <b class="assets-name">…</b> · <a class="assets-switch" href="#">switch</a></div>
 </div>
 
 <div id="hud-keys" class="hud fold folded">
@@ -250,6 +263,7 @@
 <div id="hud-mode"><button id="btn-mode">mode: play</button></div>
 
 <div id="hud-view"><button id="btn-view2d" title="the flat view of the original, or the diorama">2D</button></div>
+<div id="hud-setup"><a href="setup.html"><button id="btn-setup" title="NeoLemmix, the level packs and your configuration">Setup</button></a></div>
 
 <div id="hud-fx" class="hud fold folded">
   <button class="fold-open">3D effects</button>
@@ -302,6 +316,9 @@
   <div id="ed-msg"></div>
 </div>
 
+<div id="hud-assets" class="hud assets-foot" title="where NeoLemmix and the levels come from (see Setup)">assets: <b class="assets-name">…</b> · <a class="assets-switch" href="#">switch</a></div>
+
+<script src="js/vfs.js"></script>
 <script src="../js/lemmings.js"></script>
 <script src="../lemmix/js/parser.js"></script>
 <script src="../lemmix/js/pixels.js"></script>

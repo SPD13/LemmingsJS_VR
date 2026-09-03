@@ -11,13 +11,10 @@
 bower_components/
 node_modules/
 
-# Level packs: everything under levels/ is a drop-in and stays out of git,
-# except the two classic games the repo has always carried and the generated
-# index (see README "Levels and assets" for where packs come from).
+# Level packs: everything under levels/ is a drop-in and stays out of git -
+# the classic games and the generated index included (see README "Levels
+# and assets": the setup page installs them into the browser).
 levels/*
-!levels/lemmings/
-!levels/lemmings_ohNo/
-!levels/index.json
 !levels/README.md
 
 # NeoLemmix assets (styles, panel/mask graphics, sound effects, music packs):
@@ -29,5 +26,5 @@ neolemmix/*
 # NeoLemmix source, fetched for reference (see README) - not committed
 Doc/neolemmix-src/
 
-# scratch: screenshots and other throwaways
+# scratch: screenshots, test downloads and other throwaways
 tmp/

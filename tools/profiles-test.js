@@ -180,7 +180,7 @@ async function main() {
     check("steel comes from the .nxmt", same(my.steel, ["girder"]));
     check("the title comes from styles.ini, the theme from theme.nxtm", my.title === "My Style" && my.theme === "orig_dirt");
     check("a style without terrain has no pieces", index.styles[0].count === 0 && index.styles[0].title === "empty_style" && index.styles[0].theme === "default");
-    check("styles.ini names", same(readStylesIni(path.join(styles, "styles.ini")), { my_style: "My Style", other: "Other" }));
+    check("styles.ini names", same(readStylesIni(fs.readFileSync(path.join(styles, "styles.ini"), "utf8")), { my_style: "My Style", other: "Other" }));
     check("no styles folder: an empty index", buildStylesIndex(path.join(tmp, "nowhere")).count === 0);
 
     console.log("level styles");

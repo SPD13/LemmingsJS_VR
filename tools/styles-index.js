@@ -5,9 +5,10 @@
  * galleries view lists. A browser cannot read a folder, so the terrain
  * pieces of every NeoLemmix style (neolemmix/styles/<style>/terrain/*.png)
  * are listed here - the launcher serves the same thing live from the
- * folders, this file is for static hosting.
+ * folders, this file is for static hosting, and the setup page builds it
+ * for the styles it keeps in the browser.
  *
- *   { version, generated, count,
+ *   { version, generated, count, pieceCount,
  *     styles: [ { name, title, theme, pieces: [...], steel: [...], count } ] }
  *
  * `name` is the folder, `title` the display name from styles.ini when it has
@@ -16,23 +17,24 @@
  * whose .nxmt marks them steel. A style without a terrain folder is listed
  * with no pieces. The file lands under neolemmix/, which is not committed.
  *
+ * Like tools/levels-index.js the folders are read through an io (a repo root
+ * on disk, or the setup page's snapshot of the browser's files); loaded as a
+ * plain script it is window.StylesIndex.
+ *
  * Usage: node tools/styles-index.js [--check]
  */
-const fs = require("fs");
-const path = require("path");
-
-const STYLES_DIR = path.join("neolemmix", "styles");
+(function (root) {
+const STYLES_DIR = "neolemmix/styles";
 const INDEX_FILE = "index.json";
 
-const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
-const exists = (p) => { try { fs.statSync(p); return true; } catch (e) { return false; } };
+const isNode = typeof module !== "undefined" && module.exports;
 const natural = (a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" });
+const levelsIndex = isNode ? require("./levels-index") : root.LevelsIndex;
 
 /** The display names of styles.ini: `[folder]` sections with a `Name=` line. */
-function readStylesIni(file) {
+function readStylesIni(text) {
   const titles = {};
-  let text;
-  try { text = fs.readFileSync(file, "utf8"); } catch (e) { return titles; }
+  if (!text) return titles;
   let current = null;
   for (let line of text.split(/\r?\n/)) {
     line = line.trim();
@@ -47,56 +49,51 @@ function readStylesIni(file) {
   return titles;
 }
 
+const readOr = (io, p, dflt) => { try { return io.exists(p) ? io.readText(p) : dflt; } catch (e) { return dflt; } };
+const ext = (f) => { const i = f.lastIndexOf("."); return i < 0 ? "" : f.slice(i).toLowerCase(); };
+const stem = (f) => { const i = f.lastIndexOf("."); return (i < 0 ? f : f.slice(0, i)).toLowerCase(); };
+
 /** The terrain pieces of one style folder: names (lowercased) and which are steel. */
-function listPieces(styleDir) {
-  const dir = path.join(styleDir, "terrain");
-  if (!isDir(dir)) return { pieces: [], steel: [] };
+function listPieces(io, styleDir) {
+  const dir = styleDir + "/terrain";
+  if (!io.isDir(dir)) return { pieces: [], steel: [] };
   const names = new Set();
-  const metas = new Set();
-  for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!d.isFile()) continue;
-    const ext = path.extname(d.name).toLowerCase();
-    const base = path.basename(d.name, path.extname(d.name)).toLowerCase();
-    if (ext === ".png") names.add(base);
-    else if (ext === ".nxmt") metas.add(base);
+  const metas = new Map(); // lowercased stem -> the .nxmt file name as it is
+  for (const f of io.listFiles(dir)) {
+    const e = ext(f);
+    if (e === ".png") names.add(stem(f));
+    else if (e === ".nxmt") metas.set(stem(f), f);
   }
   const pieces = Array.from(names).sort(natural);
   const steel = pieces.filter((name) => {
-    if (!metas.has(name)) return false;
-    let text = "";
-    for (const f of fs.readdirSync(dir)) {
-      if (f.toLowerCase() === name + ".nxmt") { try { text = fs.readFileSync(path.join(dir, f), "utf8"); } catch (e) {} break; }
-    }
-    return /^\s*STEEL\b/mi.test(text);
+    const meta = metas.get(name);
+    if (!meta) return false;
+    return /^\s*STEEL\b/mi.test(readOr(io, dir + "/" + meta, ""));
   });
   return { pieces, steel };
 }
 
 /** The LEMMINGS line of theme.nxtm, "default" when absent. */
-function readTheme(styleDir) {
-  let text;
-  try { text = fs.readFileSync(path.join(styleDir, "theme.nxtm"), "utf8"); } catch (e) { return "default"; }
+function readTheme(io, styleDir) {
+  const text = readOr(io, styleDir + "/theme.nxtm", null);
+  if (text === null) return "default";
   const m = /^\s*LEMMINGS\s+(.+?)\s*$/mi.exec(text);
   return m ? m[1].toLowerCase() : "default";
 }
 
-/** The index for the repo at `repoRoot` (an empty one when the styles are not installed). */
-function buildStylesIndex(repoRoot) {
-  const stylesDir = path.join(repoRoot, STYLES_DIR);
+/** The index for a repo root on disk or an io (an empty one when the styles are not installed). */
+function buildStylesIndex(source) {
+  const io = typeof source === "string" ? levelsIndex.nodeIO(source) : source;
   const styles = [];
-  if (isDir(stylesDir)) {
-    const titles = readStylesIni(path.join(stylesDir, "styles.ini"));
-    const folders = fs.readdirSync(stylesDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && !d.name.startsWith("."))
-      .map((d) => d.name)
-      .sort(natural);
-    for (const name of folders) {
-      const dir = path.join(stylesDir, name);
-      const { pieces, steel } = listPieces(dir);
+  if (io.isDir(STYLES_DIR)) {
+    const titles = readStylesIni(readOr(io, STYLES_DIR + "/styles.ini", ""));
+    for (const name of io.listDirs(STYLES_DIR)) {
+      const dir = STYLES_DIR + "/" + name;
+      const { pieces, steel } = listPieces(io, dir);
       styles.push({
         name: name.toLowerCase(),
         title: titles[name.toLowerCase()] || name,
-        theme: readTheme(dir),
+        theme: readTheme(io, dir),
         pieces, steel, count: pieces.length,
       });
     }
@@ -110,19 +107,22 @@ function buildStylesIndex(repoRoot) {
   };
 }
 
-function findRepoRoot(start) {
-  let dir = path.resolve(start);
-  for (let i = 0; i < 6; i++) {
-    if (exists(path.join(dir, "config.json")) && exists(path.join(dir, "js", "lemmings.js"))) return dir;
-    dir = path.dirname(dir);
-  }
-  return path.resolve(start);
-}
+const api = { buildStylesIndex, readStylesIni, listPieces, readTheme, STYLES_DIR, INDEX_FILE };
+if (isNode) module.exports = api;
+else root.StylesIndex = api;
 
-if (require.main === module) {
-  const repoRoot = findRepoRoot(__dirname);
+if (isNode && require.main === module) {
+  const fs = require("fs");
+  const path = require("path");
+  const exists = (p) => { try { fs.statSync(p); return true; } catch (e) { return false; } };
+  const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch (e) { return false; } };
+  let repoRoot = path.resolve(__dirname);
+  for (let i = 0; i < 6; i++) {
+    if (exists(path.join(repoRoot, "config.json")) && exists(path.join(repoRoot, "js", "lemmings.js"))) break;
+    repoRoot = path.dirname(repoRoot);
+  }
   const index = buildStylesIndex(repoRoot);
-  const outDir = path.join(repoRoot, STYLES_DIR);
+  const outDir = path.join(repoRoot, ...STYLES_DIR.split("/"));
   const out = path.join(outDir, INDEX_FILE);
   const check = process.argv.includes("--check");
   if (!isDir(outDir)) {
@@ -135,5 +135,4 @@ if (require.main === module) {
     " · " + index.count + " styles, " + index.pieceCount + " pieces" +
     (empty ? " (" + empty + " styles without terrain)" : ""));
 }
-
-module.exports = { buildStylesIndex, readStylesIni, listPieces, readTheme, STYLES_DIR, INDEX_FILE };
+})(typeof window !== "undefined" ? window : globalThis);
