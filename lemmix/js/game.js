@@ -128,6 +128,8 @@
       this.onLoadReplayRequest = null;               // () => the page opens a file picker
       this.cursorLemming = null;                     // what the pointer is on, for the info strip
       this.nukePrepared = false;
+      this.clearPhysics = false;                     // the level as its physics map (the panel's CPM half, key t)
+      this.onOptionChanged = null;                   // () => the page redraws what it shows for an option
       this.gameTimer.onGameTick.on(() => this.onGameTimerTick());
       this.sim.start();
       for (const L of this.sim.lemmings) L.game = this;
@@ -173,6 +175,11 @@
     get replaying() { return this.sim.replaying; }
     get replayInsert() { return this.sim.replayInsert; }
     toggleReplayInsert() { this.sim.replayInsert = !this.sim.replayInsert; if (this.gui) this.gui.render(true); }
+    toggleClearPhysics() {
+      this.clearPhysics = !this.clearPhysics;
+      if (this.gui) this.gui.render(true);
+      if (this.onOptionChanged) this.onOptionChanged();
+    }
     setSelectDx(dx) { this.sim.selectDx = dx; if (this.gui) this.gui.render(true); }
 
     /** The game at `frame`, the replay kept; paused when `pause`. */
@@ -311,6 +318,14 @@
     if (this.portalWarpFrame >= 3 && this.portalWarpFrame <= 4) return; // mid-warp
     let variant = this.isZombie ? "zombie" : this.isNeutral ? "neutral" : this.hasPermanentSkills ? "athlete" : "normal";
     if (this.game.cursorLemming === this) variant += "+selected"; // the one the skill would go to
+    if (this.game.clearPhysics) {
+      // TRecolorImage.SwapColors with ClearPhysics: one flat colour per state
+      let c = this.hasPermanentSkills ? 0x00FFFF : 0x0000FF;
+      if (this.game.cursorLemming === this) c |= 0x7F0000;
+      if (this.isNeutral) c ^= 0xFFFFFF;
+      if (this.isZombie) c = (c | 0x007F00) & ~0x0000C0;
+      variant = "flat:" + c.toString(16).padStart(6, "0");
+    }
     const frame = this.game.sprites.frame(this.action, this.dx, this.frame, variant);
     if (frame) display.drawFrame(frame, this.x, this.y);
     // the countdown over a lemming about to blow (DrawLemmingCountdown)

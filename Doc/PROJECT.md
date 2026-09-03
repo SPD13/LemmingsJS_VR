@@ -349,6 +349,19 @@ The physics runs on integer maps only and has no randomness, so a run is
 reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
 NeoLemmix commit the port follows.
 
+**Clear physics mode** (the upper half of the last cell, key `t`) shows the
+level as NeoLemmix's `DrawClearPhysicsTerrain` and its trigger layer do:
+the terrain texture repainted from the physics map (`TerrainMesh.setPhysicsPaint`
+- grey, darker steel, a fine checker, blue where a one-way wall runs the way
+the one under the pointer does), background gadgets left out, and a layer of
+the level's size over the slab (`makeClearPhysicsOverlay` in `app.js`)
+repainted every frame with the trigger areas in a pink checker shaded by
+what lies under them, a blocker's two fields, and the gold-and-orange mark
+at each hatch's spawn point; lemmings draw in NeoLemmix's flat colours
+(blue, cyan for an athlete, red added under the pointer, neutrals and
+zombies as `CPM_LEMMING_*` combine them). NeoLemmix's helper icons over a
+pointed gadget are not drawn.
+
 **The replay is the game's authority**, as in NeoLemmix: a player's
 assignment, release-rate change or nuke is written into `recorded[]` at the
 current frame (cutting whatever the replay had from that frame on,
