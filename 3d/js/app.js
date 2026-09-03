@@ -1547,8 +1547,49 @@
   const selectDxNow = () => (session && session.game.sim ? session.game.sim.selectDx : 0);
   let endTimeout = null; // the level's end moving on to the next, unless the game is rewound
 
+  // ----------------------------------------------------- the REPLAY badge
+  // A red REPLAY over the play area while a NeoLemmix attempt is replaying
+  // (the panel's own R is small): on the desktop a label in the page, in a
+  // headset a plate in the bar's space above the status strip.
+  const replayBadge = document.getElementById("replay-badge");
+  const VR_REPLAY_W = 256, VR_REPLAY_H = 72;
+  let vrReplayLabel = null;
+  function vrReplayLabelMesh() {
+    if (vrReplayLabel) return vrReplayLabel;
+    const cv = document.createElement("canvas");
+    cv.width = VR_REPLAY_W; cv.height = VR_REPLAY_H;
+    const cx = cv.getContext("2d");
+    cx.fillStyle = "rgba(40, 8, 8, 0.85)";
+    cx.beginPath();
+    cx.roundRect ? cx.roundRect(3, 3, VR_REPLAY_W - 6, VR_REPLAY_H - 6, 12) : cx.rect(3, 3, VR_REPLAY_W - 6, VR_REPLAY_H - 6);
+    cx.fill();
+    cx.strokeStyle = "#ff3b3b";
+    cx.lineWidth = 5;
+    cx.stroke();
+    cx.fillStyle = "#ff3b3b";
+    cx.font = "bold 40px monospace";
+    cx.textAlign = "center";
+    cx.textBaseline = "middle";
+    cx.fillText("REPLAY", VR_REPLAY_W / 2, VR_REPLAY_H / 2 + 2);
+    const tex = new THREE.CanvasTexture(cv);
+    vrReplayLabel = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+    vrReplayLabel.name = "vr-replaybadge";
+    vrReplayLabel.renderOrder = GUI_ORDER_BAR_TOOL;
+    vrReplayLabel.visible = false;
+    guiRoot.add(vrReplayLabel);
+    return vrReplayLabel;
+  }
+  function setReplayBadge(on) {
+    if (replayBadge) replayBadge.hidden = !on;
+    const mesh = on && renderer.xr.isPresenting ? vrReplayLabelMesh() : vrReplayLabel;
+    if (mesh) mesh.visible = !!on && renderer.xr.isPresenting;
+  }
+
   function disposeSession() {
     if (!session) return;
+    setReplayBadge(false);
     if (gameCursor) gameCursor.clear(renderer.domElement);
     if (mouseCursorSprite) mouseCursorSprite.visible = false;
     if (endTimeout) { clearTimeout(endTimeout); endTimeout = null; }
@@ -2082,6 +2123,12 @@
       vrStatusPanel.position.set(
         0, y + VR_BAR_TOOL_SIZE * 0.75 + statusH / 2, VR_GUI_Z);
       vrStatusPanel.visible = true;
+      // the REPLAY plate above the strip, when it is up
+      if (vrReplayLabel) {
+        const w = guiW * 0.3, h = w * VR_REPLAY_H / VR_REPLAY_W;
+        vrReplayLabel.scale.set(w, h, 1);
+        vrReplayLabel.position.set(0, vrStatusPanel.position.y + statusH / 2 + 0.012 + h / 2, VR_GUI_Z);
+      }
       const step = VR_BAR_TOOL_SIZE * 1.15;
       const end = guiW / 2 - VR_BAR_TOOL_SIZE * 0.6;
       vrLeftTools.forEach((b, i) => { b.position.x = -end + i * step; });
@@ -3470,6 +3517,7 @@
       if (session.cpmAnimate) session.cpmAnimate(now);
       session.gui.setViewRect(visibleLevelRect()); // the minimap's frame
       session.gui.update();
+      setReplayBadge(!!session.game.replaying); // the red REPLAY over the play area
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
       if (renderer.xr.isPresenting) {
         // the pause icon tracks the clock however it was stopped - this
@@ -3688,6 +3736,7 @@
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
+    setReplayBadge, layoutGuiPanel, // for checks without a frame loop
     get cursor() { return gameCursor; },
     // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
