@@ -45,9 +45,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
 - on a NeoLemmix level, with a skill selected and a lemming under the
-  pointer, a shadow shows what the skill would do: the builder's bricks,
-  the basher's, miner's or digger's tunnel, the bomber's crater, the
-  jumper's arc and so on, in a contrasting grey over the level
+  pointer, a shadow shows what the skill would do, in the diorama's depth:
+  the builder's bricks as blocks, the basher's, miner's or digger's tunnel
+  and the bomber's crater as a cut through the slab, the jumper's arc as a
+  ribbon, and so on
 - with the NeoLemmix assets installed the pointer is NeoLemmix's cursor on
   every level: a cross, a square over a lemming, an arrow beside it while
   the direction filter is on (in VR, at the end of the beam)

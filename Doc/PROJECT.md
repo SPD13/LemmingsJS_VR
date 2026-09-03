@@ -373,11 +373,17 @@ or miner's tunnel, a digger's hole, a bomber's crater, a jumper's arc, a
 shimmier's or glider's path, a laserer's beam, a cloner's twin - the way
 `LemRendering.pas` draws them: a copy of the lemming is simulated with the
 skill frame by frame (`simulateTransitionLem`, `simulateLem` with the
-physics map put back afterwards), "low" pixels lie under the terrain and
-"high" ones on destructible terrain, each the contrasting grey of what is
-beneath at three-quarter alpha. A glider falling under the cursor shows its
-path whatever the skill. Repainted on every tick and, paused, when the
-lemming or the skill under the cursor changes.
+physics map put back afterwards). NeoLemmix draws them flat, a contrasting
+grey; the diorama gives them its depth: the terrain a tunnel or crater
+would take is a dark translucent cut through the whole slab, the bricks a
+builder, platformer or stacker would lay are light slab-deep blocks, and a
+path (a jumper's arc, a glider's flight) a thin ribbon at the lemmings'
+depth - each the greedy relief the sprites use, drawn without a depth test
+so a cut inside the slab still shows, with NeoLemmix's masking (cuts on
+destructible terrain only, bricks and paths where there is no terrain). A
+glider falling under the cursor shows its path whatever the skill. Rebuilt
+on every tick and, paused, when the lemming or the skill under the cursor
+changes.
 
 While an attempt is replaying - the replay still has actions ahead - a red
 REPLAY badge shows over the play area: a label in the page on the desktop,

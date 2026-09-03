@@ -9,7 +9,11 @@
  * ones over it, where destructible terrain would go (tunnels, craters).
  * The physics map is put back afterwards; the game never knows.
  *
- * compute(sim, lemming, skill) returns { low: [[x, y]...], high: [[x, y]...] }.
+ * compute(sim, lemming, skill) returns { low, high, bricks }, each a list of
+ * [x, y]: "low" the paths (a jumper's arc, a glider's flight), "bricks"
+ * the terrain a builder, platformer or stacker would lay (low too, for
+ * NeoLemmix, but the diorama gives them the slab's depth), "high" the
+ * terrain a basher, miner, digger, fencer, laserer or bomber would take.
  */
 (function (root) {
   const Lemmix = root.Lemmix || (root.Lemmix = {});
@@ -29,16 +33,17 @@
     [3, -12], [3, -13], [2, -13], [2, -14], [1, -14], [0, -14]];
 
   class ShadowSet {
-    constructor(sim) { this.sim = sim; this.low = []; this.high = []; this._seen = new Set(); }
-    _put(list, x, y) {
+    constructor(sim) { this.sim = sim; this.low = []; this.high = []; this.bricks = []; this._seen = new Set(); }
+    _put(list, tag, x, y) {
       if (x < 0 || x >= this.sim.width || y < 0 || y >= this.sim.height) return;
-      const key = (list === this.low ? "l" : "h") + x + "," + y;
+      const key = tag + x + "," + y;
       if (this._seen.has(key)) return;
       this._seen.add(key);
       list.push([x, y]);
     }
-    lowAt(x, y) { this._put(this.low, x, y); }
-    highAt(x, y) { this._put(this.high, x, y); }
+    lowAt(x, y) { this._put(this.low, "l", x, y); }
+    highAt(x, y) { this._put(this.high, "h", x, y); }
+    brickAt(x, y) { this._put(this.bricks, "b", x, y); }
   }
 
   /** Run `fn` with the physics map and the game's frame scratch put back afterwards. */
@@ -92,7 +97,7 @@
     withPhysicsSaved(sim, () => {
       while (L.action === BA.BUILDING) {
         if (L.physicsFrame >= 8 && !done) {
-          for (let i = 0; i <= 5; i++) out.lowAt(L.x + i * L.dx, L.y - 1);
+          for (let i = 0; i <= 5; i++) out.brickAt(L.x + i * L.dx, L.y - 1);
           done = true;
         } else if (L.physicsFrame === 0) done = false;
         sim.simulateLem(L, true);
@@ -103,7 +108,7 @@
   function drawPlatformer(sim, L, out) {
     withPhysicsSaved(sim, () => {
       while (L.action === BA.PLATFORMING) {
-        if (L.physicsFrame + 1 === 9) for (let i = 0; i <= 5; i++) out.lowAt(L.x + i * L.dx, L.y);
+        if (L.physicsFrame + 1 === 9) for (let i = 0; i <= 5; i++) out.brickAt(L.x + i * L.dx, L.y);
         sim.simulateLem(L, true);
       }
     });
@@ -116,7 +121,7 @@
       const yOffset = (L.action === BA.STACKING && L.physicsFrame === 7) ? -1 : 0;
       while (L.action === BA.STACKING) {
         if (L.physicsFrame + 1 === 7) {
-          for (let i = 1; i <= 3; i++) out.lowAt(L.x + i * L.dx, brickY + yOffset);
+          for (let i = 1; i <= 3; i++) out.brickAt(L.x + i * L.dx, brickY + yOffset);
           brickY--;
         }
         sim.simulateLem(L, true);
@@ -258,9 +263,9 @@
 
   function compute(sim, L, skill) {
     const out = new ShadowSet(sim);
-    if (!L || L.removed || !SHADOW_SKILLS.has(skill)) return { low: [], high: [] };
+    if (!L || L.removed || !SHADOW_SKILLS.has(skill)) return { low: [], high: [], bricks: [] };
     withPhysicsSaved(sim, () => draw(sim, L, skill, out));
-    return { low: out.low, high: out.high };
+    return { low: out.low, high: out.high, bricks: out.bricks };
   }
 
   Lemmix.Shadows = { compute, SHADOW_SKILLS };

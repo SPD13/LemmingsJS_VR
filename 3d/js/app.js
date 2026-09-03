@@ -1692,6 +1692,7 @@
   function disposeSession() {
     if (!session) return;
     setReplayBadge(false);
+    if (session.shadowOverlay) session.shadowOverlay.dispose(); // its geometries are rebuilt per hover, not tracked
     if (gameCursor) gameCursor.clear(renderer.domElement);
     if (mouseCursorSprite) mouseCursorSprite.visible = false;
     if (endTimeout) { clearTimeout(endTimeout); endTimeout = null; }
@@ -2176,7 +2177,7 @@
       lemmingPool, objectPool, particles, resources, depthMap, profile,
       groundData, profileUrl, musicTrack, pieceMap,
       getLastTickTime: () => lastTickTime,
-      syncScene, resetSceneMemory,
+      syncScene, resetSceneMemory, shadowOverlay,
       // clear physics: the gadgets' one colour walks the hues every five
       // seconds (MakeFixedDrawColor), between ticks too; the water bodies with it
       cpmAnimate: (now) => {
@@ -2382,55 +2383,65 @@
 
   // ------------------------------------------------ skill shadows (Lemmix)
   /**
-   * NeoLemmix's skill shadows over the level: what the selected skill would
-   * do to the lemming under the cursor (shadows.js). A layer of the level's
-   * size: a "low" pixel where no terrain is (a path, a brick), a "high" one
-   * on destructible terrain (a tunnel, a crater), each the contrasting grey
-   * of what is beneath at three-quarter alpha (CombinePixelsShadow). Drawn
-   * over everything without a depth test; repainted when the lemming, the
-   * skill or the frame changes.
+   * NeoLemmix's skill shadows, in the diorama's depth: what the selected
+   * skill would do to the lemming under the cursor (shadows.js), as
+   * translucent volumes rather than a flat layer. The terrain a tunnel or a
+   * crater would take is cut through the whole slab, dark; the bricks a
+   * builder, platformer or stacker would lay stand as slab-deep blocks,
+   * light; a path (a jumper's arc, a glider's flight) is a thin ribbon at
+   * the lemmings' depth. Each is the greedy relief the sprites use, shaded
+   * on its walls, drawn over everything without a depth test so a cut
+   * inside the slab still shows. Rebuilt when the lemming, the skill or the
+   * frame changes; NeoLemmix's masking kept (cuts on destructible terrain
+   * only, bricks and paths where there is no terrain).
    */
   function makeShadowOverlay(level, worldGroup, resources) {
-    const w = level.width, h = level.height;
-    const data = new Uint8Array(w * h * 4);
-    const tex = resources.track(new THREE.DataTexture(data, w, h, THREE.RGBAFormat));
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.NearestFilter;
-    const mesh = new THREE.Mesh(
-      resources.track(new THREE.PlaneGeometry(1, 1)),
-      resources.track(new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
-      })));
-    mesh.scale.set(w, h, 1);
-    mesh.position.set(w / 2, h / 2, OBJECT_DECAL_Z + 0.6);
-    mesh.renderOrder = -4;
-    mesh.visible = false;
-    worldGroup.add(mesh);
-    const phys = level.physics, img = level.groundImage;
-    const bg = (level.background && level.background.color) || 0;
-    const mod = (c) => (c < 0x80 ? 0xC0 : 0x40);
-    const put = (x, y, overTerrain) => {
-      const j = y * w + x, bits = phys[j];
-      const solid = (bits & 1) !== 0;
-      if (overTerrain ? (!solid || (bits & 2)) : solid) return; // high: destructible terrain only; low: under the terrain
-      const r = solid ? img[j * 4] : (bg >> 16) & 255, g = solid ? img[j * 4 + 1] : (bg >> 8) & 255, b = solid ? img[j * 4 + 2] : bg & 255;
-      const i = j * 4;
-      data[i] = mod(r); data[i + 1] = mod(g); data[i + 2] = mod(b); data[i + 3] = 0xC0;
+    const w = level.width, h = level.height, phys = level.physics;
+    const part = (color, opacity, depth, z) => {
+      const material = resources.track(new THREE.MeshBasicMaterial({
+        color, vertexColors: true, transparent: true, opacity, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+      }));
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+      mesh.renderOrder = -4;
+      mesh.visible = false;
+      worldGroup.add(mesh);
+      return { mesh, depth, z };
+    };
+    const cuts = part(0x585858, 0.62, TERRAIN_DEPTH, 0);         // through the slab
+    const bricks = part(0xd8d8d8, 0.55, TERRAIN_DEPTH, 0);       // slab-deep blocks
+    const paths = part(0xe8e8e8, 0.85, SPRITE_DEPTH, LEMMING_Z); // a ribbon at the lemmings' depth
+    const parts = [cuts, bricks, paths];
+    const keep = (x, y, overTerrain) => {
+      const bits = phys[y * w + x], solid = (bits & 1) !== 0;
+      return overTerrain ? (solid && !(bits & 2)) : !solid;
+    };
+    /** The pixels as one relief over their bounding box, put where they are in the level. */
+    const rebuild = (p, pixels, overTerrain) => {
+      const kept = pixels.filter(([x, y]) => keep(x, y, overTerrain));
+      p.mesh.geometry.dispose();
+      if (!kept.length) { p.mesh.geometry = new THREE.BufferGeometry(); p.mesh.visible = false; return; }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of kept) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+      const grid = new Uint8Array(bw * bh);
+      for (const [x, y] of kept) grid[(y - y0) * bw + (x - x0)] = 1;
+      p.mesh.geometry = buildExtrudedSpriteGeometry((x, y) => grid[y * bw + x] !== 0, bw, bh, p.depth) || new THREE.BufferGeometry();
+      p.mesh.position.set(x0, y0, p.z);
+      p.mesh.visible = true;
     };
     let lastKey = null;
     return {
-      mesh,
-      /** Paint for this lemming and skill (null: none); `key` says when nothing changed. */
+      mesh: cuts.mesh,
+      dispose() { parts.forEach((p) => { p.mesh.geometry.dispose(); worldGroup.remove(p.mesh); }); },
+      /** Build for this lemming and skill (null: none); `key` says when nothing changed. */
       update(sim, lem, skill, key) {
-        if (!lem || !skill) { mesh.visible = false; lastKey = null; return; }
+        if (!lem || !skill) { parts.forEach((p) => { p.mesh.visible = false; }); lastKey = null; return; }
         if (key === lastKey) return;
         lastKey = key;
         const shadow = Lemmix.Shadows.compute(sim, lem, skill);
-        data.fill(0);
-        for (const [x, y] of shadow.low) put(x, y, false);
-        for (const [x, y] of shadow.high) put(x, y, true);
-        tex.needsUpdate = true;
-        mesh.visible = shadow.low.length + shadow.high.length > 0;
+        rebuild(cuts, shadow.high, true);
+        rebuild(bricks, shadow.bricks, false);
+        rebuild(paths, shadow.low, false);
       },
     };
   }
