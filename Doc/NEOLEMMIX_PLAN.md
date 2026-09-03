@@ -187,6 +187,12 @@ From `3d/js/app.js`, `gui.js`, `bridge.js`, `portals.js`, `depth.js`, `terrain.j
 
 ## Status (2 September 2026)
 
+- 3 September 2026: NeoLemmix's hotkeys (`3d/js/hotkeys.js`): the key
+  table with its three layouts (traditional by default), the held filters
+  (direction, walkers only, athlete info), save/load state, the special
+  skips, save replay as a file, and the configuration dialog with Lemmix /
+  3D view tags, kept in localStorage; both engines, keys in VR too.
+
 Done on branch `lemmix`: Phase 0 (assets fetched, ignored by git; README
 says where from), Phase 1 (`levels/` directory, index, directory-style
 browser, legacy URLs, progress migration), Phase 2 (parser, styles, level

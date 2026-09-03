@@ -37,6 +37,7 @@ Everything the port adds lives in `3d/`:
     gui.js      703   the original skill panel, extruded and made pickable
     minimap.js  227   the minimap in the panel's last box: map, dots, view frame
     cursor.js   121   NeoLemmix's cursor: a cross, a square over a lemming, for both engines
+    hotkeys.js  628   NeoLemmix's configurable hotkeys: the table, its three layouts, the dialog
     vr.js       549   WebXR: session, placement, controllers, thumbsticks
     terrain.js  469   destructible extruded terrain, greedy-meshed in chunks
     library.js  441   the world catalog, level progress, level miniatures
@@ -215,6 +216,25 @@ headset — so zoom, tilt and scale are kept. Held and moved, the press keeps
 centring; moved off the map, it lets go. In VR the map is a scrubber like
 the volume slider: the trigger held on it keeps re-picking.
 
+**The hotkeys** (`hotkeys.js`) are NeoLemmix's table (LemmixHotkeys.pas):
+a key - `KeyboardEvent.code`, the two Shifts, Ctrls, Alts folded into one
+each, the middle and right mouse buttons as keys - to one function, some
+with a detail (skill, frames, hold, special skip). The three layouts are
+ported (traditional, the manual's, is the default; functional; minimal),
+the functions NeoLemmix has and the page does not (highlight, the replay
+editor, projections, save image, scroll, release mouse) left out, and the
+page's own view keys added on free keys. `app.js` runs a function on the
+key going down (`runHotkey`, GameWindow.Form_KeyDown), keeps the set of
+keys down for the held ones (`checkShifts`: direction filters, walkers
+only, athlete info, read into the sim as `hotkeyDx`, `selectWalkerOnly`,
+`game.showAthleteInfo`) and undoes a held release-rate or hold-type clear
+physics key on its release; a function a DOS level cannot do is nothing
+there. The dialog (`HotkeyDialog`, FEditHotkeys.pas) lists keys and
+functions with a Lemmix or 3D view tag, edits the chosen key's function and
+detail, finds a key by pressing it, shows unassigned keys and the keyboard's
+own labels (`navigator.keyboard.getLayoutMap`), and applies a layout; the
+table lives in localStorage (`lem3d-hotkeys`).
+
 **The cursor** (`cursor.js`) is NeoLemmix's whenever its pictures are
 installed (`neolemmix/gfx/cursor`, with the 32 px twins of `cursor-hr` for
 dense screens), on both engines: a cross over the level, a square once a
@@ -343,7 +363,7 @@ the DOS engine's generic parts by reference — `DisplayImage`, `Frame`,
 | `sprites.js` | a sprite set (`styles/<set>/lemmings/`) with its scheme and state recolouring - athlete, zombie, neutral, and the selected lemming's red shirt for the one under the cursor that the skill would go to, redrawn at once even while paused; pickup pictures; the `gfx/mask` masks |
 | `game.js` | `Lemmix.Game`: the same surface `app.js` drives for the DOS game (timer at 17 fps, lemming manager with NeoLemmix's cursor priority, skills, victory condition, command manager) |
 | `panel.js` | the NeoLemmix standard skill panel on its own 416×40 canvas (nineteen cells - the four after speed being replay, frame back/forward, direction left/right and clear-physics/load-replay, the split ones answering by half - then the minimap frame), the 38-column info strip with its icons and the replay mark, so `gui.js` extrudes it unchanged; a pack's own panel graphics when it ships them |
-| `rewind.js` | saved states and `gotoFrame`: NeoLemmix's way through time - a state at frame 0 and every 170 frames, thinned as NeoLemmix thins them; going to a frame loads the nearest earlier state and simulates up to it with nothing drawn or heard |
+| `rewind.js` | saved states, `gotoFrame` and `runUntil`: NeoLemmix's way through time - a state at frame 0 and every 170 frames, thinned as NeoLemmix thins them; going to a frame loads the nearest earlier state and simulates up to it with nothing drawn or heard; `runUntil` runs ahead the same way until a condition holds (the skip to the next shrugger) |
 
 The physics runs on integer maps only and has no randomness, so a run is
 reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the

@@ -130,6 +130,8 @@
       this.nukePrepared = false;
       this.clearPhysics = false;                     // the level as its physics map (the panel's CPM half, key t)
       this.onOptionChanged = null;                   // () => the page redraws what it shows for an option
+      this.showAthleteInfo = false;                  // the hotkey held: the info strip spells the permanent skills
+      this.stateMark = null;                         // the Save State hotkey: {frame, recorded}
       this.gameTimer.onGameTick.on(() => this.onGameTimerTick());
       this.sim.start();
       for (const L of this.sim.lemmings) L.game = this;
@@ -180,7 +182,75 @@
       if (this.gui) this.gui.render(true);
       if (this.onOptionChanged) this.onOptionChanged();
     }
+    setClearPhysics(on) { if (this.clearPhysics !== !!on) this.toggleClearPhysics(); }
     setSelectDx(dx) { this.sim.selectDx = dx; if (this.gui) this.gui.render(true); }
+
+    // ---- the hotkeys' own functions (GameWindow.Form_KeyDown)
+
+    /** Select a skill by its NeoLemmix name, when the level has it. */
+    selectSkillByName(name) {
+      const i = this.sim.activeSkills.indexOf(String(name).toUpperCase());
+      if (i < 0) return false;
+      this.queueCmmand(new Lemmings.CommandSelectSkill(i));
+      return true;
+    }
+
+    /** Next (+1) or previous (-1) skill on the panel, wrapping as NeoLemmix does. */
+    stepSkill(dir) {
+      const names = this.sim.activeSkills;
+      const sn = this.skills.getSelectedSkill();
+      let to = -1;
+      if (dir > 0) {
+        if (sn >= 0 && sn < names.length - 1) to = sn + 1;
+        else if (sn > 0) to = 0;
+      } else {
+        if (sn > 0) to = sn - 1;
+        else if (sn === 0 && names.length > 1) to = names.length - 1;
+      }
+      if (to >= 0) this.queueCmmand(new Lemmings.CommandSelectSkill(to));
+    }
+
+    /** The release rate to its limit (spbFaster/spbSlower with RightClick). */
+    setReleaseRateExtreme(dir) {
+      for (let i = 0; i < 200 && this.gameVictoryCondition.changeReleaseRate(dir); i++) { /* one step each */ }
+      if (this.gui) this.gui.render(true);
+    }
+
+    /** Cancel Replay: the player takes over even in replay-insert mode. */
+    cancelReplay() { this.sim.regainControl(true); if (this.gui) this.gui.render(true); }
+
+    /** Save State: this frame and the replay as it stands, for Load State. */
+    saveStateMark() {
+      this.stateMark = { frame: this.sim.currentIteration, recorded: this.sim.recorded.map((r) => Object.assign({}, r)) };
+    }
+
+    /** Load State: the replay as saved, the game at the saved frame, paused. */
+    loadStateMark() {
+      if (!this.stateMark) return false;
+      this.sim.recorded = this.stateMark.recorded.map((r) => Object.assign({}, r));
+      this.gotoFrame(this.stateMark.frame, true);
+      return true;
+    }
+
+    /** Skip to Previous Assignment: the frame before the replay's last action at or before now. */
+    skipToLastAction() {
+      const sim = this.sim;
+      const last = sim.lastActionFrame;
+      if (last === -1) return;
+      let target = 0;
+      if (sim.currentIteration > last) target = last;
+      else for (let i = 0; i <= sim.currentIteration; i++) if (sim.recorded.some((r) => r.frame === i)) target = i;
+      this.gotoFrame(Math.max(target - 1, 0), true);
+    }
+
+    /** Skip to Next Shrugger: ahead at hyperspeed until a builder, platformer or stacker runs out, then paused. */
+    skipToNextShrugger() {
+      const sim = this.sim;
+      const busy = (L) => !L.removed && (L.action === BA.BUILDING || L.action === BA.PLATFORMING || L.action === BA.STACKING);
+      if (!sim.lemmings.some(busy)) return;
+      Lemmix.Rewind.runUntil(sim, this.states, (s) => s.lemmings.some((L) => !L.removed && L.action === BA.SHRUGGING), 17 * 60 * 10);
+      this._afterJump(true);
+    }
 
     /** The game at `frame`, the replay kept; paused when `pause`. */
     gotoFrame(frame, pause) {

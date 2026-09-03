@@ -200,6 +200,7 @@
     <button id="btn-view" class="icon"></button>
     <input id="replay-file" type="file" accept=".nxrp" hidden>
   </div>
+  <div class="btnrow"><button id="btn-hotkeys" title="the keys: NeoLemmix's, and yours to change">configure hotkeys</button></div>
 </div>
 
 <div id="library" hidden>
@@ -221,8 +222,7 @@
   <button class="fold-close" title="hide">&times;</button>
   <b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br>
   <b>click</b> lemming: assign skill &middot; panel: as in game<br>
-  <b>space</b> pause &middot; <b>n</b> step &middot; <b>+/-</b> speed &middot; <b>,/.</b> level<br>
-  <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>w</b> world library &middot; <b>r</b> dump replay
+  <span id="hud-keys-hotkeys"></span>
   </div>
 </div>
 
@@ -308,6 +308,7 @@
 <script src="js/cursor.js"></script>
 <script src="js/minimap.js"></script>
 <script src="js/gui.js"></script>
+<script src="js/hotkeys.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

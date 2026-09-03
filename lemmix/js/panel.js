@@ -301,6 +301,14 @@
       if (!L || L.removed) return "";
       const name = Lemmix.ACTION_NAMES[L.action] || "";
       let word = ACTION_WORD[name] || "";
+      if (L.hasPermanentSkills && this.game.showAthleteInfo) {
+        // the Show Athlete Info hotkey: one letter per permanent skill, a dash for each it lacks
+        const w = "-------".split("");
+        if (L.isSlider) w[0] = "L"; if (L.isClimber) w[1] = "C"; if (L.isSwimmer) w[2] = "S";
+        if (L.isFloater) w[3] = "F"; if (L.isGlider) w[3] = "G"; if (L.isDisarmer) w[4] = "D";
+        if (L.isZombie) w[5] = "Z"; if (L.isNeutral) w[6] = "N";
+        return w.join("");
+      }
       if (L.hasPermanentSkills && !WORKING.has(name)) {
         const perms = [];
         if (L.isSlider) perms.push("SLIDER"); if (L.isClimber) perms.push("CLIMBER"); if (L.isSwimmer) perms.push("SWIMMER");
