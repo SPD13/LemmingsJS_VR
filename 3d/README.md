@@ -181,9 +181,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   "save" posts every changed file to the launcher, "export JSON" downloads
   them for `profiles/`. "galleries" (or "this piece in its gallery") opens
   the sprite galleries page.
-- `galleries.html` is the sprite galleries page, web only: every DOS tileset
-  and every NeoLemmix style down the left (a filter box narrows the list, a
-  green mark says which have a profile file), and for the open one a
+- `galleries.html` is the sprite galleries page, web only: down the left a
+  tree of every gallery — the classic games, a directory per pack holding
+  its tilesets; the NeoLemmix styles, a directory per author (the prefix of
+  the folder name) holding their styles — whose directories open and close
+  by a click (remembered), a filter box that searches the whole tree and
+  opens whatever holds a match, and a green mark on each gallery that has a
+  profile file (a directory tallies them); and for the open one a
   miniature of each terrain sprite with the same tag buttons as the editor,
   the current tag lit. Tags are saved, exported or reset per gallery, and
   are the same files the editor writes, so the 3D page shows them on its

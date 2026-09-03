@@ -43,7 +43,7 @@ Everything the port adds lives in `3d/`:
     library.js  441   the world catalog, level progress, level miniatures
     bridge.js   416   the sim/scene boundary: sprite capture and voxelisation
     editor.js   345   the piece-tagging workbench
-    galleries.js 444  the sprite galleries page (galleries.html): every tileset and style, tagged sprite by sprite
+    galleries.js 580  the sprite galleries page (galleries.html): every tileset and style, tagged sprite by sprite
     profile-store.js 318  the profile files: one per sprite gallery, merged per level, saved through the launcher
     depth.js    249   per-pixel depth classes
     audio.js    224   music and SFX through the engine's own AdLib synth

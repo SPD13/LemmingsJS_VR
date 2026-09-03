@@ -31,13 +31,20 @@
   .lib-row {
     display: flex; align-items: center; gap: 10px;
     background: #161c28; border: 1px solid #2a3446; border-radius: 6px;
-    padding: 8px 12px; cursor: pointer; font-size: 12px;
+    padding: 6px 12px; cursor: pointer; font-size: 12px;
   }
   .lib-row[hidden] { display: none; } /* the filter hides rows; flex would win otherwise */
   .lib-row:hover { border-color: #6fce7e; background: #1a2231; }
   .lib-row.here { border-color: #ffd866; background: #1e2130; }
   .lib-row.empty { opacity: 0.5; }
-  .lib-row-name { color: #f0f3f8; font-size: 12px; flex: 1; min-width: 0; }
+  /* the tree: a directory row unfolds its children, indented one step */
+  .lib-row.gal-dir { background: transparent; border-color: transparent; padding-top: 5px; padding-bottom: 5px; }
+  .lib-row.gal-dir:hover { background: #161c28; border-color: #2a3446; }
+  .lib-row.gal-dir .lib-row-name { color: #cdd6e4; }
+  .lib-row.gal-dir.open .lib-row-name { color: #f0f3f8; }
+  .gal-caret { color: #8fa1bb; width: 10px; flex: none; font-size: 11px; }
+  #gal-none { color: #8fa1bb; font-size: 11px; padding: 6px 12px; }
+  .lib-row-name { color: #f0f3f8; font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lib-row-sub { color: #8fa1bb; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .lib-badge {
     font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
@@ -45,8 +52,8 @@
   }
   .lib-badge.classic { color: #7fd6e8; border-color: #2f5f6b; }
   .lib-badge.lemmix { color: #ffb066; border-color: #6b4a2f; }
-  .lib-count { color: #cdd6e4; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .lib-mark { font-size: 11px; color: #5a6a7c; white-space: nowrap; min-width: 62px; text-align: right; }
+  .lib-count { color: #8fa1bb; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 24px; text-align: right; }
+  .lib-mark { font-size: 11px; color: #5a6a7c; white-space: nowrap; min-width: 28px; text-align: right; }
   .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
 
   /* the page: the galleries down the left, the open one's sprites on the right */
