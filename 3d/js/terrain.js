@@ -185,6 +185,34 @@ class TerrainMesh {
     if (ly === TERRAIN_CHUNK - 1 && cy < this.chunksY - 1) this.dirtyChunks.add((cy + 1) * this.chunksX + cx);
   }
 
+  /**
+   * The level's arrays changed under the mesh without passing through the
+   * mutation hooks (a saved state was put back): every pixel whose solidity
+   * differs from what is drawn marks its chunk - and the neighbour it
+   * borders, for the step walls - the texture is refilled, and only those
+   * chunks are re-meshed. A frame back costs a few chunks, not the level.
+   */
+  resync() {
+    const w = this.w, h = this.h, mask = this.maskLayer.groundMask;
+    const dirty = this.dirtyChunks;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if ((this.texData[i * 4 + 3] !== 0) === (mask[i] !== 0)) continue;
+        const cx = Math.floor(x / TERRAIN_CHUNK), cy = Math.floor(y / TERRAIN_CHUNK);
+        dirty.add(cy * this.chunksX + cx);
+        const lx = x % TERRAIN_CHUNK, ly = y % TERRAIN_CHUNK;
+        if (lx === 0 && cx > 0) dirty.add(cy * this.chunksX + cx - 1);
+        if (lx === TERRAIN_CHUNK - 1 && cx < this.chunksX - 1) dirty.add(cy * this.chunksX + cx + 1);
+        if (ly === 0 && cy > 0) dirty.add((cy - 1) * this.chunksX + cx);
+        if (ly === TERRAIN_CHUNK - 1 && cy < this.chunksY - 1) dirty.add((cy + 1) * this.chunksX + cx);
+      }
+    }
+    this._refillTexRect(0, 0, w, h);
+    this.texture.needsUpdate = true;
+    this.flushDirty(Infinity);
+  }
+
   /** Re-mesh dirty chunks, at most `budget` per call (nuke-proofing). */
   flushDirty(budget = 24) {
     let n = 0;

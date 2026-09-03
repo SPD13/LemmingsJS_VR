@@ -327,11 +327,27 @@ the DOS engine's generic parts by reference — `DisplayImage`, `Frame`,
 | `replay.js` | NeoLemmix `.nxrp` replays read (`?nxrp=<url>`, `nx-run --nxrp`) and written (the `r` key, `nx-run --save-nxrp`) |
 | `sprites.js` | a sprite set (`styles/<set>/lemmings/`) with its scheme and state recolouring; pickup pictures; the `gfx/mask` masks |
 | `game.js` | `Lemmix.Game`: the same surface `app.js` drives for the DOS game (timer at 17 fps, lemming manager with NeoLemmix's cursor priority, skills, victory condition, command manager) |
-| `panel.js` | the NeoLemmix skill panel drawn on a 352×40 canvas the shape of the DOS panel's (fifteen cells and NeoLemmix's minimap frame after them), so `gui.js` extrudes it unchanged; a pack's own panel graphics when it ships them |
+| `panel.js` | the NeoLemmix standard skill panel on its own 416×40 canvas (nineteen cells - the four after speed being replay, frame back/forward, direction left/right and clear-physics/load-replay, the split ones answering by half - then the minimap frame), the 38-column info strip with its icons and the replay mark, so `gui.js` extrudes it unchanged; a pack's own panel graphics when it ships them |
+| `rewind.js` | saved states and `gotoFrame`: NeoLemmix's way through time - a state at frame 0 and every 170 frames, thinned as NeoLemmix thins them; going to a frame loads the nearest earlier state and simulates up to it with nothing drawn or heard |
 
 The physics runs on integer maps only and has no randomness, so a run is
 reproducible from its inputs; `Doc/neolemmix-src/COMMIT` pins the
-NeoLemmix commit the port follows. Terrain changes go through the level's
+NeoLemmix commit the port follows.
+
+**The replay is the game's authority**, as in NeoLemmix: a player's
+assignment, release-rate change or nuke is written into `recorded[]` at the
+current frame (cutting whatever the replay had from that frame on,
+`regainControl` = `TReplay.Cut`) and takes effect when the next update
+reaches `checkForReplayAction` - the same path a loaded `.nxrp` takes, so
+live play and playback cannot drift apart. That is why a click on a lemming
+while paused runs one frame. There is no reverse physics: the replay button,
+a frame back and a loaded replay all go through `rewind.js` - the nearest
+saved state before the target, then updates with nothing drawn or heard
+until the frame - and the page is told (`onRestore`) to refresh what it
+holds copies of: the terrain texture and meshes (the state went back into
+the level's own arrays), the depth and relief maps (kept with each state),
+the sprite pools' last positions, the sound memory, the HUD's verdict and
+the minimap. Terrain changes go through the level's
 `setGroundAt`/`clearGroundAt`, which is why the diorama's terrain hooks
 (§2.3) need nothing new. Sound cues come out of the simulation by name
 (`game.sounds`) and play from `neolemmix/sound/` through the same gain and VR panner

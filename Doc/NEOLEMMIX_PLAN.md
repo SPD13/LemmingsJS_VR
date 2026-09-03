@@ -200,8 +200,10 @@ pre/post text and talismans, depth profiles by piece name with the editor
 and the catalog marks, per-pack panel skins) and Phase 8 (`.nxrp` replays
 read and written with a verified round trip, countdown digits, gadget
 count digits, moving backgrounds behind the terrain, and the last skills
-and gadgets: jumper, shimmier, slider, laserer, portals), and the minimap
-in both panels (`Doc/MINIMAP_PLAN.md`). Nothing from the
+and gadgets: jumper, shimmier, slider, laserer, portals), the minimap
+in both panels (`Doc/MINIMAP_PLAN.md`) and NeoLemmix's replay, frame-skip
+and directional-select buttons with its saved states
+(`Doc/REPLAY_PLAN.md`). Nothing from the
 plan is open; what remains is fidelity work against real NeoLemmix
 replays as they become available.
 

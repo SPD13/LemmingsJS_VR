@@ -293,6 +293,136 @@ async function main() {
     check("laserer removes terrain along its beam", removed > 30, { removed });
   }
 
+  // ================= the replay model and saved states (rewind.js)
+
+  /** A fingerprint of everything a frame is: lemmings, ground, counters. */
+  function fingerprint(game) {
+    let h = 0;
+    const mix = (v) => { h = (Math.imul(h ^ (v | 0), 0x9e3779b1) + 0x7f4a7c15) | 0; };
+    for (const L of game.lemmings) { mix(L.x); mix(L.y); mix(L.dx); mix(L.action); mix(L.frame); mix(L.removed ? 1 : 0); mix(L.explosionTimer); }
+    const ph = game.level.physics; for (let i = 0; i < ph.length; i++) mix(ph[i]);
+    for (const k of ["currentIteration", "clockFrame", "lemmingsOut", "lemmingsIn", "lemmingsRemoved", "currSpawnInterval", "nextLemmingCountdown"]) mix(game[k]);
+    for (const g of game.gadgets) { mix(g.currentFrame); mix(g.triggered ? 1 : 0); }
+    return h;
+  }
+
+  // --- a player's assignment is recorded now and takes effect in the next update
+  {
+    const level = makeLevel(200, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["DIGGER"]);
+    run(game, 40);
+    const at = game.currentIteration;
+    const ok = game.assignSkillTo(game.lemmings[0], "DIGGER");
+    const before = game.lemmings[0].action;
+    game.update();
+    const after = game.lemmings[0].action;
+    check("an assignment is recorded at the frame and applied by the next update",
+      ok && before === BA.WALKING && after === BA.DIGGING && game.recorded.length === 1 && game.recorded[0].frame === at &&
+      game.skillCount("DIGGER") === 4, { ok, before, after, recorded: game.recorded });
+    check("the replay is over once its last action has fired", game.replaying === false && game.lastActionFrame === at);
+  }
+
+  // --- saving a state and loading it back gives the same future
+  {
+    const level = makeLevel(600, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["BUILDER", "DIGGER"]);
+    run(game, 30);
+    game.assignSkillTo(game.lemmings[0], "BUILDER");
+    run(game, 70);
+    const state = game.saveState();
+    const atSave = game.currentIteration;
+    run(game, 60);
+    game.assignSkillTo(game.lemmings[0], "DIGGER");
+    run(game, 140);
+    const straight = fingerprint(game), endFrame = game.currentIteration;
+    game.loadState(state);
+    check("loadState puts the frame back", game.currentIteration === atSave && fingerprint(game) !== straight);
+    run(game, endFrame - atSave);
+    check("the same frames after a load give the same game (the replay re-fires)", fingerprint(game) === straight, { endFrame });
+  }
+
+  // --- cutReplay: assignments and nukes from the frame, spawn intervals from the frame after
+  {
+    const level = makeLevel(200, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["DIGGER"]);
+    game.recorded = [
+      { type: "assignment", frame: 10, skill: "DIGGER", lemIndex: 0, lemId: "N1" },
+      { type: "spawn_interval", frame: 20, interval: 40, spawned: 1 },
+      { type: "assignment", frame: 20, skill: "DIGGER", lemIndex: 0, lemId: "N1" },
+      { type: "nuke", frame: 25 },
+      { type: "spawn_interval", frame: 30, interval: 30, spawned: 1 },
+    ];
+    game.currSpawnInterval = 40; // the one on frame 20 agrees with what is in force
+    game.cutReplay(20);
+    const kept = game.recorded.map((r) => r.type + "@" + r.frame).join(" ");
+    check("cutReplay keeps the agreeing spawn interval on the frame, drops the rest", kept === "assignment@10 spawn_interval@20", kept);
+    game.recorded.push({ type: "spawn_interval", frame: 20, interval: 45, spawned: 1 });
+    game.recorded = game.recorded.filter((r) => !(r.type === "spawn_interval" && r.interval === 40));
+    game.cutReplay(20);
+    check("...and drops a disagreeing one", game.recorded.length === 1 && game.recorded[0].frame === 10);
+  }
+
+  // --- regainControl cuts only while the replay still has actions ahead
+  {
+    const level = makeLevel(200, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["DIGGER"]);
+    game.recorded = [{ type: "assignment", frame: 50, skill: "DIGGER", lemIndex: 0, lemId: "N1" }];
+    run(game, 10);
+    check("replaying while an action lies ahead", game.replaying === true && game.lastActionFrame === 50);
+    game.regainControl();
+    check("taking control drops the action ahead", game.recorded.length === 0 && game.replaying === false);
+    game.replayInsert = true;
+    game.recorded = [{ type: "assignment", frame: 50, skill: "DIGGER", lemIndex: 0, lemId: "N1" }];
+    game.regainControl();
+    check("...but not in replay-insert mode", game.recorded.length === 1);
+    game.regainControl(true);
+    check("...unless forced", game.recorded.length === 0);
+  }
+
+  // --- gotoFrame: back and forward through saved states equals playing straight
+  {
+    const level = makeLevel(600, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["BUILDER", "DIGGER"]);
+    const states = new Lemmix.SaveStates();
+    states.add(game);
+    const marks = {};
+    const step = () => {
+      game.update();
+      if (game.currentIteration % Lemmix.Rewind.SAVE_EVERY === 0) { states.add(game); states.tidy(game.currentIteration); }
+      if (game.currentIteration === 60) game.assignSkillTo(game.lemmings[0], "BUILDER");
+      if (game.currentIteration === 300) game.assignSkillTo(game.lemmings[0], "DIGGER");
+      if ([100, 250, 400].includes(game.currentIteration)) marks[game.currentIteration] = fingerprint(game);
+    };
+    for (let f = 0; f < 400; f++) step();
+    const n1 = Lemmix.Rewind.gotoFrame(game, states, 250);
+    check("gotoFrame 250 lands on the frame from the state before it", game.currentIteration === 250 && fingerprint(game) === marks[250] && n1 > 0 && n1 <= Lemmix.Rewind.SAVE_EVERY, { n1 });
+    Lemmix.Rewind.gotoFrame(game, states, 100);
+    check("gotoFrame 100 (before the digger, after the builder) matches", game.currentIteration === 100 && fingerprint(game) === marks[100]);
+    Lemmix.Rewind.gotoFrame(game, states, 400);
+    check("gotoFrame 400 forward again re-fires the replay and matches", game.currentIteration === 400 && fingerprint(game) === marks[400]);
+    Lemmix.Rewind.gotoFrame(game, states, 0);
+    check("gotoFrame 0 is the level's start, the replay kept", game.currentIteration === 0 && game.lemmings.length === 1 && game.recorded.length === 2 && game.replaying === true);
+    // one frame back from 400: a state strictly before, then 399 - 340 = 59 frames
+    Lemmix.Rewind.gotoFrame(game, states, 400);
+    const n2 = Lemmix.Rewind.gotoFrame(game, states, 399);
+    check("one frame back re-simulates from the state before", game.currentIteration === 399 && n2 === 399 - 340, { n2 });
+  }
+
+  // --- taking control at a rewound frame forks the replay there
+  {
+    const level = makeLevel(600, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["BUILDER", "DIGGER"]);
+    const states = new Lemmix.SaveStates();
+    states.add(game);
+    for (let f = 0; f < 200; f++) { game.update(); if (game.currentIteration === 180) game.assignSkillTo(game.lemmings[0], "DIGGER"); }
+    Lemmix.Rewind.gotoFrame(game, states, 120);
+    check("rewound to 120, the digger at 180 still lies ahead", game.replaying && game.recorded.length === 1);
+    game.assignSkillTo(game.lemmings[0], "BUILDER");
+    check("a new action at 120 replaces the future", game.recorded.length === 1 && game.recorded[0].skill === "BUILDER" && game.recorded[0].frame === 120);
+    run(game, 100);
+    check("...and the old digger never fires", game.skillCount("DIGGER") === 5 && game.skillCount("BUILDER") === 4);
+  }
+
   console.log(passed + " passed, " + failed + " failed");
   process.exitCode = failed ? 1 : 0;
 }

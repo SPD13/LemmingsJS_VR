@@ -11,7 +11,7 @@ const { PNG } = require("pngjs");
 const LEMMIX_DIR = path.join(__dirname, "..", "lemmix", "js");
 
 // the modules attach themselves to globalThis.Lemmix, in dependency order
-for (const name of ["parser.js", "pixels.js", "styles.js", "level.js", "lemgame.js", "sprites.js", "replay.js"]) {
+for (const name of ["parser.js", "pixels.js", "styles.js", "level.js", "lemgame.js", "rewind.js", "sprites.js", "replay.js"]) {
   require(path.join(LEMMIX_DIR, name));
 }
 const Lemmix = globalThis.Lemmix;

@@ -1363,9 +1363,11 @@
 
   // per-level session state, rebuilt on every level load
   let session = null;
+  let endTimeout = null; // the level's end moving on to the next, unless the game is rewound
 
   function disposeSession() {
     if (!session) return;
+    if (endTimeout) { clearTimeout(endTimeout); endTimeout = null; }
     try {
       if (session.game && session.game.getGameTimer()) session.game.stop();
     } catch (e) { /* already stopped */ }
@@ -1545,6 +1547,23 @@
     gui.setRelief(state.skillBar);
     gui.onMinimapCenter = (p) => centerViewOn(p.x, p.y);
 
+    if (game.states) {
+      // a saved state carries the depth and relief maps with it: the terrain
+      // rewrites them as it is dug, and a level's picture alone cannot say
+      // what class a dug-then-rebuilt pixel had
+      game.states.onSave = (s) => { s.extra.depth = depthMap.slice(); s.extra.relief = terrain.relief ? terrain.relief.slice() : null; };
+      game.states.onLoad = (s) => {
+        if (s.extra.depth) depthMap.set(s.extra.depth);
+        if (s.extra.relief && terrain.relief) terrain.relief.set(s.extra.relief);
+      };
+      game.onRestore.on((info) => refreshAfterRestore(game, info));
+      // the load-replay half of the last cell: a file picker (desktop only)
+      game.onLoadReplayRequest = () => {
+        const input = document.getElementById("replay-file");
+        if (input && !renderer.xr.isPresenting) input.click();
+      };
+    }
+
     if (state.replay) {
       game.getCommandManager().loadReplay(state.replay);
       state.replay = null;
@@ -1565,7 +1584,8 @@
     const prevActions = new Map(); // lemming id -> action name, for SFX cues
     const prevBricks = new Map();  // lemming id -> bricks laid, for the warning
     let doorSfxPlayed = false;     // the hatches open together; one sound
-    game.getGameTimer().onGameTick.on(() => {
+    // (named, so the page can run it once after the game jumps to another frame)
+    const syncScene = () => {
       lastTickTime = performance.now();
 
       objCapture.begin();
@@ -1647,7 +1667,13 @@
       particles.sync(lemCapture.particles);
 
       terrain.flushDirty();
-    });
+    };
+    game.getGameTimer().onGameTick.on(syncScene);
+    // what the bridge remembers from tick to tick, dropped when the game jumps
+    const resetSceneMemory = () => {
+      prevActions.clear(); prevBricks.clear(); doorSfxPlayed = false; trapSfxAt = null;
+      lastTickTime = performance.now();
+    };
 
     // Replace the timer's setInterval drive with our rAF accumulator (below):
     // browsers throttle setInterval hard in unfocused/occluded windows, and the
@@ -1735,11 +1761,21 @@
       hud.state.className = won ? "won" : "lost";
       setVrStatus({ note: won ? "COMPLETE" + best : "FAILED",
                     kind: won ? "won" : "lost" });
-      window.setTimeout(() => {
-        if (session && session.game === game) moveLevel(won ? 1 : 0);
+      endTimeout = window.setTimeout(() => {
+        endTimeout = null;
+        // a replay or a step back since the end keeps the level (it is playable again)
+        if (session && session.game === game && game.finalGameState !== Lemmings.GameStateTypes.UNKNOWN) moveLevel(won ? 1 : 0);
       }, 3000);
     });
     game.start();
+    // A window the player is dealing with - the catalog, a question - holds
+    // whatever game is current. A level that arrives behind it (the
+    // auto-advance or restart after a result, a reload from a switch) starts
+    // held too, and is released with the rest when the window goes.
+    if (simHolders.size > 0) {
+      simWasRunning = true;
+      game.getGameTimer().suspend();
+    }
 
     // Camera: frame the level's intended start position - but never during a
     // session, where the camera is the headset. Writing desktop coordinates
@@ -1768,6 +1804,7 @@
       lemmingPool, objectPool, particles, resources, depthMap, profile,
       groundData, profileUrl, musicTrack, pieceMap,
       getLastTickTime: () => lastTickTime,
+      syncScene, resetSceneMemory,
       // re-derive the colour-keyed relief (master switch or a per-piece tag)
       rebuildRelief: () => {
         session.terrain.setRelief(
@@ -1859,6 +1896,31 @@
   }
 
   /** Default desktop framing: the level's intended start area, slightly above. */
+  /**
+   * A Lemmix game jumped to another frame (the replay button, a frame back,
+   * a loaded replay): the state went back into the level's own arrays, so
+   * everything the scene holds a copy of is refreshed - the terrain's
+   * texture and meshes, the sprite pools' last positions, the bridge's
+   * memory of actions and bricks, the verdict on the HUD, the minimap -
+   * and one bridge pass draws the frame as a tick would.
+   */
+  function refreshAfterRestore(game) {
+    if (!session || session.game !== game) return;
+    const level = session.level;
+    session.terrain.resync();
+    session.lemmingPool.prevPositions.clear();
+    session.resetSceneMemory();
+    tickDebt = 0;
+    if (endTimeout) { clearTimeout(endTimeout); endTimeout = null; }
+    hud.state.textContent = "";
+    hud.state.className = "";
+    setLevelText(level.pretext);
+    setVrStatus({ note: "", kind: "" });
+    if (session.gui.minimap) session.gui.minimap.terrainDirty = true;
+    session.syncScene();
+    syncPauseLabel();
+  }
+
   function frameDesktopCamera(level) {
     const startX = level.screenPositionX + 200;
     const targetY = level.height / 2;
@@ -2182,6 +2244,9 @@
     if (lem) {
       session.game.queueCmmand(new Lemmings.CommandLemmingsAction(lem.id));
       audio.playSfx(SFX.ASSIGN, sfxPos(lem.x, lem.y));
+      // a Lemmix assignment is written into the replay and shows on the
+      // next frame: paused, that frame is run now (ForceUpdateOneFrame)
+      if (session.game.forceOneFrame) session.game.forceOneFrame();
     }
   }
 
@@ -2223,6 +2288,7 @@
     }
     if (!cursorSim) lem = null;
     hoveredLemming = lem;
+    if (session.game.sim) session.game.cursorLemming = lem; // the info strip names it
     if (lem) {
       session.ring.visible = true;
       session.ring.position.set(lem.x, lem.y - 5, LEMMING_Z + 2);
@@ -2326,6 +2392,15 @@
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
     if (e.button === 2) rightDownAt = { x: e.clientX, y: e.clientY };
+    if (e.button !== 0) {
+      const onPanel = pick(e);
+      if (onPanel && onPanel.panelUv && !onPanel.minimap) {
+        e.preventDefault();
+        session.gui.onMouseDown(onPanel.panelUv, e.button);
+        session.gui.onMouseUp(onPanel.panelUv);
+        return;
+      }
+    }
     if (e.button === 2 && vrMouseFallback()) {
       // right-drag = pan, as in the web view: grab the point under the
       // cursor on the board's plane and slide the diorama with it
@@ -2773,7 +2848,12 @@
     const timer = session.game.getGameTimer();
     switch (e.key) {
       case " ": e.preventDefault(); togglePause(); break;
-      case "n": if (!timer.isRunning()) timer.tick(); break;
+      case "n": // one frame forward while paused
+        if (session.game.forwardFrames) session.game.forwardFrames(1);
+        else if (!timer.isRunning()) timer.tick();
+        break;
+      case "b": if (session.game.backFrames) session.game.backFrames(1); break; // one frame back (Lemmix)
+      case "i": if (session.game.toggleReplayInsert) session.game.toggleReplayInsert(); break;
       case "+": case "=": timer.speedFactor = Math.min(10, timer.speedFactor + 1); break;
       case "-": timer.speedFactor = Math.max(0.5, timer.speedFactor - 0.5); break;
       case "e":
@@ -2872,7 +2952,10 @@
       case "c":
         if (session.editor && session.editor.enabled) session.editor.cycleClass();
         break;
-      case "r":
+      case "r": // the replay button: the level from the start, paused, the attempt replaying (Lemmix)
+        if (session.game.restartReplay) session.game.restartReplay();
+        break;
+      case "R":
         console.log("replay string (append as ?replay=... to reproduce this run):");
         console.log(session.game.getCommandManager().serialize());
         if (session.game.sim) {
@@ -3092,6 +3175,18 @@
     return Lemmix.LevelBuilder.build(data, lemmixStyles, { seed: level.id });
   });
   document.getElementById("btn-library").addEventListener("click", () => library.toggle());
+  // the panel's load-replay half opens this picker: the file plays from the start
+  const replayFile = document.getElementById("replay-file");
+  if (replayFile) {
+    replayFile.addEventListener("change", async () => {
+      const file = replayFile.files && replayFile.files[0];
+      replayFile.value = "";
+      if (!file || !session || !session.game.loadReplayFile) return;
+      try {
+        session.game.loadReplayFile(Lemmix.Replay.parse(await file.text()));
+      } catch (e) { console.warn("[3d] replay file:", e); }
+    });
+  }
   renderMode(); // billing, catalog labels and editor availability
 
   // The folding panels down the right edge - the key hints, the 3D

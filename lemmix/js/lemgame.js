@@ -102,6 +102,12 @@
 
   const inSet = (v, arr) => arr.indexOf(v) >= 0;
 
+  // what a saved state carries of the game's own numbers and flags
+  const SAVED_SCALARS = ["currentIteration", "clockFrame", "timePlay", "lemmingsToRelease", "lemmingsCloned",
+    "lemmingsOut", "lemmingsIn", "lemmingsRemoved", "spawnedDead", "delayEndFrames", "particleFinishTimer",
+    "nextLemmingCountdown", "hatchesOpened", "buttonsRemain", "currSpawnInterval", "userSetNuking",
+    "exploderAssignInProgress", "indexLemmingToBeNuked", "gameFinished", "lemNextAction", "lemJumpToHoistAdvance"];
+
   // ------------------------------------------------------------- lemming
 
   /** TLemming, with LemX/LemY/... shortened to x/y/... */
@@ -151,6 +157,16 @@
 
     assign(s) {
       for (const k of Object.keys(s)) if (k !== "index" && k !== "queueAction" && k !== "queueFrame") this[k] = s[k];
+    }
+
+    /** A copy for a saved state: every field but the game link, the jump path by value. */
+    clone() {
+      const c = new Lemming(this.index);
+      for (const k of Object.keys(this)) {
+        if (k === "game") continue;
+        c[k] = k === "jumpPositions" ? this[k].map((p) => p.slice()) : this[k];
+      }
+      return c;
     }
 
     get hasPermanentSkills() {
@@ -220,32 +236,146 @@
       this.fixedColor = null;
       this.playing = false;
       this.resultRec = null;
-      this.replay = null;        // {assignments, spawnIntervals, nukes} being played back
-      this.recorded = [];        // what the player did, for replay.js to write out
+      // The replay (TReplay): what the player did, one entry per action -
+      // {type: "assignment", frame, skill, lemIndex, lemId, x, y, dx},
+      // {type: "spawn_interval", frame, interval, spawned}, {type: "nuke",
+      // frame}. It is the authority: a player's action is recorded here and
+      // takes effect when the next update reaches checkForReplayAction, the
+      // same way a loaded replay's actions do (AssignNewSkill records, the
+      // update applies). replay.js writes it out as .nxrp and reads one in.
+      this.recorded = [];
+      this.replayInsert = false; // actions add to the replay without cutting it
+      this.selectDx = 0;         // directional select: -1, 0 or 1
     }
 
-    /** Play back a parsed replay (replay.js): its actions fire on their frames. */
-    loadReplay(replay) { this.replay = replay; }
+    // ---- the replay
+
+    /** Take a parsed replay (replay.js) as the game's own, from the start. */
+    loadReplay(replay) {
+      const out = [];
+      for (const a of replay.assignments) out.push({ type: "assignment", frame: a.frame, skill: a.skill, lemIndex: a.lemIndex, lemId: a.lemId, x: a.x, y: a.y, dx: a.dx });
+      for (const s of replay.spawnIntervals) out.push({ type: "spawn_interval", frame: s.frame, interval: s.interval, spawned: s.spawned });
+      for (const n of replay.nukes) out.push({ type: "nuke", frame: n.frame });
+      out.sort((a, b) => a.frame - b.frame);
+      this.recorded = out;
+    }
+
+    /** TReplay.Add: one entry of a kind per frame, the newer one wins. */
+    _record(entry) {
+      this.recorded = this.recorded.filter((r) => !(r.frame === entry.frame && r.type === entry.type));
+      this.recorded.push(entry);
+    }
+
+    /** The frame of the replay's last action, -1 when it has none. */
+    get lastActionFrame() {
+      let last = -1;
+      for (const r of this.recorded) if (r.frame > last) last = r.frame;
+      return last;
+    }
+
+    /** Replaying: the replay still has actions ahead of (or on) this frame. */
+    get replaying() { return this.currentIteration <= this.lastActionFrame; }
+
+    /** Is there a recorded entry of this kind on this frame? */
+    hasRecorded(type, frame) { return this.recorded.some((r) => r.type === type && r.frame === frame); }
+
+    /**
+     * TReplay.Cut: the replay's future goes - assignments and nukes from
+     * `frame` on, spawn-interval changes from the frame after (from `frame`
+     * too when the one on it disagrees with the interval in force).
+     */
+    cutReplay(frame) {
+      const onFrame = this.recorded.find((r) => r.type === "spawn_interval" && r.frame === frame);
+      const siFrom = onFrame && onFrame.interval !== this.currSpawnInterval ? frame : frame + 1;
+      this.recorded = this.recorded.filter((r) => (r.type === "spawn_interval" ? r.frame < siFrom : r.frame < frame));
+    }
+
+    /** RegainControl: the player acts, so the replay is cut here - unless it is being added to. */
+    regainControl(force) {
+      if (this.replayInsert && !force) return;
+      if (this.currentIteration > this.lastActionFrame) return;
+      this.cutReplay(this.currentIteration);
+    }
 
     /** CheckForReplayAction: what the replay says happens on this frame. */
-    checkForReplayAction() {
-      const r = this.replay;
-      if (!r) return;
+    checkForReplayAction(spawnIntervalOnly) {
       const f = this.currentIteration;
-      for (const c of r.spawnIntervals) if (c.frame === f) this.adjustSpawnInterval(c.interval);
-      for (const n of r.nukes) if (n.frame === f) { this.userSetNuking = true; this.exploderAssignInProgress = true; }
-      for (const a of r.assignments) {
+      for (const r of this.recorded) if (r.type === "spawn_interval" && r.frame === f) this.applySpawnInterval(r.interval);
+      if (spawnIntervalOnly) return;
+      for (const a of this.recorded) {
         if (a.frame !== f) continue;
+        if (a.type === "nuke") { this.userSetNuking = true; this.exploderAssignInProgress = true; continue; }
+        if (a.type !== "assignment") continue;
         let L = null;
-        if (a.lemId) L = this.lemmings.find((x) => x.identifier.toUpperCase() === a.lemId) || null;
+        const id = (a.lemId || "").toUpperCase();
+        if (id) L = this.lemmings.find((x) => x.identifier.toUpperCase() === id) || null;
         if (!L && a.lemIndex >= 0 && a.lemIndex < this.lemmings.length) L = this.lemmings[a.lemIndex];
         const action = SKILL_TO_ACTION[a.skill];
         if (!L || action === undefined || !ASSIGNABLE.has(action)) continue;
         if (L.removed || L.teleporting || L.portalWarpFrame > 0) continue;
         if (this.mayAssign(action, L) && this.checkSkillAvailable(action)) {
-          if (this.doSkillAssignment(L, action, true)) this.cueSoundEffect(SFX.ASSIGN_SKILL, L);
+          if (this.doSkillAssignment(L, action)) this.cueSoundEffect(SFX.ASSIGN_SKILL, L);
         }
       }
+    }
+
+    // ---- saved states (TLemmingGameSavedState)
+
+    /** Everything a later loadState needs to put this frame back. */
+    saveState() {
+      const level = this.level;
+      const scalars = {};
+      for (const k of SAVED_SCALARS) scalars[k] = this[k];
+      return {
+        scalars,
+        currSkillCount: Object.assign({}, this.currSkillCount),
+        usedSkillCount: Object.assign({}, this.usedSkillCount),
+        talismansAchieved: new Set(this.talismansAchieved),
+        lemmings: this.lemmings.map((L) => L.clone()),
+        gadgets: this.gadgets.map((g) => ({
+          remainingLemmings: g.remainingLemmings, holdActive: g.holdActive, triggered: g.triggered,
+          secondariesTreatAsBusy: g.secondariesTreatAsBusy, teleLem: g.teleLem, zombieMode: g.zombieMode,
+          neutralMode: g.neutralMode, x: g.x, y: g.y,
+          animations: g.animations.map((a) => ({ frame: a.frame, state: a.state, visible: a.visible })),
+        })),
+        physics: level.physics.slice(),
+        groundImage: level.groundImage.slice(),
+        groundMask: level.groundMask.groundMask.slice(),
+        extra: {}, // the page's own (depth and relief maps), see Game
+      };
+    }
+
+    /**
+     * LoadSavedState: back to that frame. The replay, the selected skill and
+     * the player's settings stay; the terrain goes back into the arrays the
+     * page holds references to, so the page must refresh what it drew.
+     */
+    loadState(s) {
+      const level = this.level;
+      for (const k of SAVED_SCALARS) this[k] = s.scalars[k];
+      this.currSkillCount = Object.assign({}, s.currSkillCount);
+      this.usedSkillCount = Object.assign({}, s.usedSkillCount);
+      this.talismansAchieved = new Set(s.talismansAchieved);
+      this.lemmings = s.lemmings.map((L, i) => { const c = L.clone(); c.index = i; return c; });
+      s.gadgets.forEach((gs, i) => {
+        const g = this.gadgets[i];
+        if (!g) return;
+        g.remainingLemmings = gs.remainingLemmings; g.holdActive = gs.holdActive; g.triggered = gs.triggered;
+        g.secondariesTreatAsBusy = gs.secondariesTreatAsBusy; g.teleLem = gs.teleLem; g.zombieMode = gs.zombieMode;
+        g.neutralMode = gs.neutralMode;
+        g.x = gs.x; g.y = gs.y;
+        if (g.object) { g.object.x = g.x; g.object.y = g.y; }
+        gs.animations.forEach((a, j) => { const t = g.animations[j]; if (t) { t.frame = a.frame; t.state = a.state; t.visible = a.visible; } });
+      });
+      level.physics.set(s.physics);
+      level.groundImage.set(s.groundImage);
+      level.groundMask.groundMask.set(s.groundMask);
+      this.zombieMap.fill(0);
+      this.setBlockerMap();
+      this.spawnIntervalModifier = 0;
+      this.sounds = [];
+      this.lastBlockerCheckLem = null;
+      this.doneAssignmentThisFrame = false;
     }
 
     // ---- setup
@@ -685,12 +815,10 @@
       return result;
     }
 
-    /** DoSkillAssignment: the skill goes to this lemming now. */
-    doSkillAssignment(L, newSkill, fromReplay) {
+    /** DoSkillAssignment: the skill goes to this lemming now (from the replay, always). */
+    doSkillAssignment(L, newSkill) {
       if (!this.checkSkillAvailable(newSkill)) return false;
       if (this.doneAssignmentThisFrame) return false;
-      if (!fromReplay) this.recorded.push({ type: "assignment", frame: this.currentIteration, skill: ACTION_TO_SKILL[newSkill],
-        lemIndex: L.index, lemId: L.identifier, x: L.x, y: L.y, dx: L.dx });
       this.updateSkillCount(newSkill);
       L.queueAction = BA.NONE; L.queueFrame = 0;
       if (newSkill === BA.STACKING) L.stackLow = !this.hasPixelAt(L.x + L.dx, L.y);
@@ -762,6 +890,7 @@
         if (L.removed || L.teleporting || L.portalWarpFrame > 0) continue;
         if (L.cannotReceiveSkills && priority) continue;
         if (!inCursor(L)) continue;
+        if (this.selectDx !== 0 && this.selectDx !== L.dx) continue; // directional select
         if (!L.cannotReceiveSkills) count++;
         let box = 0, isIn;
         do { isIn = inBox(L, box); box++; } while (!(box > Math.min(curValue, 4) || isIn));
@@ -2080,10 +2209,18 @@
       return !(this.level.spawnLocked || si < MIN_SI || si > this.level.spawnInterval);
     }
 
-    adjustSpawnInterval(si) {
+    /** AdjustSpawnInterval: the interval in force changes (what a replay entry does). */
+    applySpawnInterval(si) {
       if (si === this.currSpawnInterval || !this.checkIfLegalSI(si)) return;
       this.currSpawnInterval = si;
-      if (!this.replay) this.recorded.push({ type: "spawn_interval", frame: this.currentIteration, interval: si, spawned: this.lemmings.length });
+    }
+
+    /** The player changes it: recorded, and in force at once (RecordSpawnInterval + CheckForReplayAction(True)). */
+    adjustSpawnInterval(si) {
+      if (si === this.currSpawnInterval || !this.checkIfLegalSI(si)) return;
+      this.regainControl();
+      this._record({ type: "spawn_interval", frame: this.currentIteration, interval: si, spawned: this.lemmings.length });
+      this.checkForReplayAction(true);
     }
 
     checkAdjustSpawnInterval() {
@@ -2096,8 +2233,14 @@
         if (L.queueAction === BA.NONE) continue;
         if (L.removed || L.cannotReceiveSkills || L.teleporting) { L.queueAction = BA.NONE; L.queueFrame = 0; continue; }
         const skill = L.queueAction;
-        if (this.mayAssign(skill, L) && this.checkSkillAvailable(skill)) this.doSkillAssignment(L, skill);
-        else {
+        if (this.mayAssign(skill, L) && this.checkSkillAvailable(skill)) {
+          // into the replay, applied by checkForReplayAction right after (CheckForQueuedAction)
+          if (!this.hasRecorded("assignment", this.currentIteration)) {
+            this._record({ type: "assignment", frame: this.currentIteration, skill: ACTION_TO_SKILL[skill],
+              lemIndex: L.index, lemId: L.identifier, x: L.x, y: L.y, dx: L.dx });
+          }
+          L.queueAction = BA.NONE; L.queueFrame = 0;
+        } else {
           L.queueFrame++;
           if (L.queueFrame > 0) { L.queueAction = BA.NONE; L.queueFrame = 0; } // SkillQFrames default 0
         }
@@ -2308,23 +2451,31 @@
       const action = SKILL_TO_ACTION[skillName || this.selectedSkill];
       if (action === undefined) return false;
       const { lemming } = this.getPriorityLemming(action, x, y);
-      if (!lemming || !this.checkSkillAvailable(action)) return false;
-      return this.doSkillAssignment(lemming, action);
+      return this.assignSkillTo(lemming, ACTION_TO_SKILL[action]);
     }
 
-    /** Assign to a specific lemming (what a recorded command replays). */
+    /**
+     * AssignNewSkill for the player: the assignment is written into the
+     * replay at this frame (cutting whatever the replay had from here on)
+     * and takes effect in the next update. True when it was recorded.
+     */
     assignSkillTo(L, skillName) {
       const action = SKILL_TO_ACTION[skillName];
       if (action === undefined || !L || L.removed) return false;
       if (!this.mayAssign(action, L) || !this.checkSkillAvailable(action)) return false;
-      return this.doSkillAssignment(L, action);
+      // ProcessSkillAssignment: replay-insert mode keeps a frame's own assignment
+      if (this.replayInsert && this.hasRecorded("assignment", this.currentIteration)) return false;
+      this.regainControl();
+      this._record({ type: "assignment", frame: this.currentIteration, skill: skillName,
+        lemIndex: L.index, lemId: L.identifier, x: L.x, y: L.y, dx: L.dx });
+      return true;
     }
 
+    /** RecordNuke: into the replay, in force from the next update. */
     nuke() {
-      if (this.userSetNuking) return;
-      this.userSetNuking = true;
-      this.exploderAssignInProgress = true;
-      if (!this.replay) this.recorded.push({ type: "nuke", frame: this.currentIteration });
+      if (this.userSetNuking || this.hasRecorded("nuke", this.currentIteration)) return;
+      this.regainControl();
+      this._record({ type: "nuke", frame: this.currentIteration });
     }
 
     setSpawnIntervalModifier(m) { this.spawnIntervalModifier = m; }

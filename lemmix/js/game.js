@@ -10,6 +10,13 @@
  * assignments arrive as commands naming a lemming id, the way the DOS
  * engine records them; the lemming under the cursor is chosen with
  * NeoLemmix's own priority rules (getLemmingAt).
+ *
+ * Time can be walked, the NeoLemmix way (rewind.js): the game keeps saved
+ * states as it goes, and a restart, a frame back or a loaded replay put it
+ * at a frame by loading the nearest state and simulating up to it with the
+ * replay's actions firing on the way. The page is told (onRestore) so it
+ * can redraw what it holds copies of. The player taking control while the
+ * replay still has actions ahead cuts them off (LemGame.regainControl).
  */
 (function (root) {
   const Lemmix = root.Lemmix || (root.Lemmix = {});
@@ -117,9 +124,15 @@
       this.objectManager = new ObjectManager(this);
       this.triggerManager = { trigger: () => 0, triggers: [] };
       this.gui = null;
+      this.onRestore = new Lemmings.EventHandler(); // the game jumped to another frame
+      this.onLoadReplayRequest = null;               // () => the page opens a file picker
+      this.cursorLemming = null;                     // what the pointer is on, for the info strip
+      this.nukePrepared = false;
       this.gameTimer.onGameTick.on(() => this.onGameTimerTick());
       this.sim.start();
       for (const L of this.sim.lemmings) L.game = this;
+      this.states = new Lemmix.SaveStates();
+      this.states.add(this.sim); // frame 0: what a restart goes back to
     }
 
     /** The DOS Game builds the level here; ours already has it. */
@@ -145,8 +158,71 @@
     onGameTimerTick() {
       this.sim.update();
       for (const L of this.sim.lemmings) if (!L.game) L.game = this;
+      // a state every ten seconds, the list thinned as it grows
+      if (this.sim.currentIteration > 0 && this.sim.currentIteration % Lemmix.Rewind.SAVE_EVERY === 0 &&
+          !this.states.states.some((s) => Lemmix.SaveStates.frameOf(s) === this.sim.currentIteration)) {
+        this.states.add(this.sim);
+        this.states.tidy(this.sim.currentIteration);
+      }
       this.checkForGameOver();
       if (this.gui) this.gui.render();
+    }
+
+    // ---- walking time (the panel's replay, frame back and frame forward)
+
+    get replaying() { return this.sim.replaying; }
+    get replayInsert() { return this.sim.replayInsert; }
+    toggleReplayInsert() { this.sim.replayInsert = !this.sim.replayInsert; if (this.gui) this.gui.render(true); }
+    setSelectDx(dx) { this.sim.selectDx = dx; if (this.gui) this.gui.render(true); }
+
+    /** The game at `frame`, the replay kept; paused when `pause`. */
+    gotoFrame(frame, pause) {
+      Lemmix.Rewind.gotoFrame(this.sim, this.states, frame);
+      this._afterJump(pause);
+    }
+
+    /** The replay button: the level from the start, paused, the attempt replaying. */
+    restartReplay() { this.gotoFrame(0, true); }
+
+    /** One (or 17, or 85) frames back, paused. */
+    backFrames(n) { this.gotoFrame(this.sim.currentIteration - n, true); }
+
+    /** One frame forward is a tick while paused (the page sees it as any
+     *  other); more is a skip ahead at whatever speed the game was at. */
+    forwardFrames(n) {
+      if (n <= 1) { this.forceOneFrame(); return; }
+      Lemmix.Rewind.gotoFrame(this.sim, this.states, this.sim.currentIteration + n);
+      this._afterJump(false);
+    }
+
+    /** A paused game runs one frame: a click's assignment shows (ForceUpdateOneFrame). */
+    forceOneFrame() {
+      if (!this.gameTimer.isRunning()) this.gameTimer.tick();
+    }
+
+    /** A loaded replay file plays from the start at normal speed. */
+    loadReplayFile(parsed) {
+      this.sim.loadReplay(parsed);
+      this.gameTimer.speedFactor = 1;
+      Lemmix.Rewind.gotoFrame(this.sim, this.states, 0);
+      this._afterJump(false);
+      if (!this.gameTimer.isRunning()) this.gameTimer.continue();
+    }
+
+    requestLoadReplay() { if (this.onLoadReplayRequest) this.onLoadReplayRequest(); }
+
+    _afterJump(pause) {
+      const sim = this.sim;
+      for (const L of sim.lemmings) L.game = this;
+      // the command log and the timer count frames the way the sim does
+      this.gameTimer.tickIndex = sim.currentIteration;
+      const logged = this.commandManager.loggedCommads;
+      for (const k of Object.keys(logged)) if (+k >= sim.currentIteration) delete logged[k];
+      this.finalGameState = Lemmings.GameStateTypes.UNKNOWN; // re-latched by checkForGameOver if still over
+      this.nukePrepared = false;
+      if (pause) this.gameTimer.suspend();
+      if (this.gui) this.gui.render(true);
+      this.onRestore.trigger({ frame: sim.currentIteration, paused: !this.gameTimer.isRunning() });
     }
 
     getGameState() {
@@ -183,7 +259,7 @@
       return this._countdown.get(n);
     }
 
-    /** Play a NeoLemmix replay (parsed by Lemmix.Replay) from the start. */
+    /** A NeoLemmix replay (parsed by Lemmix.Replay) as this game's own, before it starts. */
     loadReplay(replay) { this.sim.loadReplay(replay); }
   }
 

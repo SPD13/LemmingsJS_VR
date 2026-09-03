@@ -632,6 +632,8 @@ class GuiPanel {
     if (!this._ensureMesh()) return;
     this._applyPlacement();
     if (this.minimap) this.minimap.update(); // the frame moves between ticks
+    // a Lemmix panel's held frame-skip half repeats between ticks (and while paused)
+    if (this.game.gui && this.game.gui.poll) this.game.gui.poll(performance.now());
     if (!this.dirty) return;
     this.dirty = false;
     this.ctx.putImageData(this.display.getImageData(), 0, 0);
@@ -678,7 +680,7 @@ class GuiPanel {
   // prepared nuke on the way (handleSkillMouseDown), and a Lemmix panel
   // would look up a cell that is not there. Held and moved, it keeps
   // centring the view (MinimapMouseMove); moved off the map, it lets go.
-  onMouseDown(uv) {
+  onMouseDown(uv, button) {
     const p = this._uvToPixels(uv);
     if (this.minimap && this.minimap.contains(p.x, p.y)) {
       this.minimapDrag = true;
@@ -686,6 +688,7 @@ class GuiPanel {
       this._centerFromMinimap(p);
       return;
     }
+    p.button = button || 0; // a Lemmix panel skips further on a right or middle press
     this.display.onMouseDown.trigger(p);
   }
   onMouseMove(uv) {
