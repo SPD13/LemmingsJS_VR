@@ -42,6 +42,8 @@
   #hud-keys b { color: #cdd6e4; font-weight: 600; }
   #hud-fx { top: 46px; }
   #hud-fx .btnrow { margin-top: 0; }
+  /* the mode switch, third down the right edge */
+  #hud-mode { position: absolute; top: 80px; right: 12px; z-index: 10; }
   .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btnrow button { white-space: nowrap; }
   button {
@@ -49,6 +51,14 @@
     border: 1px solid #33405a; border-radius: 4px; padding: 3px 10px; cursor: pointer;
   }
   button:hover { background: #263043; }
+  /* the icon buttons: the VR bar's own pictures, which paint their own
+     ground and hover outline, so the button itself is bare */
+  button.icon {
+    width: 30px; height: 30px; padding: 0; border: none; background: transparent;
+    vertical-align: middle;
+  }
+  button.icon:hover { background: transparent; }
+  button.icon canvas { display: block; width: 30px; height: 30px; }
   #loading {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     z-index: 20; background: #10141c; color: #6fce7e; font-size: 14px; letter-spacing: 0.1em;
@@ -176,14 +186,13 @@
     <div id="level-text-body" hidden></div>
   </div>
   <div class="btnrow">
-    <button id="btn-prev">&larr; prev</button>
-    <button id="btn-restart">restart</button>
-    <button id="btn-next">next &rarr;</button>
-    <button id="btn-pause">pause</button>
-    <button id="btn-library">worlds</button>
-    <button id="btn-sound">sound: on</button>
-    <button id="btn-mode">mode: play</button>
-    <button id="btn-view">reset view</button>
+    <button id="btn-prev" class="icon"></button>
+    <button id="btn-restart" class="icon"></button>
+    <button id="btn-next" class="icon"></button>
+    <button id="btn-pause" class="icon"></button>
+    <button id="btn-library" class="icon"></button>
+    <button id="btn-sound" class="icon"></button>
+    <button id="btn-view" class="icon"></button>
     <input id="replay-file" type="file" accept=".nxrp" hidden>
   </div>
 </div>
@@ -211,6 +220,8 @@
   <b>e</b> piece editor (<b>c</b> cycles class) &middot; <b>w</b> world library &middot; <b>r</b> dump replay
   </div>
 </div>
+
+<div id="hud-mode"><button id="btn-mode">mode: play</button></div>
 
 <div id="hud-fx" class="hud fold folded">
   <button class="fold-open">3D effects</button>
