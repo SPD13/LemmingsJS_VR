@@ -54,7 +54,11 @@ const VR_STICK_PAN = 0.8;   // metres per second at full deflection
 const VR_STICK_TILT = 1.0;  // radians per second at full deflection
 // The face buttons of the hand that is not pointing zoom the board: the
 // upper one (B/Y) in, the lower one (A/X) out, for as long as it is held.
-const VR_ZOOM_RATE = 2.0;   // scale factor per second held
+// It is a dolly: the board slides along the line of sight, so what is being
+// looked at comes closer or recedes.
+const VR_ZOOM_RATE = 2.0;   // the distance to it, divided per second held
+const VR_ZOOM_NEAR = 0.2;   // metres: no closer than this to the eyes
+const VR_ZOOM_FAR = 6.0;    // and no farther
 const VR_BTN_LOWER = 4;     // A or X in the standard gamepad mapping
 const VR_BTN_UPPER = 5;     // B or Y
 // How far the hand has to travel with the trigger held before it counts as a

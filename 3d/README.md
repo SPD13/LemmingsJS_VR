@@ -215,7 +215,10 @@ intended start area.
   hands (0.15×–8×)
 - **the face buttons of the other hand** — the upper one (Y, or B when the
   left hand points) zooms the board in and the lower one (X, or A) zooms it
-  out, for as long as it is held, about the level's focus point.
+  out, for as long as it is held. It is a dolly along your line of sight:
+  whatever you are looking at stays dead centre and comes closer or
+  recedes, wherever the board has been panned to, and the rest grows or
+  shrinks with it in perspective.
 - **A/X** (the pointing hand) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale. The in-scene windows -
   the world catalog, the restart question, the settings - open centred in
