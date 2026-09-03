@@ -566,6 +566,108 @@ Vfs.boot("../", "setup.html").then(function (booted) {
       c.fill();
     });
   };
+  // the 2D/3D switch: what it offers - a flat card on the diorama, a cube in
+  // the flat view (on: the flat view is in force)
+  const flatIcon = (cx, st) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
+      c.beginPath();
+      if (st.on) {
+        // a cube: the diorama
+        c.moveTo(16, 24); c.lineTo(40, 24); c.lineTo(40, 48); c.lineTo(16, 48); c.closePath();
+        c.moveTo(16, 24); c.lineTo(26, 14); c.lineTo(50, 14); c.lineTo(40, 24);
+        c.moveTo(50, 14); c.lineTo(50, 38); c.lineTo(40, 48);
+      } else {
+        // a card: the flat picture
+        c.rect(14, 19, 36, 26);
+      }
+      c.stroke();
+    });
+  };
+  // the right panel's icons: a switch is green when on and grey when off,
+  // a tool wears the plain colours
+  const switchIcon = (cx, st, body) => {
+    const bg = st.on ? (st.hovered ? "#245232" : "#16281a") : (st.hovered ? "#33405a" : "#1c2432");
+    barToolIcon(cx, st.hovered, bg, st.on ? "#6fce7e" : "#5a6a7c", body);
+  };
+  const toolIcon = (cx, st, body, stroke) => {
+    barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", stroke || "#cdd6e4", body);
+  };
+  // a keyboard: the key hints
+  const hintsIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    c.beginPath();
+    c.roundRect ? c.roundRect(10, 20, 44, 26, 4) : c.rect(10, 20, 44, 26);
+    c.stroke();
+    c.fillStyle = "#cdd6e4";
+    for (const [x, y] of [[17, 27], [27, 27], [37, 27], [47, 27], [17, 37], [47, 37]]) c.fillRect(x - 2, y - 2, 4, 4);
+    c.fillRect(24, 35, 16, 4); // the space bar
+  });
+  // a gamepad: the controls configuration
+  const controlsIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    c.beginPath();
+    c.roundRect ? c.roundRect(8, 22, 48, 22, 11) : c.rect(8, 22, 48, 22);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(20, 27); c.lineTo(20, 39);
+    c.moveTo(14, 33); c.lineTo(26, 33);
+    c.stroke();
+    c.fillStyle = "#cdd6e4";
+    c.beginPath(); c.arc(40, 30, 3, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(47, 36, 3, 0, Math.PI * 2); c.fill();
+  });
+  // a relief profile on its slab: the 3D effects
+  const fxIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    c.beginPath();
+    c.moveTo(10, 46); c.lineTo(10, 38); c.lineTo(22, 22); c.lineTo(31, 32); c.lineTo(42, 16); c.lineTo(54, 38); c.lineTo(54, 46);
+    c.closePath();
+    c.stroke();
+  });
+  // a pencil: editing (yellow while it is on)
+  const modeIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    c.beginPath();
+    c.moveTo(16, 48); c.lineTo(20, 36); c.lineTo(42, 14); c.lineTo(50, 22); c.lineTo(28, 44); c.closePath();
+    c.moveTo(20, 36); c.lineTo(28, 44);
+    c.stroke();
+  }, st.on ? "#ffd866" : "#cdd6e4");
+  // a gear: the setup page
+  const setupIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    c.beginPath();
+    c.arc(32, 32, 9, 0, Math.PI * 2);
+    c.stroke();
+    c.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      c.moveTo(32 + Math.cos(a) * 14, 32 + Math.sin(a) * 14);
+      c.lineTo(32 + Math.cos(a) * 20, 32 + Math.sin(a) * 20);
+    }
+    c.stroke();
+  });
+  // the 3D effects: bumpy ground, an arch, a slope, the bar in relief
+  const embossIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    c.beginPath();
+    c.moveTo(10, 40);
+    for (let x = 10; x <= 54; x += 2) c.lineTo(x, 40 - 8 * Math.abs(Math.sin((x - 10) / 6)));
+    c.lineTo(54, 50); c.lineTo(10, 50); c.closePath();
+    c.stroke();
+  });
+  const doorsIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    c.beginPath();
+    c.moveTo(18, 50); c.lineTo(18, 28); c.arc(32, 28, 14, Math.PI, 0); c.lineTo(46, 50);
+    c.moveTo(12, 50); c.lineTo(52, 50);
+    c.stroke();
+  });
+  const smoothIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    c.beginPath();
+    c.moveTo(10, 44); c.bezierCurveTo(24, 44, 26, 20, 40, 20); c.lineTo(54, 20);
+    c.stroke();
+  });
+  const skillBarIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    c.beginPath();
+    c.rect(10, 24, 44, 16);
+    c.moveTo(24, 24); c.lineTo(24, 40);
+    c.moveTo(40, 24); c.lineTo(40, 40);
+    c.moveTo(14, 46); c.lineTo(58, 46); c.lineTo(58, 30); // the shadow of its thickness
+    c.stroke();
+  });
   const hudIcons = {
     prev: iconizeHudButton(document.getElementById("btn-prev"), vrPrevBtn.userData.draw, "previous level"),
     restart: iconizeHudButton(document.getElementById("btn-restart"), vrRestartBtn.userData.draw, "restart the level"),
@@ -574,6 +676,18 @@ Vfs.boot("../", "setup.html").then(function (booted) {
     worlds: iconizeHudButton(document.getElementById("btn-library"), vrWorldsBtn.userData.draw, "world library"),
     sound: iconizeHudButton(document.getElementById("btn-sound"), vrMuteBtn.userData.draw, "sound on / off"),
     view: iconizeHudButton(document.getElementById("btn-view"), resetViewIcon, "reset the view (Home)"),
+    flat: iconizeHudButton(document.getElementById("btn-flat"), flatIcon, "the flat view of the original"),
+    // the right panel
+    hints: iconizeHudButton(document.getElementById("btn-hints"), hintsIcon, "the controls: mouse, keys"),
+    controls: iconizeHudButton(document.getElementById("btn-controls"), controlsIcon,
+      "configure the controls: the keyboard's keys and the headset's controllers, NeoLemmix's and yours to change"),
+    fx: iconizeHudButton(document.getElementById("btn-fx"), fxIcon, "3D effects"),
+    mode: iconizeHudButton(document.getElementById("btn-mode"), modeIcon, "mode: play"),
+    setup: iconizeHudButton(document.getElementById("btn-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
+    emboss: iconizeHudButton(document.getElementById("btn-emboss"), embossIcon, "3D terrain"),
+    doors: iconizeHudButton(document.getElementById("btn-doors"), doorsIcon, "3D doors"),
+    smooth: iconizeHudButton(document.getElementById("btn-smooth"), smoothIcon, "smooth"),
+    skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
   };
   // the sound column keeps its own place, so it is not in the row above, but
   // it is pressed like the rest
@@ -1856,7 +1970,8 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   // master switch for colour-keyed terrain relief (per-piece tags in the editor)
   const embossBtn = document.getElementById("btn-emboss");
   const renderEmbossBtn = () => {
-    embossBtn.textContent = "3D terrain: " + (state.emboss ? "on" : "off");
+    hudIcons.emboss({ on: state.emboss });
+    embossBtn.title = "3D terrain (colour-keyed relief): " + (state.emboss ? "on" : "off");
   };
   function toggleEmboss() {
     state.emboss = !state.emboss;
@@ -1875,7 +1990,8 @@ Vfs.boot("../", "setup.html").then(function (booted) {
       ? "LEMMINGS 3D · VALIDATION MODE" : "LEMMINGS 3D";
     document.title = state.edit
       ? "Lemmings 3D — validation mode" : "Lemmings 3D";
-    hud.modeBtn.textContent = "mode: " + (state.edit ? "edit" : "play");
+    hudIcons.mode({ on: state.edit });
+    hud.modeBtn.title = "mode: " + (state.edit ? "edit (the tagging workbench)" : "play");
     library.setEditMode(state.edit);
     // edit mode is the tagging workbench: the piece editor comes up with it
     // (holding the sim) and goes away with it
@@ -1900,7 +2016,8 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   // relief this cannot be swapped in place - the level is rebuilt.
   const doorsBtn = document.getElementById("btn-doors");
   const renderDoorsBtn = () => {
-    doorsBtn.textContent = "3D doors: " + (state.doors ? "on" : "off");
+    hudIcons.doors({ on: state.doors });
+    doorsBtn.title = "3D doors (entrances and exits as openings): " + (state.doors ? "on" : "off");
   };
   function toggleDoors() {
     state.doors = !state.doors;
@@ -1915,7 +2032,8 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   // slope the relief between heights instead of stepping
   const smoothBtn = document.getElementById("btn-smooth");
   const renderSmoothBtn = () => {
-    smoothBtn.textContent = "smooth: " + (state.smooth ? "on" : "off");
+    hudIcons.smooth({ on: state.smooth });
+    smoothBtn.title = "smooth (slopes between the relief's heights): " + (state.smooth ? "on" : "off");
   };
   function toggleSmooth() {
     state.smooth = !state.smooth;
@@ -1931,7 +2049,8 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   // panel. Off, the bar is the flat original.
   const skillBarBtn = document.getElementById("btn-skillbar");
   const renderSkillBarBtn = () => {
-    skillBarBtn.textContent = "3D skills bar: " + (state.skillBar ? "on" : "off");
+    hudIcons.skillBar({ on: state.skillBar });
+    skillBarBtn.title = "3D skills bar (the panel's artwork in relief): " + (state.skillBar ? "on" : "off");
   };
   function toggleSkillBar() {
     state.skillBar = !state.skillBar;
@@ -1947,10 +2066,10 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   // headset's: inside a session the board is always the diorama, and the
   // desktop comes back to whichever it had. Applied without a shortcut, so a
   // session's start and end can each assert it.
-  const flatBtn = document.getElementById("btn-view2d");
+  const flatBtn = document.getElementById("btn-flat");
   const renderFlatBtn = () => {
-    flatBtn.textContent = state.flat ? "3D" : "2D";
-    flatBtn.title = state.flat ? "back to the diorama" : "the flat view of the original";
+    hudIcons.flat({ on: state.flat });
+    flatBtn.title = state.flat ? "back to the diorama (3D)" : "the flat view of the original (2D)";
   };
   function applyFlat(on) {
     const presenting = renderer.xr.isPresenting;
@@ -4311,6 +4430,15 @@ Vfs.boot("../", "setup.html").then(function (booted) {
     onClose: () => { releaseSim("hotkeys"); refreshKeyHints(); },
   });
   document.getElementById("btn-controls").addEventListener("click", () => hotkeyDialog.open());
+  // the setup page: leaving the game page mid-level loses the level, so a
+  // level under way asks first; from the library with nothing playing, straight there
+  const goSetup = () => {
+    if (session) askConfirm("Open the setup page?", "leave the level", () => { location.href = "setup.html"; },
+      "Progress on this level is lost.");
+    else location.href = "setup.html";
+  };
+  document.getElementById("btn-setup").addEventListener("click", goSetup);
+  document.getElementById("lib-setup").addEventListener("click", goSetup);
   hotkeys.onChange = () => refreshKeyHints();
 
   /** The tooltips and the controls panel name the keys as they are set. */
@@ -4947,35 +5075,41 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   renderMode(); // billing, catalog labels and editor availability
   applyFlat(state.flat); // the 2D view, if that is what was last used
 
-  // The folding panels down the right edge - the key hints, the 3D
-  // effects. Each is a button; pressed, it unfolds into its panel, which
-  // stays as long as the mouse is on it and folds back a couple of seconds
-  // after the mouse has left - or at once from its own close.
+  // The right panel's drawers - the key hints, the 3D effects. An icon
+  // opens its drawer under the row (closing the other), presses again to
+  // close it; an open drawer stays as long as the mouse is on the panel and
+  // closes a couple of seconds after the mouse has left.
   const FOLD_MS = 2000;
-  function foldingPanel(panel) {
+  {
+    const panel = document.getElementById("hud-right");
+    const drawers = [
+      { btn: document.getElementById("btn-hints"), body: document.getElementById("hud-keys") },
+      { btn: document.getElementById("btn-fx"), body: document.getElementById("hud-fx") },
+    ];
     let timer = null;
     const cancel = () => { clearTimeout(timer); timer = null; };
-    const fold = () => { cancel(); panel.classList.add("folded"); };
+    const closeAll = () => { cancel(); for (const d of drawers) d.body.hidden = true; };
+    const anyOpen = () => drawers.some((d) => !d.body.hidden);
     const arm = () => {
       cancel();
       timer = window.setTimeout(() => {
         timer = null;
-        if (!panel.matches(":hover")) fold();
+        if (!panel.matches(":hover")) closeAll();
       }, FOLD_MS);
     };
-    panel.querySelector(".fold-open").addEventListener("click", () => {
-      panel.classList.remove("folded");
-      // the button was where the panel now is, so the mouse is usually on
-      // it; when it is not (a touch, say), the panel folds on its own
-      window.setTimeout(() => { if (!panel.matches(":hover")) arm(); }, 0);
-    });
-    panel.querySelector(".fold-close").addEventListener("click", fold);
+    for (const d of drawers) {
+      d.btn.addEventListener("click", () => {
+        const open = d.body.hidden;
+        closeAll();
+        d.body.hidden = !open;
+        // the mouse is usually on the panel; when it is not (a touch, say),
+        // the drawer closes on its own
+        if (open) window.setTimeout(() => { if (!panel.matches(":hover")) arm(); }, 0);
+      });
+    }
     panel.addEventListener("mouseenter", cancel);
-    panel.addEventListener("mouseleave", () => {
-      if (!panel.classList.contains("folded")) arm();
-    });
+    panel.addEventListener("mouseleave", () => { if (anyOpen()) arm(); });
   }
-  document.querySelectorAll(".fold").forEach(foldingPanel);
 
   // debug handle for the console / automated checks
   window.__lem3d = {
