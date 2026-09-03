@@ -28,7 +28,7 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
-`?emboss=`, `?smooth=`, `?doors=`, `?skillbar=` and `?edit=` (`1`/`on`/`true` or
+`?emboss=`, `?smooth=`, `?doors=`, `?skillbar=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
 `0`/`off`/`false`). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them
 on a headset — its browser is a different machine with its own empty
@@ -42,6 +42,21 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   reset view (all of these
   also work inside a controller-less VR session, moving the diorama instead
   of the camera)
+- **2D**: the button fifth down the right edge switches to the flat view of
+  the original - the level square on, one screen pixel per level pixel at
+  the zoom, the terrain the level's picture, entrances and exits the
+  sprites the original draws - with everything else of this page: the
+  panel and its minimap, the hotkeys, the catalog, replays, clear physics
+  and the skill shadows (drawn flat over the picture). Drag with either
+  button or the arrows to scroll (the view stops at the level's edges, as
+  the original's does), wheel or PgUp/PgDn to zoom about the pointer, Home
+  or a double right-click to start over. The button then reads **3D** and
+  takes the diorama back, from the same place. The choice is remembered
+  (`lem3d-flat`; `?flat=1` asks for it in the URL). The "3D effects" fold
+  is out of the way in 2D, since none of them shows there, and its settings
+  are kept for the diorama. A headset always gets the diorama, whatever the
+  desktop shows, and the desktop comes back to its own view when the
+  session ends.
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
 - on a NeoLemmix level, with a skill selected and a lemming under the

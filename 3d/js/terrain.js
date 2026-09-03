@@ -14,6 +14,11 @@
  * build funnels through them) to keep the depth buffer + texture in sync and
  * re-mesh dirty chunks with a per-tick budget. Geometry lives in game pixel
  * space (y down); the parent group flips it into world space.
+ *
+ * The 2D view (setFlat) hides the chunks behind one quad carrying the same
+ * texture: the original's terrain, exactly, since the texture is the level's
+ * picture with the collision mask for its alpha. The chunks are left alone
+ * while it is up and re-meshed once when it comes down.
  */
 
 const TERRAIN_CHUNK = 32;
@@ -44,6 +49,10 @@ class TerrainMesh {
     this.chunksY = Math.ceil(this.h / TERRAIN_CHUNK);
     this.group = new THREE.Group();
     parent.add(this.group);
+    this.chunkGroup = new THREE.Group(); // the extruded chunks (3D)
+    this.group.add(this.chunkGroup);
+    this.flatMesh = null;                // the one quad (2D), built on first use
+    this.flat = false;
 
     this.maskLayer = level.getGroundMaskLayer();
     this.hasRelief = this.relief.some((v) => v > 0);
@@ -119,8 +128,40 @@ class TerrainMesh {
   }
 
   _rebuildAll() {
+    if (this.flat) return; // re-meshed once, when the quad comes down
     for (let cy = 0; cy < this.chunksY; cy++) {
       for (let cx = 0; cx < this.chunksX; cx++) this._rebuildChunk(cx, cy);
+    }
+  }
+
+  /**
+   * The 2D view: the chunks hidden behind one quad at `z` textured with the
+   * level's picture (the texture is kept in step with every dig either way,
+   * so the quad shows them at once). Opaque, with an alpha test: the
+   * overlays (clear physics, the skill shadows, the ring) are transparent
+   * and drawn after all opaque things, so they still read on top of it.
+   * Coming back, every chunk is re-meshed from the depth buffer as it stands.
+   */
+  setFlat(on, z) {
+    on = !!on;
+    if (on && !this.flatMesh) {
+      const geom = this.resources.track(new THREE.PlaneGeometry(1, 1));
+      const material = this.resources.track(new THREE.MeshBasicMaterial({
+        map: this.texture, alphaTest: 0.5, side: THREE.DoubleSide,
+      }));
+      this.flatMesh = new THREE.Mesh(geom, material);
+      this.flatMesh.scale.set(this.w, this.h, 1);
+      this.flatMesh.name = "terrain-flat";
+      this.group.add(this.flatMesh);
+    }
+    if (this.flatMesh && z != null) this.flatMesh.position.set(this.w / 2, this.h / 2, z);
+    if (this.flat === on) return;
+    this.flat = on;
+    this.chunkGroup.visible = !on;
+    if (this.flatMesh) this.flatMesh.visible = on;
+    if (!on) {
+      this.dirtyChunks.clear();
+      this._rebuildAll();
     }
   }
 
@@ -261,6 +302,7 @@ class TerrainMesh {
 
   /** Re-mesh dirty chunks, at most `budget` per call (nuke-proofing). */
   flushDirty(budget = 24) {
+    if (this.flat) return; // the quad shows the texture; the chunks wait
     let n = 0;
     for (const id of this.dirtyChunks) {
       this.dirtyChunks.delete(id);
@@ -273,14 +315,14 @@ class TerrainMesh {
     const id = cy * this.chunksX + cx;
     const old = this.chunkMeshes[id];
     if (old) {
-      this.group.remove(old);
+      this.chunkGroup.remove(old);
       old.geometry.dispose();
       this.chunkMeshes[id] = null;
     }
     const geom = this._buildChunkGeometry(cx, cy);
     if (!geom) return;
     const mesh = new THREE.Mesh(geom, this.material);
-    this.group.add(mesh);
+    this.chunkGroup.add(mesh);
     this.chunkMeshes[id] = mesh;
   }
 
