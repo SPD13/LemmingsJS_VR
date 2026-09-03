@@ -32,6 +32,11 @@ class TerrainMesh {
     this.level = level;
     this.depth = depthMap;
     this.relief = reliefMap || new Uint8Array(level.width * level.height);
+    // the level as built: a dig or a blast writes EMPTY into the depth (and
+    // flattens the relief) as it goes, and a saved state put back can bring
+    // those pixels back solid - they take their class and relief from here
+    this.depth0 = this.depth.slice();
+    this.relief0 = this.relief.slice();
     this.resources = resources;
     this.w = level.width;
     this.h = level.height;
@@ -102,6 +107,7 @@ class TerrainMesh {
   /** Swap in a new relief map (the 3D-terrain toggle) and re-mesh. */
   setRelief(reliefMap) {
     this.relief = reliefMap || new Uint8Array(this.w * this.h);
+    this.relief0 = this.relief.slice();
     this.hasRelief = this.relief.some((v) => v > 0);
     this._rebuildAll();
   }
@@ -213,14 +219,32 @@ class TerrainMesh {
    * differs from what is drawn marks its chunk - and the neighbour it
    * borders, for the step walls - the texture is refilled, and only those
    * chunks are re-meshed. A frame back costs a few chunks, not the level.
+   *
+   * The depth buffer is put back in step too: a pixel dug out and now solid
+   * again gets the class and relief the level was built with (a brick's
+   * place, empty at the build, is terrain), and one built and now gone is
+   * emptied - the meshes are cut from the depth, so without this a restored
+   * hole would stay a hole.
    */
   resync() {
     const w = this.w, h = this.h, mask = this.maskLayer.groundMask;
+    const depth = this.depth, depth0 = this.depth0, relief = this.relief, relief0 = this.relief0;
     const dirty = this.dirtyChunks;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
-        if ((this.texData[i * 4 + 3] !== 0) === (mask[i] !== 0)) continue;
+        const solid = mask[i] !== 0;
+        let changed = (this.texData[i * 4 + 3] !== 0) !== solid;
+        if (solid && depth[i] === DepthClass.EMPTY) {
+          depth[i] = depth0[i] !== DepthClass.EMPTY ? depth0[i] : DepthClass.TERRAIN;
+          relief[i] = relief0[i];
+          changed = true;
+        } else if (!solid && depth[i] !== DepthClass.EMPTY) {
+          depth[i] = DepthClass.EMPTY;
+          relief[i] = 0;
+          changed = true;
+        }
+        if (!changed) continue;
         const cx = Math.floor(x / TERRAIN_CHUNK), cy = Math.floor(y / TERRAIN_CHUNK);
         dirty.add(cy * this.chunksX + cx);
         const lx = x % TERRAIN_CHUNK, ly = y % TERRAIN_CHUNK;
