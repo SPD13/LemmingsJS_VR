@@ -51,6 +51,11 @@
   #hud-fx .btnrow { margin-top: 0; }
   /* the mode switch, fourth down the right edge */
   #hud-mode { position: absolute; top: 114px; right: 12px; z-index: 10; }
+  /* the 2D/3D switch, fifth down: the flat view of the original, or the diorama */
+  #hud-view { position: absolute; top: 148px; right: 12px; z-index: 10; }
+  /* in 2D the 3D effects have nothing to show, and the controls read differently */
+  body.flat #hud-fx { display: none; }
+  body.flat .k3d, body:not(.flat) .k2d { display: none; }
   .btnrow { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .btnrow button { white-space: nowrap; }
   button {
@@ -221,7 +226,8 @@
   <button class="fold-open">controls</button>
   <div class="fold-body">
   <button class="fold-close" title="hide">&times;</button>
-  <b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br>
+  <span class="k3d"><b>drag</b>/<b>&#8679;arrows</b> orbit &middot; <b>right-drag</b>/<b>arrows</b> pan &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br></span>
+  <span class="k2d"><b>drag</b>/<b>right-drag</b>/<b>arrows</b> scroll &middot; <b>wheel</b>/<b>PgUp&#8725;PgDn</b> zoom &middot; <b>Home</b>/<b>2&times;right-click</b> reset<br></span>
   <b>click</b> lemming: assign skill &middot; panel: as in game<br>
   <span id="hud-keys-hotkeys"></span>
   </div>
@@ -230,6 +236,8 @@
 <div id="hud-controls"><button id="btn-controls" title="the keyboard's keys and the headset's controllers: NeoLemmix's, and yours to change">configure controls</button></div>
 
 <div id="hud-mode"><button id="btn-mode">mode: play</button></div>
+
+<div id="hud-view"><button id="btn-view2d" title="the flat view of the original, or the diorama">2D</button></div>
 
 <div id="hud-fx" class="hud fold folded">
   <button class="fold-open">3D effects</button>

@@ -414,10 +414,12 @@ class ParticleCloud {
    * that reads as a couple of screen pixels on the desktop covers a headset's
    * eye when the board is 2.5mm to the pixel and an arm's length away.
    */
-  updateScale() {
+  updateScale(pxPerUnit) {
     this.points.updateWorldMatrix(true, false);
     const s = new THREE.Vector3().setFromMatrixScale(this.points.matrixWorld);
-    const size = PARTICLE_SIZE * Math.abs(s.x);
+    // under an orthographic camera (the 2D view) a point's size is plain
+    // screen pixels: one level pixel's worth, at the view's zoom
+    const size = (pxPerUnit ? Math.max(1, pxPerUnit) : PARTICLE_SIZE) * Math.abs(s.x);
     if (this.material.size !== size) this.material.size = size;
   }
 

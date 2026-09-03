@@ -22,6 +22,10 @@
   const OBJECT_Z = LEMMING_Z - 0.8;
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
+  // the 2D view's terrain: one quad just behind the objects and lemmings, so
+  // a digger in the ground or a climber on a wall draws over it as in the
+  // original; the background objects and the backdrop stay behind it
+  const FLAT_TERRAIN_Z = OBJECT_Z - 1;
 
   window.__LEM3D_BUILD = "2026-09-02.1";
   console.log("[3d] build " + window.__LEM3D_BUILD);
@@ -57,6 +61,9 @@
     smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
+    // The 2D view: the original's flat picture under an orthographic camera,
+    // with everything else of this page. Off, the diorama.
+    flat: setting("flat", "lem3d-flat", false),
     shadows: setting("shadows", "lem3d-shadows", true),  // NeoLemmix's skill shadows (a hotkey toggles them)
     music: setting("music", "lem3d-music", true),        // the music, apart from the sound (a hotkey toggles it)
     // Editing is the tagging workbench: the piece editor, the tagging marks
@@ -167,6 +174,21 @@
   scene.add(camera); // children of the camera render only once it is in the graph
   const guiRoot = new THREE.Group();
   camera.add(guiRoot);
+
+  // The 2D view's camera: orthographic, square on to the board, its zoom the
+  // screen pixels per level pixel. The toolbar rides whichever camera is in
+  // force; inside a session that is always the perspective one, the headset's.
+  const flatCamera = new THREE.OrthographicCamera(
+    -window.innerWidth / 2, window.innerWidth / 2,
+    window.innerHeight / 2, -window.innerHeight / 2, 1, 4000);
+  flatCamera.position.z = 2000;
+  scene.add(flatCamera);
+  let flatActive = false; // the 2D view in force: state.flat, outside a session
+  /** The camera the page is seen through: the 2D one when that view is in
+   *  force, else the perspective one (the headset's own inside a session). */
+  function desktopEye() {
+    return !renderer.xr.isPresenting && flatActive ? flatCamera : camera;
+  }
 
   // -------------------------------------------------- icon buttons (VR)
   // Small drawn squares the controller ray can press: the toolbar's own two
@@ -1653,7 +1675,7 @@
   function setBarLocked(locked) {
     if (barLocked === locked) return;
     barLocked = locked;
-    const parent = locked ? camera : scene;
+    const parent = locked ? desktopEye() : scene;
     parent.updateMatrixWorld(true);
     guiRoot.updateMatrixWorld(true);
     const world = guiRoot.matrixWorld.clone();
@@ -1667,7 +1689,11 @@
   /** Back to riding the head, square in front, with no drag offset. */
   function resetBar() {
     barParked = null;
-    setBarLocked(true);
+    // straight onto the camera in force (the 2D view has its own), not
+    // through setBarLocked, which sees nothing to do for a bar already locked
+    barLocked = true;
+    desktopEye().add(guiRoot);
+    setBarToolState(barLockBtn, { on: false });
     guiRoot.position.set(0, 0, 0);
     guiRoot.quaternion.identity();
     guiRoot.scale.setScalar(1);
@@ -1776,7 +1802,9 @@
   window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    sizeFlatCamera();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (flatActive && session) { clampFlatView(session.level); applyFlatView(session.level); }
     layoutGuiPanel(); // the toolbar is sized to the viewport
   });
 
@@ -1827,7 +1855,7 @@
   // right-click (in a headset, the board is re-placed in front of the player)
   document.getElementById("btn-view").addEventListener("click", () => {
     if (renderer.xr.isPresenting) vr.recenterNow();
-    else if (session) frameDesktopCamera(session.level);
+    else if (session) frameDesktopView(session.level);
   });
 
   document.getElementById("btn-mode").addEventListener("click", () => {
@@ -1878,11 +1906,42 @@
     state.skillBar = !state.skillBar;
     try { localStorage.setItem("lem3d-skillbar", state.skillBar ? "on" : "off"); } catch (e) {}
     renderSkillBarBtn();
-    if (session) session.gui.setRelief(state.skillBar);
+    if (session) session.gui.setRelief(state.skillBar && !flatActive);
     paintVrSettings();
   }
   skillBarBtn.addEventListener("click", toggleSkillBar);
   renderSkillBarBtn();
+
+  // The 2D view against the diorama. The switch is the page's, not a
+  // headset's: inside a session the board is always the diorama, and the
+  // desktop comes back to whichever it had. Applied without a shortcut, so a
+  // session's start and end can each assert it.
+  const flatBtn = document.getElementById("btn-view2d");
+  const renderFlatBtn = () => {
+    flatBtn.textContent = state.flat ? "3D" : "2D";
+    flatBtn.title = state.flat ? "back to the diorama" : "the flat view of the original";
+  };
+  function applyFlat(on) {
+    const presenting = renderer.xr.isPresenting;
+    flatActive = !!on && !presenting;
+    document.body.classList.toggle("flat", flatActive);
+    controls.enabled = !flatActive && !presenting;
+    if (session) session.setFlat(flatActive);
+    resetBar(); // the bar onto the camera in force
+    if (session && !presenting) frameDesktopView(session.level);
+    layoutGuiPanel();
+  }
+  function toggleFlat() {
+    state.flat = !state.flat;
+    try { localStorage.setItem("lem3d-flat", state.flat ? "on" : "off"); } catch (e) {}
+    renderFlatBtn();
+    // keep the place: the level point in the middle stays there after the switch
+    const centre = session && !renderer.xr.isPresenting ? currentViewCentre() : null;
+    applyFlat(state.flat);
+    if (centre) centerViewOn(centre.x, centre.y);
+  }
+  flatBtn.addEventListener("click", toggleFlat);
+  renderFlatBtn();
 
   audio.configureSpatial({
     isActive: () => renderer.xr.isPresenting,
@@ -2137,6 +2196,7 @@
       waterMeshes.push({ mesh, colour: pool.colour });
     }
 
+    let flatOn = false; // the 2D view on this level (session.setFlat)
     const lemmingPool = new BillboardPool(worldGroup, materialCache);
     const objectPool = new BillboardPool(worldGroup, materialCache);
     const particles = new ParticleCloud(worldGroup, LEMMING_Z + 1);
@@ -2211,8 +2271,10 @@
         return !!g && (g.effectBase === "BACKGROUND" || g.effectBase === "PAINT" || g.onlyOnTerrain);
       };
       const cpmOn = !!(cpmOverlay && game.clearPhysics);
-      const objectItems = portalIndices.size === 0 && !cpmOn ? objCapture.items
-        : objCapture.items.filter((_, i) => !portalIndices.has(i) && !(cpmOn && cpmHides(i)));
+      // (the 2D view draws the openings as the original's sprites again)
+      const dropPortals = portalIndices.size > 0 && !flatOn;
+      const objectItems = !dropPortals && !cpmOn ? objCapture.items
+        : objCapture.items.filter((_, i) => !(dropPortals && portalIndices.has(i)) && !(cpmOn && cpmHides(i)));
       if (cpmOverlay) {
         // clear physics: the terrain as its physics map, the layer of
         // trigger areas and marks repainted for this frame
@@ -2420,7 +2482,7 @@
     // session, where the camera is the headset. Writing desktop coordinates
     // into it there is read straight back as a head pose, and the next level
     // gets placed hundreds of metres away. Leaving VR reframes anyway.
-    if (!renderer.xr.isPresenting) frameDesktopCamera(level);
+    if (!renderer.xr.isPresenting && !flatActive) frameDesktopCamera(level);
 
     hud.name.textContent = level.name.trim() || "(unnamed level)";
     const meta = where.packName + " · " + where.label +
@@ -2458,8 +2520,29 @@
         session.terrain.setRelief(
           buildReliefMap(level, pieceMap, session.profile, state.emboss, groundData));
       },
+      // the 2D view: the terrain as one quad, the openings as the original's
+      // sprites again (their geometry and the water hidden), the bar flat
+      setFlat: (on) => {
+        on = !!on;
+        if (flatOn === on) return;
+        flatOn = on;
+        terrain.setFlat(on, FLAT_TERRAIN_Z);
+        for (const portal of portals) {
+          portal.mesh.visible = !on;
+          if (portal.flaps) for (const flap of portal.flaps) flap.mesh.visible = !on;
+        }
+        for (const w of waterMeshes) w.mesh.visible = !on;
+        gui.setRelief(state.skillBar && !on);
+        syncScene(true); // the sprites drawn again, whether the clock runs or not
+      },
     };
     session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
+    if (flatActive) {
+      // the 2D view, framed once the quad is there (and again once the bar is)
+      session.setFlat(true);
+      frameFlatView(level);
+      flatFramePending = true;
+    }
     layoutGuiPanel();
     if (renderer.xr.isPresenting) placeDioramaForXR();
 
@@ -2528,6 +2611,19 @@
       vrVolumeSlider.visible = false;
       vrStatusPanel.visible = false;
       session.gui.setReliefDepth(1);
+      if (flatActive) {
+        // the 2D view: the band along the bottom, sized in screen pixels
+        // and put into the camera's units (screen pixels over the zoom).
+        // Every frame comes through here, so a zoom re-sizes it at once.
+        if (flatFramePending && session.gui.mesh) {
+          flatFramePending = false;
+          frameFlatView(session.level);
+        }
+        const k = flatCamera.zoom;
+        const t = flatToolbarPx();
+        session.gui.place(t.w / k, (-window.innerHeight / 2 + t.above) / k, -600);
+        return;
+      }
       const dist = 600;
       const tanHalf = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const viewH = 2 * dist * tanHalf;
@@ -2756,6 +2852,125 @@
     return session && session.gui.mesh ? session.gui.canvas.width / 320 : 1;
   }
 
+  // ------------------------------------------------------------ the 2D view
+  // The original's picture: the level square on under an orthographic
+  // camera, scrolled and zoomed the way the original's stage is. The view
+  // is three numbers - the level point in the middle of the play area and
+  // the zoom, screen pixels per level pixel - and the camera is set from
+  // them. The play area is the viewport above the toolbar's band.
+  const FLAT_ZOOM_MIN = 0.5, FLAT_ZOOM_MAX = 10; // the original's range
+  const flatView = { cx: 0, cy: 0, zoom: 2 };
+  // a level framed before its panel has painted: the band was guessed, so
+  // it is framed again on the first frame that can measure it
+  let flatFramePending = false;
+
+  function sizeFlatCamera() {
+    flatCamera.left = -window.innerWidth / 2;
+    flatCamera.right = window.innerWidth / 2;
+    flatCamera.top = window.innerHeight / 2;
+    flatCamera.bottom = -window.innerHeight / 2;
+    flatCamera.updateProjectionMatrix();
+  }
+
+  /** The toolbar's band along the bottom of the 2D screen, in CSS px: its
+   *  width and height, how far its centre stands above the bottom edge
+   *  (the 3D layout's slack for a raised button), and its top. */
+  function flatToolbarPx() {
+    const w = window.innerWidth * 0.55 * panelWidthScale();
+    const cv = session ? session.gui.canvas : null;
+    const h = w * ((cv && cv.height) || 40) / ((cv && cv.width) || 320);
+    const tileBottom = cv ? session.gui.raisedTileBottomOffset() * h : h * 0.6;
+    const above = tileBottom + h * 0.04;
+    return { w, h, above, top: above + h / 2 };
+  }
+
+  /** The play area: the viewport above the toolbar's band, in CSS px. */
+  function flatPlayPx() {
+    const t = flatToolbarPx();
+    return { w: window.innerWidth, h: Math.max(1, window.innerHeight - t.top) };
+  }
+
+  /** Keep the view inside the level, as the original's stage does: the
+   *  edges stay inside it where the view is narrower than the level; where
+   *  the view is wider, the level sits in the middle. */
+  function clampFlatView(level) {
+    const play = flatPlayPx();
+    const vw = play.w / flatView.zoom, vh = play.h / flatView.zoom;
+    flatView.cx = vw >= level.width ? level.width / 2
+      : THREE.MathUtils.clamp(flatView.cx, vw / 2, level.width - vw / 2);
+    flatView.cy = vh >= level.height ? level.height / 2
+      : THREE.MathUtils.clamp(flatView.cy, vh / 2, level.height - vh / 2);
+  }
+
+  /** The camera from the view: the play area's middle on (cx, cy), which
+   *  puts the camera's own middle half the toolbar's band lower. Snapped to
+   *  whole screen pixels, so every level pixel is the same width. */
+  function applyFlatView(level) {
+    const z = flatView.zoom;
+    flatCamera.zoom = z;
+    const band = flatToolbarPx().top;
+    // world y is up: sim y runs down from the top of the level
+    const x = Math.round(flatView.cx * z) / z;
+    const y = Math.round((level.height - flatView.cy - band / 2 / z) * z) / z;
+    flatCamera.position.set(x, y, 2000);
+    flatCamera.updateProjectionMatrix();
+  }
+
+  /** The level's start as the original shows it: scrolled to its screen
+   *  position (the same middle the 3D framing uses) and zoomed so the level
+   *  stands about three fifths of the play area high. */
+  function frameFlatView(level) {
+    const play = flatPlayPx();
+    flatView.zoom = THREE.MathUtils.clamp(
+      0.6 * play.h / level.height, FLAT_ZOOM_MIN, FLAT_ZOOM_MAX);
+    flatView.cx = level.screenPositionX + 200;
+    flatView.cy = level.height / 2;
+    clampFlatView(level);
+    applyFlatView(level);
+  }
+
+  /** The desktop view back to its start, in whichever view is in force. */
+  function frameDesktopView(level) {
+    if (flatActive) frameFlatView(level);
+    else frameDesktopCamera(level);
+  }
+
+  /** Zoom the 2D view about a screen point, so what is under it stays there. */
+  function zoomFlatAbout(nextZoom, clientX, clientY) {
+    if (!session) return;
+    const level = session.level;
+    const r = renderer.domElement.getBoundingClientRect();
+    const play = flatPlayPx();
+    const z0 = flatView.zoom;
+    const z1 = THREE.MathUtils.clamp(nextZoom, FLAT_ZOOM_MIN, FLAT_ZOOM_MAX);
+    if (z1 === z0) return;
+    // the point, from the play area's middle; the level point under it
+    const dx = clientX - r.left - play.w / 2, dy = clientY - r.top - play.h / 2;
+    const px = flatView.cx + dx / z0, py = flatView.cy + dy / z0;
+    flatView.zoom = z1;
+    flatView.cx = px - dx / z1;
+    flatView.cy = py - dy / z1;
+    clampFlatView(level);
+    applyFlatView(level);
+  }
+
+  /** Scroll the 2D view by screen pixels (right and down positive). */
+  function scrollFlatBy(dxPx, dyPx) {
+    if (!session) return;
+    flatView.cx += dxPx / flatView.zoom;
+    flatView.cy += dyPx / flatView.zoom;
+    clampFlatView(session.level);
+    applyFlatView(session.level);
+  }
+
+  /** The level-space box the 2D play area covers, unclamped. */
+  function flatViewRect() {
+    const play = flatPlayPx();
+    const vw = play.w / flatView.zoom, vh = play.h / flatView.zoom;
+    return { x0: flatView.cx - vw / 2, x1: flatView.cx + vw / 2,
+             y0: flatView.cy - vh / 2, y1: flatView.cy + vh / 2 };
+  }
+
   // ------------------------------------------------- the view as a rectangle
   // The minimap wants "the part of the level on screen" and, on a press,
   // "put this level point in the middle". In 2D those are the scroll
@@ -2770,8 +2985,9 @@
    *  camera in a session (its projection covers both eyes), the desktop one otherwise. */
   function viewEye() {
     if (renderer.xr.isPresenting) return renderer.xr.getCamera();
-    camera.updateMatrixWorld();
-    return camera;
+    const eye = desktopEye();
+    eye.updateMatrixWorld();
+    return eye;
   }
 
   /** The lemmings' plane of the board, in world space. */
@@ -2801,10 +3017,16 @@
    *  none of the view's corners reaches the board (the last box stands). */
   function visibleLevelRect() {
     if (!session) return null;
+    const { width, height } = session.level;
+    if (flatActive) {
+      // the 2D view is a rectangle by construction
+      const r = flatViewRect();
+      const cx = (v) => Math.max(0, Math.min(width, v)), cy = (v) => Math.max(0, Math.min(height, v));
+      return { x0: cx(r.x0), x1: cx(r.x1), y0: cy(r.y0), y1: cy(r.y1) };
+    }
     const eye = viewEye(), plane = levelPlane();
     const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([nx, ny]) => levelPointAt(eye, plane, nx, ny));
     if (!corners.some((c) => c.hit)) return null;
-    const { width, height } = session.level;
     const clampX = (v) => Math.max(0, Math.min(width, v));
     const clampY = (v) => Math.max(0, Math.min(height, v));
     return {
@@ -2816,6 +3038,7 @@
   /** The level point in the middle of the view. */
   function currentViewCentre() {
     if (!session) return null;
+    if (flatActive) return { x: flatView.cx, y: flatView.cy };
     const c = levelPointAt(viewEye(), levelPlane(), 0, 0);
     if (c.hit) return { x: c.x, y: c.y };
     const r = visibleLevelRect();
@@ -2833,6 +3056,12 @@
     const rw = r ? r.x1 - r.x0 : 0, rh = r ? r.y1 - r.y0 : 0;
     const cx = rw >= width ? width / 2 : THREE.MathUtils.clamp(simX, rw / 2, width - rw / 2);
     const cy = rh >= height ? height / 2 : THREE.MathUtils.clamp(simY, rh / 2, height - rh / 2);
+    if (flatActive) {
+      flatView.cx = cx;
+      flatView.cy = cy;
+      applyFlatView(session.level);
+      return;
+    }
     const cur = currentViewCentre();
     if (!cur) return;
     session.worldGroup.updateWorldMatrix(true, false);
@@ -3005,7 +3234,7 @@
         .applyMatrix4(projInv).applyMatrix4(eye.matrixWorld);
       raycaster.set(origin, target.sub(origin).normalize());
     } else {
-      raycaster.setFromCamera(ndc, camera);
+      raycaster.setFromCamera(ndc, desktopEye()); // handles the orthographic one too
     }
     return raycaster;
   }
@@ -3238,12 +3467,18 @@
   // OrbitControls suppresses the context menu only while enabled (desktop);
   // in a session the right button belongs to our pan
   renderer.domElement.addEventListener("contextmenu", (e) => {
-    if (renderer.xr.isPresenting) e.preventDefault();
+    if (renderer.xr.isPresenting || flatActive) e.preventDefault();
   });
 
   // wheel in VR mouse-fallback: zoom the diorama toward the cursor's point
   // on the board (desktop wheel zoom stays with OrbitControls)
   renderer.domElement.addEventListener("wheel", (e) => {
+    if (flatActive && session) {
+      // the 2D view: zoom about the pointer (OrbitControls is off)
+      e.preventDefault();
+      zoomFlatAbout(flatView.zoom * Math.pow(0.998, e.deltaY), e.clientX, e.clientY);
+      return;
+    }
     if (!vrMouseFallback() || !session) return;
     e.preventDefault();
     // the catalog scrolls instead, the way the sticks scroll it in a headset
@@ -3259,6 +3494,9 @@
 
   // a volume slider or catalog scrollbar held down by the mouse
   let mouseScrub = null;
+  // the 2D view scrolled by a drag: where the pointer was last, which button
+  // holds it, and whether it has moved enough to be a drag rather than a click
+  let flatDrag = null;
 
   /**
    * A press on the skills bar, any button. It is the bar's alone: this runs
@@ -3298,6 +3536,15 @@
     pressedOnPanel = false;
     if (!mouseAllowed()) return;
     if (e.button === 2) rightDownAt = { x: e.clientX, y: e.clientY };
+    if (flatActive) {
+      // the 2D view: a drag with either button scrolls; a left press that
+      // barely moves is the click that picks a lemming (on release)
+      if (e.button === 0) downAt = { x: e.clientX, y: e.clientY };
+      if (e.button === 0 || e.button === 2) {
+        flatDrag = { x: e.clientX, y: e.clientY, button: e.button, active: e.button === 2 };
+      }
+      return;
+    }
     if (e.button === 2 && vrMouseFallback()) {
       // right-drag = pan, as in the web view: grab the point under the
       // cursor on the board's plane and slide the diorama with it
@@ -3336,6 +3583,7 @@
     }
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
+    if (flatDrag && e.button === flatDrag.button) flatDrag = null;
     if (e.button === 2) {
       vrPan = null;
       // double right-click (no drag) = reset the view to its default
@@ -3351,7 +3599,7 @@
           if (renderer.xr.isPresenting) {
             if (vrMouseFallback()) vr.recenterNow();
           } else if (session) {
-            frameDesktopCamera(session.level);
+            frameDesktopView(session.level);
           }
         } else {
           lastRightClickAt = now;
@@ -3386,6 +3634,20 @@
       const p = pick(e);
       session.gui.onMouseMove(p && p.panelUv ? p.panelUv : null);
       return;
+    }
+    if (flatActive && flatDrag) {
+      const held = e.buttons & (flatDrag.button === 2 ? 2 : 1);
+      if (!held) {
+        flatDrag = null; // the button came up off the canvas
+      } else {
+        const dx = e.clientX - flatDrag.x, dy = e.clientY - flatDrag.y;
+        if (!flatDrag.active && Math.abs(dx) + Math.abs(dy) > 5) flatDrag.active = true;
+        if (flatDrag.active) {
+          scrollFlatBy(-dx, -dy); // the level follows the pointer
+          flatDrag.x = e.clientX;
+          flatDrag.y = e.clientY;
+        }
+      }
     }
     if (vrMouseFallback()) {
       const rc = mouseRaycaster(e);
@@ -3561,7 +3823,7 @@
     // OrbitControls would silently accumulate wheel/drag input during the
     // session and apply it as a jump on exit
     controls.enabled = false;
-    resetBar();          // on the head until the board is placed...
+    applyFlat(false);    // the diorama, whatever the desktop shows; the bar on the head until the board is placed...
     barAutoPlace = true; // ...then below the board, unlocked
     layoutGuiPanel();
     vrWindowsPlaced = false; // the first frame's pose places them
@@ -3581,10 +3843,9 @@
     setVrSettings(false);
     setVrDetail(false);
     noteVrTipHover(null); // and no label lingers from a headset beam
-    // an unlocked bar is a VR notion: on the desktop it rides the camera
-    resetBar();
-    if (session) frameDesktopCamera(session.level);
-    layoutGuiPanel();
+    // an unlocked bar is a VR notion: on the desktop it rides the camera -
+    // the one of whichever view the desktop had, put back here
+    applyFlat(state.flat);
   });
 
   /**
@@ -4025,6 +4286,12 @@
         cur * (zoomIn ? 1.15 : 1 / 1.15),
         VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
       scaleDioramaAbout(next, dioramaFocusWorld());
+    } else if (flatActive) {
+      // about the play area's middle
+      const r = renderer.domElement.getBoundingClientRect();
+      const play = flatPlayPx();
+      zoomFlatAbout(flatView.zoom * (zoomIn ? 1.15 : 1 / 1.15),
+        r.left + play.w / 2, r.top + play.h / 2);
     } else {
       const dir = camera.position.clone().sub(controls.target)
         .multiplyScalar(zoomIn ? 1 / 1.15 : 1.15);
@@ -4037,7 +4304,7 @@
   function resetView() {
     if (!session) return;
     if (renderer.xr.isPresenting) vr.recenterNow();
-    else frameDesktopCamera(session.level);
+    else frameDesktopView(session.level);
   }
 
   /** The piece editor is the edit mode's tool; asking for it enters the mode. */
@@ -4146,6 +4413,14 @@
         e.preventDefault();
         const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
         const dy = e.key === "ArrowUp" ? 1 : e.key === "ArrowDown" ? -1 : 0;
+        if (flatActive) {
+          // the 2D view scrolls, a twelfth of the play area a press; it has no orbit
+          if (!e.shiftKey) {
+            const play = flatPlayPx();
+            scrollFlatBy(dx * play.w * 0.08, -dy * play.h * 0.08);
+          }
+          return true;
+        }
         if (e.shiftKey) {
           // shift+arrows = orbit (10 degrees per press)
           const step = Math.PI / 18;
@@ -4286,7 +4561,7 @@
       session.lemmingPool.applyInterpolation(alpha);
       // point size does not follow the diorama's scale, so it is reapplied
       // here: grips, sticks and drags all change that scale mid-session
-      session.particles.updateScale();
+      session.particles.updateScale(flatActive ? flatCamera.zoom : 0);
       updateHoverRing(); // ring keeps following the hovered lemming
       if (session.cpmAnimate) session.cpmAnimate(now);
       session.gui.setViewRect(visibleLevelRect()); // the minimap's frame
@@ -4323,7 +4598,7 @@
       // the sign is parked over the level, so it has nowhere to be without one
       vrWarningSign.visible = vrMouseFallback() && !!session;
     } else {
-      controls.update();
+      if (!flatActive) controls.update();
       vrWarningSign.visible = false;
     }
     if (!vrMouseFallback()) {
@@ -4331,7 +4606,7 @@
       vrPan = null;
       vrOrbit = null;
     }
-    renderer.render(scene, camera);
+    renderer.render(scene, desktopEye());
   }
 
   // world library: the level packs, browsed like the levels/ directory
@@ -4476,6 +4751,7 @@
     window.addEventListener("focus", () => releaseSim("replay-file"));
   }
   renderMode(); // billing, catalog labels and editor availability
+  applyFlat(state.flat); // the 2D view, if that is what was last used
 
   // The folding panels down the right edge - the key hints, the 3D
   // effects. Each is a button; pressed, it unfolds into its panel, which
@@ -4510,6 +4786,8 @@
   // debug handle for the console / automated checks
   window.__lem3d = {
     state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
+    // the 2D view: its camera, its numbers, and the switch
+    flatCamera, flatView, applyFlat, toggleFlat, flatPlayPx, get flatActive() { return flatActive; },
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
