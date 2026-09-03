@@ -8,10 +8,13 @@
  * twin from gfx/cursor-hr for dense screens. The hot spot is the cross's
  * centre, pixel (8, 8) of the 16 px picture.
  *
- * On the desktop the picture becomes the canvas's CSS cursor. In a headset
- * it becomes a sprite where the beam lands on the board (vr.js), sized to
- * sixteen level pixels at the board's scale. When the NeoLemmix assets are
- * not installed nothing changes: the page keeps its own pointer and ring.
+ * Over the board it is a sprite at the pointer's spot, sixteen level pixels
+ * wide at the board's scale - so it is a fixed size in the level whatever
+ * the zoom, wide enough to ring a lemming, on the desktop as in a headset
+ * where it sits where the beam lands (vr.js). Off the board, over the
+ * toolbar say, the picture is the canvas's CSS cursor. When the NeoLemmix
+ * assets are not installed nothing changes: the page keeps its own pointer
+ * and ring.
  */
 
 const CURSOR_FILES = ["standard", "focused", "direction_left", "direction_right"];
@@ -80,6 +83,13 @@ class GameCursor {
     element.dataset.gameCursor = key;
     element.style.cursor = this.cssPlain[key];
     element.style.cursor = this.css[key];
+  }
+
+  /** No OS pointer over `element`: the sprite in the scene is the cursor there. */
+  hide(element) {
+    if (!this.ok || !element || element.dataset.gameCursor === "none") return;
+    element.dataset.gameCursor = "none";
+    element.style.cursor = "none";
   }
 
   clear(element) {

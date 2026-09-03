@@ -220,11 +220,14 @@ installed (`neolemmix/gfx/cursor`, with the 32 px twins of `cursor-hr` for
 dense screens), on both engines: a cross over the level, a square once a
 lemming is under it, and a small arrow beside either while the direction
 filter is on — the six cursors `GameWindow.pas` composes, chosen the way
-`SetCurrentCursor` chooses them, hot spot at the cross's centre. On the
-desktop it is the canvas's CSS cursor; in a headset it is a sprite sixteen
-level pixels wide where the beam lands on the board, the impact dot staying
-for the toolbar and the windows. With the cursor in use the yellow ring is
-not drawn; without the pictures the page keeps its own pointer and ring.
+`SetCurrentCursor` chooses them, hot spot at the cross's centre. Over the
+board it is a sprite sixteen level pixels wide at the board's scale — a
+fixed size in the level whatever the zoom, so the square rings a lemming at
+any distance — on the desktop at the pointer's spot with the OS pointer
+hidden, in a headset where the beam lands, the impact dot staying for the
+toolbar and the windows; off the board the picture is the canvas's CSS
+cursor. With the cursor in use the yellow ring is not drawn; without the
+pictures the page keeps its own pointer and ring.
 
 Render orders matter here and are worth knowing, because three draws *all*
 opaque objects before *any* transparent one — an overlay needs both a render

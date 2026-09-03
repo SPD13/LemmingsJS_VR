@@ -2433,8 +2433,23 @@
       session.ring.visible = false;
       hud.hover.innerHTML = "&nbsp;";
     }
-    // the desktop pointer: a cross, a square over a lemming, an arrow with the direction filter
-    if (cursorReady() && !renderer.xr.isPresenting) gameCursor.apply(renderer.domElement, !!lem, selectDxNow());
+    // The desktop pointer. Over the board it is the sprite - sixteen level
+    // pixels wide, so its size on screen follows the zoom and it rings a
+    // lemming at any distance - and the OS pointer is hidden there; off the
+    // board (the toolbar, the dark) it is the picture as a CSS cursor.
+    if (cursorReady() && !renderer.xr.isPresenting) {
+      const sprite = boardCursorSprite();
+      if (cursorSim && sprite) {
+        session.worldGroup.updateWorldMatrix(true, false);
+        sprite.position.copy(session.worldGroup.localToWorld(new THREE.Vector3(cursorSim.x, cursorSim.y, LEMMING_Z + 2)));
+        gameCursor.dressSprite(sprite, !!lem, selectDxNow(), dioramaRoot.scale.x);
+        sprite.visible = true;
+        gameCursor.hide(renderer.domElement);
+      } else {
+        if (sprite) sprite.visible = false;
+        gameCursor.apply(renderer.domElement, false, selectDxNow());
+      }
+    }
   }
 
   // while a session has controllers, they own the pointer and stray desktop
@@ -2695,6 +2710,11 @@
       return;
     }
     applyHover(pick(e));
+  });
+  // the pointer leaving the canvas takes the cursor with it
+  renderer.domElement.addEventListener("pointerleave", () => {
+    if (!mouseAllowed() || renderer.xr.isPresenting) return;
+    applyHover(null);
   });
 
   // ------------------------------------------------------------------ WebXR
