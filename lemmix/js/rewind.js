@@ -97,7 +97,26 @@
     return n;
   }
 
+  /**
+   * Forward at hyperspeed until `stop(sim)` says so (checked after each
+   * frame), the game ends, or `maxFrames` have gone by - NeoLemmix's
+   * fHyperSpeedStopCondition. Returns the frames simulated.
+   */
+  function runUntil(sim, states, stop, maxFrames) {
+    let n = 0;
+    while (n < maxFrames && !sim.gameFinished && !sim.stateIsUnplayable) {
+      sim.update();
+      n++;
+      if (sim.currentIteration % SAVE_EVERY === 0) {
+        states.add(sim);
+        states.tidy(sim.currentIteration);
+      }
+      if (stop(sim)) break;
+    }
+    return n;
+  }
+
   Lemmix.SaveStates = SaveStates;
-  Lemmix.Rewind = { gotoFrame, SAVE_EVERY };
-  if (typeof module !== "undefined" && module.exports) module.exports = { SaveStates, gotoFrame, SAVE_EVERY };
+  Lemmix.Rewind = { gotoFrame, runUntil, SAVE_EVERY };
+  if (typeof module !== "undefined" && module.exports) module.exports = { SaveStates, gotoFrame, runUntil, SAVE_EVERY };
 })(typeof window !== "undefined" ? window : globalThis);

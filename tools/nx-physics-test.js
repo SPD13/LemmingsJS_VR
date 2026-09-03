@@ -449,6 +449,72 @@ async function main() {
     check("no shadow for a skill without one", Lemmix.Shadows.compute(game, L, "CLIMBER").high.length === 0 && Lemmix.Shadows.compute(game, L, "CLIMBER").low.length === 0);
   }
 
+  // ================= the hotkeys' filters and skips
+
+  // --- directional select: the panel's sticky choice, a held direction key over it
+  {
+    const level = makeLevel(200, 100, 60);
+    level.skills = [{ name: "BUILDER", count: 5 }, { name: "DIGGER", count: 5 }];
+    level.preplaced = [
+      { x: 50, y: 60, dx: 1, slider: false, climber: false, swimmer: false, floater: false, glider: false, disarmer: false, zombie: false, neutral: false, blocker: false },
+      { x: 52, y: 60, dx: -1, slider: false, climber: false, swimmer: false, floater: false, glider: false, disarmer: false, zombie: false, neutral: false, blocker: false },
+    ];
+    level.releaseCount = 2;
+    const game = new Lemmix.LemGame(level, masks);
+    game.start();
+    const right = game.lemmings.find((L) => L.dx === 1), left = game.lemmings.find((L) => L.dx === -1);
+    const at = () => game.getPriorityLemming(BA.NONE, 51, 58).lemming;
+    check("both under the cursor: one of them", at() === right || at() === left);
+    game.selectDx = -1;
+    check("the panel's left filter: the left-facing one", at() === left);
+    game.hotkeyDx = 1;
+    check("a held right key wins over the panel's choice", game.effectiveSelectDx === 1 && at() === right);
+    game.hotkeyDx = 0; game.selectDx = 0;
+    // --- select walker: a worker would come first; with the key held only the walker counts
+    game.assignSkillTo(left, "BUILDER");
+    run(game, 3);
+    game.setSelectedSkill("DIGGER"); // a skill a builder can take: the worker's box comes first
+    check("a builder under the cursor comes before a walker", left.action === BA.BUILDING && at() === left);
+    game.selectWalkerOnly = true;
+    check("...unless only walkers are wanted", at() === right);
+    game.selectWalkerOnly = false;
+  }
+
+  // --- skip to next shrugger: ahead at hyperspeed until a builder runs out of bricks
+  {
+    const level = makeLevel(600, 100, 60);
+    const game = makeGame(level, 20, 60, 1, ["BUILDER"]);
+    const states = new Lemmix.SaveStates();
+    states.add(game);
+    run(game, 10);
+    game.assignSkillTo(game.lemmings[0], "BUILDER");
+    run(game, 2);
+    const n = Lemmix.Rewind.runUntil(game, states, (s) => s.lemmings.some((L) => L.action === BA.SHRUGGING), 5000);
+    check("runUntil stops on the shrugger", game.lemmings[0].action === BA.SHRUGGING && n > 12 * 9 && n < 300, { n, action: game.lemmings[0].action });
+    check("...and saved a state on the way", states.states.length >= 2);
+    const m = Lemmix.Rewind.runUntil(game, states, () => false, 7);
+    check("runUntil runs its bound out", m === 7);
+  }
+
+  // ================= the hotkey table (3d/js/hotkeys.js)
+  {
+    const Hotkeys = require("../3d/js/hotkeys.js");
+    const hk = new Hotkeys.HotkeyManager(); // no localStorage here: the traditional layout
+    check("traditional layout: R restarts, P pauses, F3 is the climber", hk.get("KeyR").action === "restart" && hk.get("KeyP").action === "pause" &&
+      hk.get("F3").action === "skill" && hk.get("F3").mod === "climber");
+    check("the manual's skips: B back one, N forward one, space 170", hk.get("KeyB").mod === -1 && hk.get("KeyN").mod === 1 && hk.get("Space").mod === 170);
+    check("described as NeoLemmix lists them", Hotkeys.describe(hk.get("KeyB")) === "Time Skip: Back 1 Frame" && Hotkeys.describe(hk.get("Comma")) === "Time Skip: Back 85 Frames" &&
+      Hotkeys.describe(hk.get("Digit1")) === "Select Skill: Walker" && Hotkeys.describe(hk.get("KeyT")) === "Clear Physics Mode (hold)" && Hotkeys.describe(hk.get("BracketLeft")) === "Skip to Previous Assignment");
+    check("tagged Lemmix when a DOS level cannot do it", Hotkeys.tagOf(hk.get("KeyB")) === "lemmix" && Hotkeys.tagOf(hk.get("Digit1")) === "lemmix" && Hotkeys.tagOf(hk.get("KeyT")) === "lemmix" &&
+      Hotkeys.tagOf(hk.get("F3")) === "" && Hotkeys.tagOf(hk.get("KeyN")) === "" && Hotkeys.tagOf(hk.get("Home")) === "view");
+    hk.set("KeyQ", "pause");
+    check("a key given a function, and one cleared", hk.get("KeyQ").action === "pause" && (hk.set("KeyQ", null), hk.get("KeyQ") === null));
+    check("the first keyboard key of a function names it", hk.keyNameFor("pause") === "P" && hk.keyNameFor("skill", "digger") === "F10" && hk.keyNameFor("skip", 1) === "N");
+    hk.applyPreset("functional");
+    check("functional layout: F1 restarts, D is the walker, space pauses", hk.get("F1").action === "restart" && hk.get("KeyD").mod === "walker" && hk.get("Space").action === "pause");
+    check("Shift and Ctrl are keys like any other", Hotkeys.normalizeCode("ShiftLeft") === "Shift" && Hotkeys.normalizeCode("ControlRight") === "Control" && hk.get("Shift").action === "previous_skill");
+  }
+
   console.log(passed + " passed, " + failed + " failed");
   process.exitCode = failed ? 1 : 0;
 }

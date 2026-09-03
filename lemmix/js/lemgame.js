@@ -245,7 +245,9 @@
       // update applies). replay.js writes it out as .nxrp and reads one in.
       this.recorded = [];
       this.replayInsert = false; // actions add to the replay without cutting it
-      this.selectDx = 0;         // directional select: -1, 0 or 1
+      this.selectDx = 0;         // directional select: -1, 0 or 1 (the panel's, sticky)
+      this.hotkeyDx = 0;         // the same while a direction hotkey is held; it wins
+      this.selectWalkerOnly = false; // the Select Walker hotkey held: pick walkers only
     }
 
     // ---- the replay
@@ -869,6 +871,9 @@
      * selected skill (or any skill when `action` is NONE). Returns
      * {lemming, count} where count is how many lemmings sit under the cursor.
      */
+    /** The direction filter in force: a held direction hotkey, else the panel's choice. */
+    get effectiveSelectDx() { return this.hotkeyDx !== 0 ? this.hotkeyDx : this.selectDx; }
+
     getPriorityLemming(action, mx, my) {
       const NonPerm = 0, Perm = 1, NonWalk = 2, Walk = 3;
       let priority = null, curValue = 10, count = 0;
@@ -890,10 +895,13 @@
         if (L.removed || L.teleporting || L.portalWarpFrame > 0) continue;
         if (L.cannotReceiveSkills && priority) continue;
         if (!inCursor(L)) continue;
-        if (this.selectDx !== 0 && this.selectDx !== L.dx) continue; // directional select
+        const dx = this.effectiveSelectDx;
+        if (dx !== 0 && dx !== L.dx) continue; // directional select
+        if (this.selectWalkerOnly && L.action !== BA.WALKING) continue; // the Select Walker hotkey
         if (!L.cannotReceiveSkills) count++;
         let box = 0, isIn;
-        do { isIn = inBox(L, box); box++; } while (!(box > Math.min(curValue, 4) || isIn));
+        if (this.selectWalkerOnly) box = 1;
+        else do { isIn = inBox(L, box); box++; } while (!(box > Math.min(curValue, 4) || isIn));
         if (!this.mayAssign(newSkill, L)) box = 8;
         if (L.cannotReceiveSkills) box = 9;
         if (box < curValue || (box === curValue && dist(L) < dist(priority))) { priority = L; curValue = box; }

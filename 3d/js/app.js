@@ -57,6 +57,8 @@
     smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
+    shadows: setting("shadows", "lem3d-shadows", true),  // NeoLemmix's skill shadows (a hotkey toggles them)
+    music: setting("music", "lem3d-music", true),        // the music, apart from the sound (a hotkey toggles it)
     // Editing is the tagging workbench: the piece editor, the tagging marks
     // in the catalog, the "validation mode" billing. Playing is the game.
     edit: setting("edit", "lem3d-edit", false),
@@ -530,11 +532,11 @@
     });
   };
   const hudIcons = {
-    prev: iconizeHudButton(document.getElementById("btn-prev"), vrPrevBtn.userData.draw, "previous level (,)"),
+    prev: iconizeHudButton(document.getElementById("btn-prev"), vrPrevBtn.userData.draw, "previous level"),
     restart: iconizeHudButton(document.getElementById("btn-restart"), vrRestartBtn.userData.draw, "restart the level"),
-    next: iconizeHudButton(document.getElementById("btn-next"), vrNextBtn.userData.draw, "next level (.)"),
-    pause: iconizeHudButton(hud.pauseBtn, vrPauseBtn.userData.draw, "pause / resume (space)"),
-    worlds: iconizeHudButton(document.getElementById("btn-library"), vrWorldsBtn.userData.draw, "world library (w)"),
+    next: iconizeHudButton(document.getElementById("btn-next"), vrNextBtn.userData.draw, "next level"),
+    pause: iconizeHudButton(hud.pauseBtn, vrPauseBtn.userData.draw, "pause / resume"),
+    worlds: iconizeHudButton(document.getElementById("btn-library"), vrWorldsBtn.userData.draw, "world library"),
     sound: iconizeHudButton(document.getElementById("btn-sound"), vrMuteBtn.userData.draw, "sound on / off"),
     view: iconizeHudButton(document.getElementById("btn-view"), resetViewIcon, "reset the view (Home)"),
   };
@@ -1731,7 +1733,7 @@
     audio.setEnabled(!audio.enabled);
     renderSoundBtn();
   paintVolume();  // now that audio exists, show its real level and switch
-    if (audio.enabled && session) audio.playMusic(session.musicTrack || 0);
+    if (audio.enabled && session) session.playMusic();
   });
   renderSoundBtn();
 
@@ -1842,7 +1844,7 @@
   let gameCursor = null;
   GameCursor.load("../").then((c) => { gameCursor = c; });
   const cursorReady = () => !!(gameCursor && gameCursor.ok);
-  const selectDxNow = () => (session && session.game.sim ? session.game.sim.selectDx : 0);
+  const selectDxNow = () => (session && session.game.sim ? session.game.sim.effectiveSelectDx : 0);
   let endTimeout = null; // the level's end moving on to the next, unless the game is rewound
 
   // ----------------------------------------------------- the REPLAY badge
@@ -1969,8 +1971,13 @@
     const musicTrack = state.engine === "lemmix"
       ? Array.from(state.levelId).reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 1000
       : state.group * 30 + state.level;
-    if (state.engine === "lemmix") audio.playLevelMusic(lemmixEngine.musicCandidates(where, level), musicTrack);
-    else audio.playMusic(musicTrack);
+    // the music is started here and again by the sound and music toggles
+    const playMusic = () => {
+      if (!state.music) return;
+      if (state.engine === "lemmix") audio.playLevelMusic(lemmixEngine.musicCandidates(where, level), musicTrack);
+      else audio.playMusic(musicTrack);
+    };
+    playMusic();
 
     const resources = new SessionResources();
 
@@ -2371,7 +2378,7 @@
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
       lemmingPool, objectPool, particles, resources, depthMap, profile,
-      groundData, profileUrl, musicTrack, pieceMap,
+      groundData, profileUrl, musicTrack, playMusic, pieceMap,
       getLastTickTime: () => lastTickTime,
       syncScene, resetSceneMemory, shadowOverlay,
       // clear physics: the gadgets' one colour walks the hues every five
@@ -2640,7 +2647,7 @@
    */
   function shadowChoice(game) {
     const sim = game.sim;
-    if (!sim || !cursorSim) return null;
+    if (!sim || !cursorSim || !state.shadows) return null; // the Toggle Skill Shadows hotkey hides them
     const skill = sim.selectedSkill;
     if (game.cursorLemming && skill && Lemmix.Shadows.SHADOW_SKILLS.has(skill)) return { lem: game.cursorLemming, skill };
     const any = sim.getPriorityLemming(Lemmix.BA.NONE, Math.round(cursorSim.x), Math.round(cursorSim.y)).lemming;
@@ -3203,7 +3210,9 @@
    * a left press is held, for the release-rate and frame-skip repeats and
    * for dragging on the minimap.
    */
+  let pressedOnPanel = false; // the last press was the bar's: its release is not a click on the board
   function pressOnPanel(e, p) {
+    pressedOnPanel = true;
     if (e.button !== 0) {
       if (p.minimap) return;
       e.preventDefault();
@@ -3223,7 +3232,10 @@
     pressOnPanel(e, p);
   }, true);
 
+  // a middle press must not start the browser's autoscroll: it is a key here
+  renderer.domElement.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
   renderer.domElement.addEventListener("pointerdown", (e) => {
+    pressedOnPanel = false;
     if (!mouseAllowed()) return;
     if (e.button === 2) rightDownAt = { x: e.clientX, y: e.clientY };
     if (e.button === 2 && vrMouseFallback()) {
@@ -3270,6 +3282,9 @@
       const dragged = !rightDownAt ||
         Math.abs(e.clientX - rightDownAt.x) + Math.abs(e.clientY - rightDownAt.y) > 5;
       if (!dragged) {
+        // a right click is a key in NeoLemmix's table; on the board it is
+        // also the first half of the double click that resets the view
+        if (!pressedOnPanel) runMouseKey("MouseRight");
         const now = performance.now();
         if (now - lastRightClickAt < 400) {
           lastRightClickAt = 0;
@@ -3285,6 +3300,10 @@
       return;
     }
     if (e.button === 0) vrOrbit = null;
+    if (e.button === 1) { // a middle click is a key in NeoLemmix's table (pause, by default)
+      if (mouseAllowed() && !pressedOnPanel) runMouseKey("MouseMiddle");
+      return;
+    }
     if (!mouseAllowed() || e.button !== 0) return;
     if (session.gui.minimapDrag) session.gui.onMouseUp(null); // wherever the button came up
     if (mouseScrub) { mouseScrub = null; return; } // it acted as it was dragged
@@ -3729,48 +3748,309 @@
     if (e.target === confirmDom.panel) closeConfirm();
   });
 
-  window.addEventListener("keydown", (e) => {
-    // a question on screen owns the keyboard: answer it or dismiss it, but
-    // do not let a stray space bar pause the game behind it
-    if (!confirmDom.panel.hidden) {
-      if (e.key === "Escape") { e.preventDefault(); closeConfirm(); }
-      else if (e.key === "Enter") { e.preventDefault(); confirmDom.yes.click(); }
+  // --------------------------------------------------------------- hotkeys
+  /**
+   * NeoLemmix's key table (hotkeys.js): a key is looked up and its function
+   * run, for either engine - the functions a DOS level cannot do are simply
+   * nothing there. The held ones (a direction filter, walkers only, the
+   * athlete info) work through the set of keys down, read after every key
+   * event as NeoLemmix's CheckShifts reads the keyboard; the release-rate
+   * keys and a "hold" clear physics undo themselves on the key's release.
+   * The dialog behind the "hotkeys" button edits the table and keeps it in
+   * this browser. A headset gets the keys too: the keyboard still reaches
+   * the page while it presents.
+   */
+  const hotkeys = new Hotkeys.HotkeyManager();
+  const hotkeyDialog = new Hotkeys.HotkeyDialog(hotkeys, {
+    onOpen: () => { releaseHeldKeys(); holdSim("hotkeys"); },
+    onClose: () => { releaseSim("hotkeys"); refreshKeyHints(); },
+  });
+  document.getElementById("btn-hotkeys").addEventListener("click", () => hotkeyDialog.open());
+  hotkeys.onChange = () => refreshKeyHints();
+
+  /** The tooltips and the controls panel name the keys as they are set. */
+  function refreshKeyHints() {
+    const k = (id, mod) => { const n = hotkeys.keyNameFor(id, mod); return n ? " (" + n + ")" : ""; };
+    const t = (id, text, mod) => { const b = document.getElementById(id); if (b) b.title = text + k(b.dataset.action, mod); };
+    t("btn-prev", "previous level");
+    t("btn-next", "next level");
+    t("btn-pause", "pause / resume");
+    t("btn-library", "world library");
+    t("btn-sound", "sound on / off");
+    t("btn-view", "reset the view");
+    const hint = document.getElementById("hud-keys-hotkeys");
+    if (hint) {
+      const parts = [];
+      const add = (id, label, mod) => { const n = hotkeys.keyNameFor(id, mod); if (n) parts.push("<b>" + n + "</b> " + label); };
+      add("pause", "pause"); add("skip", "step", 1); add("restart", "restart"); add("fastforward", "fast forward");
+      add("previous_skill", "prev skill"); add("next_skill", "next skill"); add("quit", "library"); add("save_replay", "save replay");
+      hint.innerHTML = parts.join(" &middot; ") + (parts.length ? " &middot; " : "") + "<b>hotkeys</b> (top left) sets them all";
+    }
+  }
+  for (const [id, action] of [["btn-prev", "previous_level"], ["btn-next", "next_level"], ["btn-pause", "pause"],
+    ["btn-library", "quit"], ["btn-sound", "toggle_sound"], ["btn-view", "reset_view"]]) {
+    document.getElementById(id).dataset.action = action;
+  }
+  refreshKeyHints();
+
+  const FF_SPEED = 4, SLOWMO_SPEED = 0.25; // NeoLemmix's fast forward and slow motion
+  const NUKE_DOUBLE_MS = 250;              // the second press of the nuke key must come within this
+  const isMac = /Mac/.test(navigator.platform);
+  const heldCodes = new Set();
+  let lastNukeKeyAt = 0;
+
+  const heldAction = (id) => {
+    for (const c of heldCodes) { const b = hotkeys.get(c); if (b && b.action === id) return true; }
+    return false;
+  };
+
+  /** CheckShifts: the held keys' filters into the game. */
+  function checkShifts() {
+    if (!session || !session.game.sim) return;
+    const game = session.game, sim = game.sim;
+    let dx = 0;
+    if (heldAction("dir_select_left")) dx--;
+    if (heldAction("dir_select_right")) dx++; // both held cancel out, as in NeoLemmix
+    sim.hotkeyDx = dx;
+    sim.selectWalkerOnly = heldAction("force_walker");
+    const info = heldAction("athlete_info");
+    if (game.showAthleteInfo !== info) {
+      game.showAthleteInfo = info;
+      if (game.gui) game.gui.render(true);
+    }
+  }
+
+  /** A key let go: the held filters re-read, a held release-rate or clear-physics key released. */
+  function keyUp(code) {
+    heldCodes.delete(code);
+    const b = hotkeys.get(code);
+    if (b && session) {
+      if (b.action === "rr_down" || b.action === "rr_up") holdReleaseRate(0);
+      else if (b.action === "clear_physics" && b.mod && session.game.setClearPhysics) session.game.setClearPhysics(false);
+    }
+    checkShifts();
+  }
+
+  /** Every held key let go at once: focus lost, or a dialog taking the keyboard. */
+  function releaseHeldKeys() {
+    for (const code of Array.from(heldCodes)) keyUp(code);
+    heldCodes.clear();
+    checkShifts();
+  }
+  window.addEventListener("blur", releaseHeldKeys);
+
+  /** A held release-rate key: the Lemmix panel's own repeat, or the DOS panel's per-tick change. */
+  function holdReleaseRate(dir) {
+    if (!session) return;
+    const game = session.game;
+    if (dir) game.queueCmmand(dir > 0 ? new Lemmings.CommandReleaseRateIncrease(1) : new Lemmings.CommandReleaseRateDecrease(1));
+    if (game.gui && "rrHeld" in game.gui) game.gui.rrHeld = dir;
+    else if (game.gameGui) game.gameGui.deltaReleaseRate = dir;
+  }
+
+  /** Select a skill by NeoLemmix's name: the level's cell of it, on either panel. */
+  function selectSkillNamed(name) {
+    const game = session.game;
+    if (game.selectSkillByName) { game.selectSkillByName(name); return; }
+    const type = Lemmings.SkillTypes[String(name).toUpperCase()];
+    if (type) game.queueCmmand(new Lemmings.CommandSelectSkill(type));
+  }
+
+  /** The next (+1) or previous (-1) skill on the panel, wrapping as NeoLemmix wraps. */
+  function stepSkill(dir) {
+    const game = session.game;
+    if (game.stepSkill) { game.stepSkill(dir); return; }
+    // the DOS panel: its eight skills, in the order of their types
+    const n = 8, sn = game.getGameSkills().getSelectedSkill() - 1;
+    let to = -1;
+    if (dir > 0) { if (sn >= 0 && sn < n - 1) to = sn + 1; else if (sn > 0) to = 0; }
+    else { if (sn > 0) to = sn - 1; else if (sn === 0) to = n - 1; }
+    if (to >= 0) game.queueCmmand(new Lemmings.CommandSelectSkill(to + 1));
+  }
+
+  /** Fast forward or slow motion: on at that speed, off back to normal; a paused game runs. */
+  function toggleSpeed(speed) {
+    const timer = session.game.getGameTimer();
+    const paused = !timer.isRunning();
+    timer.speedFactor = !paused && timer.speedFactor === speed ? 1 : speed;
+    if (paused) { timer.continue(); hudIcons.pause({ on: false }); }
+  }
+
+  /** A time skip of `n` frames: back through the saved states (Lemmix), forward by ticks. */
+  function skipFrames(n) {
+    const game = session.game, timer = game.getGameTimer();
+    if (game.sim) {
+      if (n < 0) game.backFrames(-n);
+      else game.forwardFrames(n);
       return;
     }
-    // the library and the level keys work without a level on the board too:
-    // a level the page cannot play yet leaves no session behind
-    switch (e.key) {
-      case "w": window.__lem3d.library.toggle(); return;
-      case "Escape": window.__lem3d.library.close(); return;
-      case ",": moveLevel(-1); return;
-      case ".": moveLevel(1); return;
+    if (n === 1) { if (!timer.isRunning()) timer.tick(); }
+    else for (let i = 0; i < n; i++) timer.tick();
+  }
+
+  /** Save Replay: the attempt as a file - NeoLemmix's .nxrp, or the DOS engine's replay string. */
+  function saveReplayFile() {
+    const game = session.game;
+    const base = (hud.name.textContent || "level").trim().replace(/[^\w.-]+/g, "_").slice(0, 60) || "level";
+    let text, name;
+    if (game.sim) {
+      text = Lemmix.Replay.serialize(game.sim, {});
+      name = base + ".nxrp";
+    } else {
+      text = game.getCommandManager().serialize();
+      name = base + ".replay.txt";
+      console.log("replay string (append as ?replay=... to reproduce this run):");
     }
+    console.log(text);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function toggleMusic() {
+    state.music = !state.music;
+    try { localStorage.setItem("lem3d-music", state.music ? "on" : "off"); } catch (e) {}
+    if (!state.music) audio.stopMusic();
+    else if (session) session.playMusic();
+  }
+
+  function toggleShadows() {
+    state.shadows = !state.shadows;
+    try { localStorage.setItem("lem3d-shadows", state.shadows ? "on" : "off"); } catch (e) {}
+    if (session && session.syncScene && !session.game.getGameTimer().isRunning()) session.syncScene(true);
+  }
+
+  /** One zoom step in or out: the camera along its line of sight, or the diorama about its focus. */
+  function zoomView(zoomIn) {
     if (!session) return;
-    const timer = session.game.getGameTimer();
+    if (renderer.xr.isPresenting) {
+      const cur = dioramaRoot.scale.x;
+      const next = THREE.MathUtils.clamp(
+        cur * (zoomIn ? 1.15 : 1 / 1.15),
+        VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
+      scaleDioramaAbout(next, dioramaFocusWorld());
+    } else {
+      const dir = camera.position.clone().sub(controls.target)
+        .multiplyScalar(zoomIn ? 1 / 1.15 : 1.15);
+      camera.position.copy(controls.target).add(dir);
+      controls.update();
+    }
+  }
+
+  /** The view back to its start: the desktop camera framed, the headset recentred. */
+  function resetView() {
+    if (!session) return;
+    if (renderer.xr.isPresenting) vr.recenterNow();
+    else frameDesktopCamera(session.level);
+  }
+
+  /** The piece editor is the edit mode's tool; asking for it enters the mode. */
+  function openPieceEditor() {
+    if (!state.edit) {
+      state.edit = true;
+      try { localStorage.setItem("lem3d-edit", "on"); } catch (err) {}
+      renderMode();
+    }
+    if (session && session.editor) session.editor.toggle();
+  }
+
+  /**
+   * Form_KeyDown: a key's function, on the key going down. The held ones
+   * (direction filters, walkers only, athlete info) are not here: the set
+   * of keys down does their work. Returns whether the key was taken.
+   */
+  function runHotkey(b) {
+    const a = Hotkeys.ACTION_BY_ID.get(b.action);
+    if (!a || a.held) return false;
+    if (!session) {
+      // without a level on the board, only what does not need one
+      if (b.action === "quit") { library.open(); return true; }
+      if (b.action === "previous_level") { moveLevel(-1); return true; }
+      if (b.action === "next_level") { moveLevel(1); return true; }
+      return false;
+    }
+    const game = session.game, sim = game.sim || null, timer = game.getGameTimer();
+    if (Hotkeys.tagOf(b) === "lemmix" && !sim) return true; // a NeoLemmix function on a DOS level: nothing
+    switch (b.action) {
+      case "skill": selectSkillNamed(b.mod); break;
+      case "previous_skill": stepSkill(-1); break;
+      case "next_skill": stepSkill(1); break;
+      case "rr_down": holdReleaseRate(-1); break;
+      case "rr_up": holdReleaseRate(1); break;
+      case "rr_min":
+      case "rr_max": {
+        const dir = b.action === "rr_max" ? 1 : -1;
+        if (sim) game.setReleaseRateExtreme(dir);
+        else game.queueCmmand(dir > 0 ? new Lemmings.CommandReleaseRateIncrease(99) : new Lemmings.CommandReleaseRateDecrease(99));
+        break;
+      }
+      case "pause": togglePause(); break;
+      case "nuke": {
+        // a double press, so a stray key does not end the level
+        const now = performance.now();
+        if (now - lastNukeKeyAt < NUKE_DOUBLE_MS) {
+          lastNukeKeyAt = 0;
+          game.queueCmmand(new Lemmings.CommandNuke());
+          game.nukePrepared = false;
+        } else lastNukeKeyAt = now;
+        break;
+      }
+      case "fastforward": toggleSpeed(FF_SPEED); break;
+      case "slow_motion": toggleSpeed(SLOWMO_SPEED); break;
+      case "skip": skipFrames(b.mod | 0); break;
+      case "special_skip": if ((b.mod | 0) === 0) game.skipToLastAction(); else game.skipToNextShrugger(); break;
+      case "restart": if (sim) game.restartReplay(); else moveLevel(0); break;
+      case "save_state": game.saveStateMark(); break;
+      case "load_state": game.loadStateMark(); break;
+      case "clear_physics": if (b.mod) game.setClearPhysics(true); else game.toggleClearPhysics(); break;
+      case "toggle_shadows": toggleShadows(); break;
+      case "replay_insert": game.toggleReplayInsert(); break;
+      case "cancel_replay": game.cancelReplay(); break;
+      case "load_replay": game.requestLoadReplay(); break;
+      case "save_replay": saveReplayFile(); break;
+      case "toggle_music": toggleMusic(); break;
+      case "toggle_sound": soundBtn.click(); break;
+      case "zoom_in": zoomView(true); break;
+      case "zoom_out": zoomView(false); break;
+      case "quit": library.open(); break;
+      case "cheat": game.getGameSkills().cheat(); if (game.gui && game.gui.render) game.gui.render(true); break;
+      case "reset_view": resetView(); break;
+      case "recenter_vr": if (renderer.xr.isPresenting) vr.recenterNow(); break;
+      case "speed_up": timer.speedFactor = Math.min(10, timer.speedFactor + 1); break;
+      case "speed_down": timer.speedFactor = Math.max(0.5, timer.speedFactor - 0.5); break;
+      case "previous_level": moveLevel(-1); break;
+      case "next_level": moveLevel(1); break;
+      case "piece_editor": openPieceEditor(); break;
+      case "cycle_class": if (session.editor && session.editor.enabled) session.editor.cycleClass(); break;
+      case "yaw_left":
+      case "yaw_right":
+        vrYawCorrection += (b.action === "yaw_right" ? 1 : -1) * (Math.PI / 12);
+        console.log("[vr] yaw correction: " + Math.round(vrYawCorrection * 180 / Math.PI) + "°");
+        if (renderer.xr.isPresenting) vr.recenterNow();
+        break;
+      default: return false;
+    }
+    return true;
+  }
+
+  /** A mouse button as a key: the middle and right clicks of NeoLemmix's table. */
+  function runMouseKey(code) {
+    const b = hotkeys.get(code);
+    if (b) runHotkey(b);
+  }
+
+  /** The view keys that are not in the table: arrows pan, shift+arrows orbit. */
+  function viewKey(e) {
     switch (e.key) {
-      case " ": e.preventDefault(); togglePause(); break;
-      case "n": // one frame forward while paused
-        if (session.game.forwardFrames) session.game.forwardFrames(1);
-        else if (!timer.isRunning()) timer.tick();
-        break;
-      case "b": if (session.game.backFrames) session.game.backFrames(1); break; // one frame back (Lemmix)
-      case "i": if (session.game.toggleReplayInsert) session.game.toggleReplayInsert(); break;
-      case "t": if (session.game.toggleClearPhysics) session.game.toggleClearPhysics(); break; // clear physics mode (Lemmix)
-      case "+": case "=": timer.speedFactor = Math.min(10, timer.speedFactor + 1); break;
-      case "-": timer.speedFactor = Math.max(0.5, timer.speedFactor - 0.5); break;
-      case "e":
-        // the piece editor is the edit mode's tool; asking for it enters it
-        if (!state.edit) {
-          state.edit = true;
-          try { localStorage.setItem("lem3d-edit", "on"); } catch (err) {}
-          renderMode();
-        }
-        if (session.editor) session.editor.toggle();
-        break;
       case "ArrowLeft":
       case "ArrowRight":
       case "ArrowUp":
       case "ArrowDown": {
+        if (!session) return false;
         e.preventDefault();
         const dx = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
         const dy = e.key === "ArrowUp" ? 1 : e.key === "ArrowDown" ? -1 : 0;
@@ -3798,7 +4078,7 @@
               .add(offset.setFromSpherical(spherical));
             controls.update();
           }
-          break;
+          return true;
         }
         const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
         const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
@@ -3816,56 +4096,47 @@
           controls.target.add(offset);
           controls.update();
         }
-        break;
+        return true;
       }
-      case "PageUp":
-      case "PageDown": {
-        e.preventDefault();
-        const zoomIn = e.key === "PageUp";
-        if (renderer.xr.isPresenting) {
-          const cur = dioramaRoot.scale.x;
-          const next = THREE.MathUtils.clamp(
-            cur * (zoomIn ? 1.15 : 1 / 1.15),
-            VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
-          scaleDioramaAbout(next, dioramaFocusWorld());
-        } else {
-          const dir = camera.position.clone().sub(controls.target)
-            .multiplyScalar(zoomIn ? 1 / 1.15 : 1.15);
-          camera.position.copy(controls.target).add(dir);
-          controls.update();
-        }
-        break;
-      }
-      case "Home":
-        e.preventDefault();
-        if (renderer.xr.isPresenting) vr.recenterNow();
-        else frameDesktopCamera(session.level);
-        break;
-      case "v":
-        if (renderer.xr.isPresenting) vr.recenterNow();
-        break;
-      case "[":
-      case "]":
-        vrYawCorrection += (e.key === "]" ? 1 : -1) * (Math.PI / 12);
-        console.log("[vr] yaw correction: " +
-          Math.round(vrYawCorrection * 180 / Math.PI) + "°");
-        if (renderer.xr.isPresenting) vr.recenterNow();
-        break;
-      case "c":
-        if (session.editor && session.editor.enabled) session.editor.cycleClass();
-        break;
-      case "r": // the replay button: the level from the start, paused, the attempt replaying (Lemmix)
-        if (session.game.restartReplay) session.game.restartReplay();
-        break;
-      case "R":
-        console.log("replay string (append as ?replay=... to reproduce this run):");
-        console.log(session.game.getCommandManager().serialize());
-        if (session.game.sim) {
-          console.log("the same as a NeoLemmix replay (.nxrp):");
-          console.log(Lemmix.Replay.serialize(session.game.sim, {}));
-        }
-        break;
     }
+    return false;
+  }
+
+  const typingIn = (el) => !!(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable));
+
+  window.addEventListener("keydown", (e) => {
+    // a question on screen owns the keyboard: answer it or dismiss it, but
+    // do not let a stray space bar pause the game behind it
+    if (!confirmDom.panel.hidden) {
+      if (e.key === "Escape") { e.preventDefault(); closeConfirm(); }
+      else if (e.key === "Enter") { e.preventDefault(); confirmDom.yes.click(); }
+      return;
+    }
+    if (hotkeyDialog.isOpen || typingIn(e.target) || vrModal.visible) return;
+    // the browser's own shortcuts stay its own (a reload, a new tab)
+    if (e.metaKey || (e.ctrlKey && !isMac)) return;
+    // the library open: Escape closes it, the rest waits for a level
+    if (library.isOpen) {
+      if (e.key === "Escape") { e.preventDefault(); library.close(); }
+      return;
+    }
+    const code = Hotkeys.normalizeCode(e.code);
+    const b = hotkeys.get(code);
+    if (b) {
+      const a = Hotkeys.ACTION_BY_ID.get(b.action);
+      heldCodes.add(code);
+      if (a.held) checkShifts();
+      else if (!e.repeat || a.repeat) runHotkey(b);
+      e.preventDefault();
+      // a held function leaves the fixed view keys their work (a direction
+      // filter on an arrow key does not stop the arrow from panning)
+      if (!a.held) return;
+    }
+    viewKey(e);
+  });
+  window.addEventListener("keyup", (e) => {
+    if (typingIn(e.target)) return;
+    keyUp(Hotkeys.normalizeCode(e.code));
   });
 
   // Leaving a level in progress asks first, whichever way you leave it. The
@@ -4151,6 +4422,7 @@
     lemmixStyles,
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
     setReplayBadge, layoutGuiPanel, // for checks without a frame loop
+    hotkeys, hotkeyDialog, runHotkey, // the key table, its dialog, a function by its binding
     get cursor() { return gameCursor; },
     // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },

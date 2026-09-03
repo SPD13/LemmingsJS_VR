@@ -216,6 +216,14 @@ class GameAudio {
       .catch((e) => console.warn("[audio] sfx failed:", e));
   }
 
+  /** The music off, the effects left alone (the Toggle Music hotkey). */
+  stopMusic() {
+    this._pendingMusic = null;
+    this.stopFileMusic();
+    if (!this.resources) return;
+    try { this.resources.stopMusic(); } catch (e) {}
+  }
+
   stopAll() {
     this._pendingMusic = null;
     this.stopFileMusic();

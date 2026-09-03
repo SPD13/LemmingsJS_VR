@@ -64,15 +64,44 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   darker steel, a blue tint on the one-way walls like the one under the
   pointer, trigger areas in pink, a blocker's fields, an orange mark at each
   hatch's spawn point, lemmings in flat colours - blue, cyan for an athlete,
-  reddened under the pointer; key `t`), and load replay (a `.nxrp` file
+  reddened under the pointer; the clear-physics hotkey, T by default, holds
+  it), and load replay (a `.nxrp` file
   picked from the desktop, with a warning first when it names another
   level, then played from the start at normal speed; in a headset the
   button only says to load it from the desktop). An R in the info strip
   and a red REPLAY over the play area (in a headset, above the status
-  strip, which stands over the board) mean the attempt is replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
-  replay-insert mode (your actions add to the replay instead of cutting it)
-- `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
-  level, `R` dump the replay string to the console
+  strip, which stands over the board) mean the attempt is replaying. The
+  hotkeys for these, in the default layout: R replay, B frame back, N frame
+  forward, W replay-insert mode (your actions add to the replay instead of
+  cutting it), C cancel the replay, Enter/Backspace save and load a state
+- **hotkeys** are NeoLemmix's (`js/hotkeys.js`, from its LemmixHotkeys.pas
+  and the manual's list): a key does one function, some with a detail (which
+  skill, how many frames, hold or toggle, which special skip), and Shift,
+  Ctrl and Alt are keys like any other, not modifiers. The default is
+  NeoLemmix's traditional layout, the one the manual documents: digits and
+  F3-F10 select skills, Z/X previous and next skill, F1/F2 release rate
+  (held), P, F11 or a middle click pause, F fast forward, T clear physics
+  while held, N/B one frame forward/back, Space 170 frames forward, `.` 85
+  forward, `-` 17 back, `,` 85 back, `[` back to the previous assignment,
+  `]` ahead to the next shrugger, R restart, U save the replay as a file
+  (`.nxrp`, or the DOS engine's replay string), L load a replay, C cancel it,
+  W replay-insert, H hide the skill shadows, M and S music and sound, the
+  arrow keys a direction filter while held, Ctrl walkers only while held,
+  Alt the athlete info in the panel while held, Esc the world library; the
+  page's own view keys sit on keys the layout leaves free (Home reset the
+  view, PgUp/PgDn zoom, V recentre in VR, J the piece editor, K its class
+  cycle). "configure hotkeys" (top left) opens the configuration, laid out
+  like NeoLemmix's: the list of keys with their functions, a function and
+  its detail for the chosen key, "show unassigned keys", "find key" (press
+  the key to jump to it), the key names from your own keyboard layout when
+  the browser can tell them, and the three NeoLemmix layouts (traditional,
+  functional, minimal) to start over from. Functions with no effect on a DOS
+  level carry a **Lemmix** tag, the page's own a **3D view** tag. The table
+  is kept in localStorage. The keys work in a headset too (the keyboard
+  still reaches the page); the configuration is the web page's only. Fixed,
+  outside the table: arrows pan and shift+arrows orbit, alongside whatever
+  held function the arrow keys carry; Escape closes what is open; Enter
+  answers a question
 - the prev, restart and next icons ask before throwing away a level in progress —
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
@@ -81,9 +110,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   editing. Playing is the game and is
   the default; editing is the tagging workbench — it bills itself as
   validation mode, opens the piece editor, and turns the catalog over to
-  tagging status. `?edit=1` selects it too, and pressing `e` enters it, since
-  the piece editor is its tool. Remembered in localStorage.
-- `w` (or the globe icon) opens the world library, which is also where
+  tagging status. `?edit=1` selects it too, and the piece-editor hotkey (J
+  by default) enters it, since the piece editor is its tool. Remembered in
+  localStorage.
+- Esc (the quit hotkey) or the globe icon opens the world library, which is also where
   the page starts when its URL names no level (at the root, and without a
   close until a level is picked). It is browsed the way the
   `levels/` directory is laid out: a row per level pack — its name, whether
