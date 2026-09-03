@@ -2555,20 +2555,40 @@
 
   // a volume slider or catalog scrollbar held down by the mouse
   let mouseScrub = null;
-  let minimapHeldControls = false; // orbiting switched off for a hold on the minimap
+
+  /**
+   * A press on the skills bar, any button. It is the bar's alone: this runs
+   * in the capture phase, ahead of OrbitControls' own listener, and stops
+   * the event there, so no drag can start from the bar - a press that opens
+   * a file dialog (load replay) never gets its release, and the board would
+   * otherwise turn with the pointer once the dialog closed. Right and middle
+   * presses are a click each (a Lemmix panel skips 17 or 85 frames on them);
+   * a left press is held, for the release-rate and frame-skip repeats and
+   * for dragging on the minimap.
+   */
+  function pressOnPanel(e, p) {
+    if (e.button !== 0) {
+      if (p.minimap) return;
+      e.preventDefault();
+      session.gui.onMouseDown(p.panelUv, e.button);
+      session.gui.onMouseUp(p.panelUv);
+      return;
+    }
+    downAt = { x: e.clientX, y: e.clientY };
+    if (!p.minimap) audio.playSfx(SFX.CLICK);
+    session.gui.onMouseDown(p.panelUv);
+  }
+  renderer.domElement.addEventListener("pointerdown", (e) => {
+    if (!mouseAllowed()) return;
+    const p = pick(e);
+    if (!(p && p.panelUv)) return;
+    e.stopImmediatePropagation();
+    pressOnPanel(e, p);
+  }, true);
 
   renderer.domElement.addEventListener("pointerdown", (e) => {
     if (!mouseAllowed()) return;
     if (e.button === 2) rightDownAt = { x: e.clientX, y: e.clientY };
-    if (e.button !== 0) {
-      const onPanel = pick(e);
-      if (onPanel && onPanel.panelUv && !onPanel.minimap) {
-        e.preventDefault();
-        session.gui.onMouseDown(onPanel.panelUv, e.button);
-        session.gui.onMouseUp(onPanel.panelUv);
-        return;
-      }
-    }
     if (e.button === 2 && vrMouseFallback()) {
       // right-drag = pan, as in the web view: grab the point under the
       // cursor on the board's plane and slide the diorama with it
@@ -2593,7 +2613,7 @@
       // in the scene, not the DOM.
       const p0 = pick(e);
       if (p0 && p0.barTool) {
-        if (p0.barTool === "volume" || p0.scrollBar || p0.minimap) {
+        if (p0.barTool === "volume" || p0.scrollBar) {
           // a scrubber follows the cursor until the button comes back up
           mouseScrub = p0.barTool;
           actOnPick(p0);
@@ -2604,16 +2624,6 @@
       // its focus point; a barely-moved press stays a click
       vrOrbit = { lastX: e.clientX, lastY: e.clientY,
                   pivot: dioramaFocusWorld(), active: false };
-    }
-    const p = pick(e);
-    if (p && p.panelUv) {
-      if (!p.minimap) audio.playSfx(SFX.CLICK);
-      session.gui.onMouseDown(p.panelUv);
-      if (session.gui.minimapDrag) {
-        // a hold on the map scrolls the view, so it must not orbit it too
-        vrOrbit = null;
-        if (controls.enabled) { controls.enabled = false; minimapHeldControls = true; }
-      }
     }
   });
   renderer.domElement.addEventListener("pointerup", (e) => {
@@ -2638,7 +2648,6 @@
       return;
     }
     if (e.button === 0) vrOrbit = null;
-    if (minimapHeldControls && e.button === 0) { controls.enabled = true; minimapHeldControls = false; }
     if (!mouseAllowed() || e.button !== 0) return;
     if (session.gui.minimapDrag) session.gui.onMouseUp(null); // wherever the button came up
     if (mouseScrub) { mouseScrub = null; return; } // it acted as it was dragged
