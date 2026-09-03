@@ -12,6 +12,13 @@
  * its ground files; the NeoLemmix ones come from neolemmix/styles/index.json,
  * which the launcher builds live from the style folders (and
  * tools/styles-index.js writes for static hosting).
+ *
+ * The list is a tree: the classic games, a directory per pack holding its
+ * tilesets; the NeoLemmix styles, a directory per author (the part of the
+ * folder name before the first underscore, NeoLemmix's naming) holding
+ * their styles. Directories open and close by a click, which is
+ * remembered; the filter searches the whole tree and opens whatever holds
+ * a match; opening a gallery opens its branch.
  */
 (function () {
   const ROOT = "../";
@@ -44,6 +51,13 @@
   let current = null;       // the open gallery
   let opening = 0;          // a counter so a slow open does not paint over a newer one
   const cards = new Map();  // piece key -> { el, dom, sprite }
+  const OPEN_KEY = "lem3d-gal-open";
+  let tree = { children: [] };  // directories ({kind:"dir", id, title, children, parent, row, mark}) and galleries
+  let openDirs = new Set(["dos", "nx"]);
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPEN_KEY));
+    if (Array.isArray(saved)) openDirs = new Set(saved.filter((id) => typeof id === "string"));
+  } catch (e) { /* the defaults: the two roots open */ }
 
   const slugOf = (dir) => String(dir || "game").split("/").pop().replace(/[^a-z0-9]/gi, "").toLowerCase();
 
@@ -86,7 +100,8 @@
         out.push({
           id, kind: "dos", pack, set: n, url: ProfileStore.urlForGallery(id),
           title: pack.name + " · " + worldName(pack.gameType, { set: n }),
-          sub: "set " + n + " · " + dir,
+          short: worldName(pack.gameType, { set: n }),
+          sub: "set " + n,
           count: null,
         });
       });
@@ -110,7 +125,9 @@
       out.push({
         id, kind: "nx", style: s.name, url,
         title: s.title || s.name,
+        short: s.title || s.name,
         sub: s.name + (s.theme && s.theme !== "default" ? " · lemmings: " + s.theme : ""),
+        author: s.name.includes("_") ? s.name.split("_")[0] : null,
         count: s.count | 0, pieces: s.pieces || [], steel: new Set(s.steel || []),
       });
     }
@@ -125,21 +142,20 @@
     row.dataset.id = g.id;
     const name = document.createElement("div");
     name.className = "lib-row-name";
-    name.textContent = g.title;
+    name.textContent = g.short || g.title;
     const sub = document.createElement("div");
     sub.className = "lib-row-sub";
     sub.textContent = g.sub;
     name.appendChild(sub);
-    const badge = document.createElement("span");
-    badge.className = "lib-badge " + (g.kind === "dos" ? "classic" : "lemmix");
-    badge.textContent = g.kind === "dos" ? "classic" : "lemmix";
+    row.title = g.title + (g.kind === "dos" ? " (classic tileset)" : " (NeoLemmix style)");
     const count = document.createElement("span");
     count.className = "lib-count";
-    count.textContent = g.count == null ? "" : g.count + (g.count === 1 ? " sprite" : " sprites");
+    count.textContent = g.count == null ? "" : String(g.count);
+    count.title = g.count == null ? "" : g.count + (g.count === 1 ? " sprite" : " sprites");
     const mark = document.createElement("span");
     mark.className = "lib-mark";
     mark.textContent = "…";
-    row.append(name, badge, count, mark);
+    row.append(name, count, mark);
     row.addEventListener("click", () => openGallery(g, null, true));
     g.row = row;
     g.mark = mark;
@@ -148,8 +164,124 @@
 
   function setMark(g, tagged) {
     g.tagged = tagged;
-    g.mark.textContent = tagged ? "✔ tagged" : "not tagged";
+    g.mark.textContent = tagged ? "✔" : "";
+    g.mark.title = tagged ? "has a profile file" : "no profile file yet";
     g.mark.classList.toggle("tagged", tagged);
+    for (let d = g.parent; d && d.id; d = d.parent) renderDirMark(d);
+  }
+
+  // ---- the tree
+
+  function dirNode(id, title, sub, parent) {
+    const node = { kind: "dir", id, title, sub, children: [], parent, row: null, mark: null };
+    parent.children.push(node);
+    return node;
+  }
+
+  /** Every gallery under a directory. */
+  function leavesOf(node) {
+    const out = [];
+    const walk = (n) => { for (const c of n.children) c.kind === "dir" ? walk(c) : out.push(c); };
+    walk(node);
+    return out;
+  }
+
+  function matches(g, q) {
+    return !q || (g.title + " " + g.sub + " " + g.id).toLowerCase().includes(q);
+  }
+
+  function dirRow(node) {
+    const row = document.createElement("div");
+    row.className = "lib-row gal-dir";
+    const caret = document.createElement("span");
+    caret.className = "gal-caret";
+    const name = document.createElement("div");
+    name.className = "lib-row-name";
+    name.textContent = node.title;
+    if (node.sub) {
+      const sub = document.createElement("div");
+      sub.className = "lib-row-sub";
+      sub.textContent = node.sub;
+      name.appendChild(sub);
+    }
+    const count = document.createElement("span");
+    count.className = "lib-count";
+    const mark = document.createElement("span");
+    mark.className = "lib-mark";
+    row.append(caret, name, count, mark);
+    row.addEventListener("click", () => {
+      if (dom.filter.value.trim()) return; // the filter decides what is open
+      if (openDirs.has(node.id)) openDirs.delete(node.id); else openDirs.add(node.id);
+      saveOpen();
+      renderList();
+    });
+    node.row = row;
+    node.caret = caret;
+    node.count = count;
+    node.mark = mark;
+    renderDirMark(node);
+    return row;
+  }
+
+  /** A directory's tally: how many galleries it holds, how many have a file. */
+  function renderDirMark(node) {
+    if (!node.mark) return;
+    const leaves = leavesOf(node);
+    const tagged = leaves.filter((g) => g.tagged).length;
+    node.count.textContent = String(leaves.length);
+    node.count.title = leaves.length + (leaves.length === 1 ? " gallery" : " galleries");
+    node.mark.textContent = tagged ? tagged + " ✔" : "";
+    node.mark.title = tagged + " with a profile file";
+    node.mark.classList.toggle("tagged", tagged > 0);
+  }
+
+  function saveOpen() {
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(Array.from(openDirs))); } catch (e) {}
+  }
+
+  /** Open every directory above a gallery, so it is on screen. */
+  function reveal(g) {
+    let changed = false;
+    for (let d = g.parent; d && d.id; d = d.parent) {
+      if (!openDirs.has(d.id)) { openDirs.add(d.id); changed = true; }
+    }
+    if (changed) saveOpen();
+    renderList();
+    if (g.row.isConnected) g.row.scrollIntoView({ block: "nearest" });
+  }
+
+  /**
+   * Lay the tree out: open directories unfold, a filter shows only the
+   * galleries that match, inside their (then open) directories.
+   */
+  function renderList() {
+    const q = dom.filter.value.trim().toLowerCase();
+    dom.list.textContent = "";
+    const walk = (node, depth) => {
+      for (const child of node.children) {
+        if (child.kind === "dir") {
+          const hits = q ? leavesOf(child).filter((g) => matches(g, q)).length : -1;
+          if (q && !hits) continue;
+          const open = q ? true : openDirs.has(child.id);
+          child.caret.textContent = open ? "▾" : "▸";
+          child.row.style.paddingLeft = (12 + depth * 16) + "px";
+          child.row.classList.toggle("open", open);
+          dom.list.appendChild(child.row);
+          if (open) walk(child, depth + 1);
+        } else {
+          if (!matches(child, q)) continue;
+          child.row.style.paddingLeft = (12 + depth * 16) + "px";
+          dom.list.appendChild(child.row);
+        }
+      }
+    };
+    walk(tree, 0);
+    if (!dom.list.children.length) {
+      const none = document.createElement("div");
+      none.id = "gal-none";
+      none.textContent = q ? "no gallery matches" : "no galleries found";
+      dom.list.appendChild(none);
+    }
   }
 
   /** Which galleries have a profile file (a HEAD per file, a few at a time). */
@@ -161,26 +293,43 @@
     });
   }
 
-  function applyFilter() {
-    const q = dom.filter.value.trim().toLowerCase();
-    for (const g of galleries) {
-      const hay = (g.title + " " + g.sub + " " + g.id).toLowerCase();
-      g.row.hidden = !!q && !hay.includes(q);
-    }
-  }
-
   async function buildList() {
     const [dos, nx] = await Promise.all([dosGalleries(), nxGalleries()]);
     galleries = dos.concat(nx || []);
-    dom.list.textContent = "";
-    for (const g of galleries) dom.list.appendChild(galleryRow(g));
+    tree = { children: [] };
+    if (dos.length) {
+      const root = dirNode("dos", "Classic games", "the DOS tilesets, a pack at a time", tree);
+      const packs = new Map();
+      for (const g of dos) {
+        const key = g.pack.path || g.pack.name;
+        if (!packs.has(key)) packs.set(key, dirNode("dos/" + key, g.pack.name, g.pack.dir || "", root));
+        g.parent = packs.get(key);
+        g.parent.children.push(g);
+      }
+    }
+    if (nx && nx.length) {
+      const root = dirNode("nx", "NeoLemmix styles", "a directory per author", tree);
+      const authors = new Map();
+      const sorted = nx.slice().sort((a, b) =>
+        (!a.author) - (!b.author) || (a.author || "").localeCompare(b.author || "") ||
+        (b.count > 0) - (a.count > 0) || a.title.localeCompare(b.title));
+      for (const g of sorted) {
+        const key = g.author || "other";
+        if (!authors.has(key)) authors.set(key, dirNode("nx/" + key, key, g.author ? key + "_*" : "styles without an author prefix", root));
+        g.parent = authors.get(key);
+        g.parent.children.push(g);
+      }
+    }
+    for (const g of galleries) galleryRow(g);
+    const walkDirs = (n) => { for (const c of n.children) if (c.kind === "dir") { dirRow(c); walkDirs(c); } };
+    walkDirs(tree);
     const notes = [];
     if (nx === null) {
       notes.push("no NeoLemmix styles listed: start the launcher, or run `node tools/styles-index.js` after unpacking the styles (neolemmix/README.md)");
     }
     dom.note.textContent = notes.join(" · ") ||
       (dos.length + " DOS tileset" + (dos.length === 1 ? "" : "s") + ", " + (nx || []).length + " NeoLemmix style" + ((nx || []).length === 1 ? "" : "s"));
-    applyFilter();
+    renderList();
     markTagged(galleries);
   }
 
@@ -365,6 +514,7 @@
     current = g;
     cards.clear();
     for (const other of galleries) other.row.classList.toggle("here", other === g);
+    reveal(g);
     dom.empty.hidden = true;
     dom.head.hidden = false;
     dom.title.textContent = g.title;
@@ -384,7 +534,7 @@
       try { sprites = await dosSprites(g); } catch (e) { msg("could not read the tileset: " + e.message, false); }
       if (token !== opening) return;
       g.count = sprites.length;
-      g.row.querySelector(".lib-count").textContent = sprites.length + " sprites";
+      g.row.querySelector(".lib-count").textContent = String(sprites.length);
       for (const sp of sprites) {
         const card = makeCard(g, sp);
         dom.grid.appendChild(card.el);
@@ -420,7 +570,7 @@
 
   // ---- boot
 
-  dom.filter.addEventListener("input", applyFilter);
+  dom.filter.addEventListener("input", renderList);
   dom.save.addEventListener("click", save);
   dom.export.addEventListener("click", exportFile);
   dom.reset.addEventListener("click", resetAll);
