@@ -524,6 +524,20 @@ async function main() {
       !Hotkeys.allowedOn("VrPointB", "vr_pan") && !Hotkeys.allowedOn("VrPointB", "piece_editor") && !Hotkeys.allowedOn("KeyQ", "vr_pan"));
     hk.set("VrFreeStickClick", "pause");
     check("a keyboard key names a function before a controller does", hk.keyNameFor("pause") === "Middle-Click" || hk.keyNameFor("pause") === "P");
+    // --- export and import: the whole table, keyboard and controllers, as JSON
+    hk.applyPreset("traditional"); hk.set("KeyQ", "skill", "bomber"); hk.set("VrPointB", "skip", -17);
+    const text = hk.exportJSON();
+    const parsed = JSON.parse(text);
+    check("the export names its format and carries both halves", parsed.format === Hotkeys.EXPORT_FORMAT && parsed.keys.KeyQ.mod === "bomber" && parsed.keys.VrPointB.mod === -17 && parsed.keys.VrFreeStick.action === "vr_tilt");
+    const other = new Hotkeys.HotkeyManager();
+    other.applyPreset("minimal");
+    const r = other.importJSON(text);
+    check("imported whole: the same table, nothing else left", r.skipped === 0 && r.loaded === hk.table.size && other.get("KeyQ").mod === "bomber" && other.get("VrPointB").mod === -17 && other.get("KeyR").action === "restart");
+    const r2 = other.importJSON(JSON.stringify({ format: Hotkeys.EXPORT_FORMAT, keys: { KeyP: { action: "pause" }, KeyZ: { action: "no_such" }, Nope: { action: "pause" }, VrFreeStick: { action: "pause" } } }));
+    check("unknown keys, functions and misplaced functions are skipped", r2.loaded === 1 && r2.skipped === 3 && other.get("KeyP").action === "pause" && other.get("KeyR") === null);
+    let bad = null; try { other.importJSON("{\"hello\": 1}"); } catch (e) { bad = e.message; }
+    let bad2 = null; try { other.importJSON("not json"); } catch (e) { bad2 = e.message; }
+    check("a file that is not a controls file is refused", /not a controls file/.test(bad) && /not a JSON/.test(bad2) && other.get("KeyP").action === "pause");
   }
 
   console.log(passed + " passed, " + failed + " failed");

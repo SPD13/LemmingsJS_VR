@@ -33,6 +33,8 @@
 (function (root) {
   const STORAGE_KEY = "lem3d-hotkeys";
   const VERSION = 1;
+  const EXPORT_FORMAT = "lemmings-3d-controls"; // the exported file names itself
+  const EXPORT_FILE = "lemmings-3d-controls.json";
 
   // NeoLemmix's skills in its own order (TSkillPanelButton); the DOS engine has eight of them
   const SKILLS = ["walker", "jumper", "shimmier", "slider", "climber", "swimmer", "floater", "glider",
@@ -356,6 +358,43 @@
       this._changed();
     }
 
+    /**
+     * The whole table - the keyboard's keys and the controllers - as a JSON
+     * text, to keep or carry to another browser.
+     */
+    exportJSON() {
+      const keys = {};
+      for (const [code, b] of this.table) keys[code] = { action: b.action, mod: b.mod };
+      return JSON.stringify({ format: EXPORT_FORMAT, version: VERSION, keys }, null, 2);
+    }
+
+    /**
+     * A table from exportJSON's text, replacing this one. Entries that name
+     * an unknown key or function, or put a function on an input that cannot
+     * take it, are skipped. Returns {loaded, skipped}; throws on a text that
+     * is not a controls file at all.
+     */
+    importJSON(text) {
+      let data;
+      try { data = JSON.parse(text); } catch (e) { throw new Error("not a JSON file"); }
+      if (!data || typeof data !== "object" || !data.keys || typeof data.keys !== "object" || Array.isArray(data.keys)) {
+        throw new Error("not a controls file (no \"keys\" table)");
+      }
+      if (data.format && data.format !== EXPORT_FORMAT) throw new Error("not a controls file (format " + data.format + ")");
+      const next = new Map();
+      let skipped = 0;
+      for (const code of Object.keys(data.keys)) {
+        const b = data.keys[code];
+        const known = KEY_BY_CODE.has(code) || VR_KEY_BY_CODE.has(code);
+        if (!known || !b || typeof b !== "object" || !ACTION_BY_ID.has(b.action) || !allowedOn(code, b.action)) { skipped++; continue; }
+        next.set(code, { action: b.action, mod: b.mod == null ? defaultMod(b.action) : b.mod });
+      }
+      this.table = next;
+      this.save();
+      this._changed();
+      return { loaded: next.size, skipped };
+    }
+
     /** Give `code` a function (null clears it). */
     set(code, action, mod) {
       if (!action) this.table.delete(code);
@@ -458,6 +497,9 @@
     border-radius: 4px; padding: 3px 10px; cursor: pointer; }
   #hotkeys button:hover { background: #263043; }
   #hotkeys button.hk-on { border-color: #ffd866; color: #ffd866; }
+  #hotkeys .hk-status { font-size: 11px; color: #6fce7e; margin: -4px 0 8px; }
+  #hotkeys .hk-status.hk-bad { color: #e07a6a; }
+  #hotkeys .hk-status[hidden] { display: none !important; }
   #hotkeys .hk-close { padding: 0 6px; border-color: transparent; background: transparent; color: #8fa1bb; }
   #hotkeys .hk-close:hover { color: #f0f3f8; background: #263043; }
   `;
@@ -495,8 +537,12 @@
           <div class="hk-head">
             <h2 id="hk-title">CONFIGURE CONTROLS</h2>
             <span class="hk-note">click a key or a controller input, give it a function; saved in this browser</span>
+            <button class="hk-export" title="save the keyboard and VR bindings as a JSON file">export</button>
+            <button class="hk-import" title="load bindings from a JSON file, replacing these">import</button>
+            <input type="file" class="hk-file" accept=".json,application/json" hidden>
             <button class="hk-close" title="close">&times;</button>
           </div>
+          <div class="hk-status" hidden></div>
           <div class="hk-tabs">
             <button data-tab="keyboard" class="hk-on">Keyboard</button>
             <button data-tab="vr">VR</button>
@@ -549,7 +595,14 @@
         toolsKeyboard: q(".hk-tools-keyboard"), toolsVr: q(".hk-tools-vr"),
         legendKeyboard: q(".hk-legend-keyboard"), legendVr: q(".hk-legend-vr"),
         tabs: Array.from(rootEl.querySelectorAll(".hk-tabs button")),
+        status: q(".hk-status"), file: q(".hk-file"),
       };
+      q(".hk-export").addEventListener("click", () => this.exportFile());
+      q(".hk-import").addEventListener("click", () => { this.dom.file.value = ""; this.dom.file.click(); });
+      this.dom.file.addEventListener("change", () => {
+        const f = this.dom.file.files && this.dom.file.files[0];
+        if (f) this.importFile(f);
+      });
       for (const b of this.dom.tabs) b.addEventListener("click", () => this.showTab(b.dataset.tab));
       q(".hk-vr-reset").addEventListener("click", () => { this.manager.applyVrPreset(); this.refresh(); });
       if (!(navigator.keyboard && navigator.keyboard.getLayoutMap)) {
@@ -606,6 +659,7 @@
     open(tab) {
       if (this.isOpen) return;
       this.dom.root.hidden = false;
+      this._status("");
       if (tab) this.showTab(tab); else this.refresh();
       if (this.hooks.onOpen) this.hooks.onOpen();
     }
@@ -631,6 +685,44 @@
       this.dom.root.hidden = true;
       this.manager.save(); // "By clicking on Close you save all hotkey assignments"
       if (this.hooks.onClose) this.hooks.onClose();
+    }
+
+    /** A line under the head, green for news, red for a complaint. */
+    _status(text, bad) {
+      this.dom.status.textContent = text || "";
+      this.dom.status.hidden = !text;
+      this.dom.status.classList.toggle("hk-bad", !!bad);
+    }
+
+    /** The table as a JSON file, through a download. */
+    exportFile() {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([this.manager.exportJSON()], { type: "application/json" }));
+      a.download = EXPORT_FILE;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      this._status("exported as " + EXPORT_FILE);
+    }
+
+    /** A JSON file into the table, the list redrawn, the outcome said. */
+    importFile(file) {
+      return file.text().then((text) => this.importText(text, file.name)).catch((e) => this._status(String(e.message || e), true));
+    }
+
+    importText(text, name) {
+      try {
+        const r = this.manager.importJSON(text);
+        this.selected = null;
+        this.refresh();
+        this._status((name ? name + ": " : "") + r.loaded + " binding" + (r.loaded === 1 ? "" : "s") + " loaded" +
+          (r.skipped ? ", " + r.skipped + " skipped (unknown key or function)" : ""));
+        return r;
+      } catch (e) {
+        this._status((name ? name + ": " : "") + (e.message || e), true);
+        return null;
+      }
     }
 
     _setFinding(on) {
@@ -736,6 +828,7 @@
   root.Hotkeys = {
     ACTIONS, ACTION_BY_ID, KEYS, VR_KEYS, VR_PRESET, SKILLS, DOS_SKILLS, SPECIAL_SKIPS, PRESETS, DEFAULT_PRESET,
     HotkeyManager, HotkeyDialog, normalizeCode, keyName, describe, tagOf, allowedOn, isVrCode, loadLayoutNames,
+    EXPORT_FORMAT, EXPORT_FILE,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = root.Hotkeys;
 })(typeof window !== "undefined" ? window : globalThis);
