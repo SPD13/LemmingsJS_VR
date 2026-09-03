@@ -438,12 +438,21 @@
   // it is pressed like the rest
   const vrWidgets = vrButtons.concat([vrMuteBtn]);
 
+  // The in-scene windows - the restart question, the world catalog and the
+  // settings - hang off this root, which is fixed in the world: when a
+  // window opens, the root is set to where the head is looking, so the
+  // window is centred in the view, and there it stays while the head moves.
+  // Recentring (A/X, the settings row, the reset button) sets it again.
+  const vrWindowRoot = new THREE.Group();
+  scene.add(vrWindowRoot);
+  let vrWindowsPlaced = false; // set from the first head pose of a session
+
   // Restart asks first. A DOM dialog is invisible in a headset, so the
-  // question is in the scene, head-fixed like the toolbar and squarely in
-  // front: while it is up it takes the ray and nothing behind it can be hit.
+  // question is in the scene, squarely in front: while it is up it takes the
+  // ray and nothing behind it can be hit.
   const vrModal = new THREE.Group();
   vrModal.visible = false;
-  camera.add(vrModal);
+  vrWindowRoot.add(vrModal);
   const vrModalPanel = (() => {
     const cv = document.createElement("canvas");
     cv.width = 512; cv.height = 192;
@@ -499,7 +508,41 @@
   vrNoBtn.renderOrder = GUI_ORDER_MODAL_BTN;
 
   /** Show or hide the restart question. */
+  /** Whether any of the three windows is up: a second one opening while
+   *  another is up shares its frame rather than moving it. */
+  function anyVrWindowUp() {
+    return vrModal.visible || vrCatalog.visible || vrSettings.visible;
+  }
+
+  /**
+   * A bar riding the head would sit across a window. While one is up, such
+   * a bar is parked where the bar starts a session - below the board, in
+   * the room - and when the last window goes it is handed back to the head
+   * exactly as it was hanging. A bar already in the room is left alone.
+   */
+  let barParked = null; // the head-relative transform to give back
+  function syncBarForWindows() {
+    const up = anyVrWindowUp();
+    if (up && !barParked && barLocked && session) {
+      barParked = {
+        position: guiRoot.position.clone(),
+        quaternion: guiRoot.quaternion.clone(),
+        scale: guiRoot.scale.clone(),
+      };
+      placeBarBelowDiorama();
+    } else if (!up && barParked) {
+      const back = barParked;
+      barParked = null;
+      setBarLocked(true);
+      guiRoot.position.copy(back.position);
+      guiRoot.quaternion.copy(back.quaternion);
+      guiRoot.scale.copy(back.scale);
+      barDragFrom = null;
+    }
+  }
+
   function setVrModal(open) {
+    if (open && renderer.xr.isPresenting && !anyVrWindowUp()) placeVrWindows();
     vrModal.visible = open && renderer.xr.isPresenting;
     for (const b of [vrYesBtn, vrNoBtn]) {
       b.visible = vrModal.visible;
@@ -507,6 +550,7 @@
     }
     if (vrModal.visible) holdSim("vr-modal");
     else { vrConfirmAction = null; releaseSim("vr-modal"); }
+    syncBarForWindows();
   }
 
   let vrConfirmAction = null;
@@ -572,7 +616,7 @@
 
   const vrCatalog = new THREE.Group();
   vrCatalog.visible = false;
-  camera.add(vrCatalog);
+  vrWindowRoot.add(vrCatalog);
 
   /**
    * Lay the whole list out once, in its own coordinates: the heading saying
@@ -976,7 +1020,7 @@
 
   const vrSettings = new THREE.Group();
   vrSettings.visible = false;
-  camera.add(vrSettings);
+  vrWindowRoot.add(vrSettings);
 
   const vrSettingsPanel = (() => {
     const cv = document.createElement("canvas");
@@ -1074,12 +1118,14 @@
   function setVrSettings(open) {
     const show = open && renderer.xr.isPresenting;
     if (show === vrSettings.visible) return;
+    if (show && !anyVrWindowUp()) placeVrWindows();
     vrSettings.visible = show;
     vrSettingsClose.visible = show;
     setBarToolState(vrSettingsClose, { hovered: false });
     setVrSettingsHover(-1);
     if (show) { holdSim("vr-settings"); paintVrSettings(); }
     else releaseSim("vr-settings");
+    syncBarForWindows();
   }
 
   /** In the dialog's plane, like every other window. */
@@ -1168,6 +1214,7 @@
   function setVrCatalog(open) {
     const show = open && renderer.xr.isPresenting;
     if (show === vrCatalog.visible) return;
+    if (show && !anyVrWindowUp()) placeVrWindows();
     vrCatalog.visible = show;
     // locked (no level chosen yet), the catalog has no close: there is
     // nothing behind it to go back to
@@ -1176,6 +1223,7 @@
     setVrCatalogHover(-1);
     if (show) { holdSim("vr-catalog"); loadVrCatalog(true); }
     else releaseSim("vr-catalog");
+    syncBarForWindows();
   }
 
   /** The window and its close button, in metres of camera space. */
@@ -1199,11 +1247,13 @@
   layoutVrSettings();
 
   /**
-   * The toolbar rides the head by default. Unlocked, it is handed to the
-   * scene with its world transform kept, so it simply stays where it was
-   * hanging while the player looks around; locking hands it back the same
-   * way, so it never jumps at the moment of the click - it just starts
-   * following again from wherever it is.
+   * The toolbar is the scene's by default, placed below the board (see
+   * placeBarBelowDiorama), and it rides the head on the desktop and until
+   * the board is placed. Unlocking hands it to the scene with its world
+   * transform kept, so it simply stays where it was hanging while the
+   * player looks around; locking hands it back the same way, so it never
+   * jumps at the moment of the click - it just starts following again from
+   * wherever it is.
    */
   let barLocked = true;
   let barDragFrom = null;
@@ -1223,10 +1273,46 @@
 
   /** Back to riding the head, square in front, with no drag offset. */
   function resetBar() {
+    barParked = null;
     setBarLocked(true);
     guiRoot.position.set(0, 0, 0);
     guiRoot.quaternion.identity();
     guiRoot.scale.setScalar(1);
+    barDragFrom = null;
+  }
+
+  /**
+   * Where the bar goes in a session by default: unlocked, the scene's, just
+   * below the board and centred on the part of the level in front of the
+   * player, facing the way the board faces. guiRoot is laid out as if it
+   * were a head - the panel hangs VR_GUI_Y below and VR_GUI_Z ahead of it -
+   * so it is set where such a head would have to be for the panel to land
+   * there. Set with the board (placeDioramaForXR): at a session's first
+   * frame, on a recentre, on a level change - unless the player has locked
+   * the bar to the head, which is then their choice to keep.
+   */
+  let barAutoPlace = false; // the first placement of a session
+  function placeBarBelowDiorama() {
+    if (!session) return;
+    setBarLocked(false);
+    const level = session.level;
+    dioramaRoot.updateMatrixWorld(true);
+    // the level's bottom edge, under the focus, on the terrain's front face
+    const edge = dioramaRoot.localToWorld(
+      new THREE.Vector3(level.screenPositionX + 200, 0, TERRAIN_DEPTH));
+    const guiW = VR_GUI_WIDTH * panelWidthScale();
+    const cv = session.gui.canvas;
+    const barH = guiW * (cv.width ? cv.height / cv.width : 40 / 320);
+    // the row of controls and the status strip stand over the bar
+    const statusH = guiW * VR_STATUS_H / VR_STATUS_W;
+    const above = VR_BAR_TOOL_SIZE * 1.55 + statusH;
+    const centre = edge.clone();
+    centre.y -= 0.02 + above + barH / 2;
+    guiRoot.quaternion.setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0), dioramaRoot.rotation.y);
+    guiRoot.scale.setScalar(1);
+    guiRoot.position.copy(centre).sub(
+      new THREE.Vector3(0, VR_GUI_Y, VR_GUI_Z).applyQuaternion(guiRoot.quaternion));
     barDragFrom = null;
   }
 
@@ -1833,6 +1919,9 @@
       // the same size, and the bar's row and sound column follow its ends
       const guiW = VR_GUI_WIDTH * panelWidthScale();
       session.gui.place(guiW, VR_GUI_Y, VR_GUI_Z); // metres
+      // the panel has no mesh until it has painted once: a level loaded
+      // mid-session lays out on the next frame, not this one
+      if (!session.gui.mesh) return;
       // The row of controls rides just above the bar's top edge, in the bar's
       // own space, so dragging or unpinning it carries them along: the two
       // handles at the left end, pause in the middle, the three that leave
@@ -2567,22 +2656,54 @@
   // keys, V to re-place) in case another runtime ever reports a rotated axis.
   let vrYawCorrection = 0;
 
-  function placeDioramaForXR(headPose) {
-    if (!session) return false;
-    const s = VR_PIXEL_SCALE;
-    const headPos = new THREE.Vector3();
-    const headQuat = new THREE.Quaternion();
+  /** Where the head is: the frame's pose when given, else the XR camera's. */
+  function headPoseNow(headPose) {
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
     if (headPose && headPose.pos) {
-      headPos.copy(headPose.pos);
-      headQuat.copy(headPose.quat);
+      pos.copy(headPose.pos);
+      quat.copy(headPose.quat);
     } else {
       // Mid-session callers without a frame pose: ask the XR camera, which is
       // only ever the head. The user camera is a copy the renderer refreshes
       // each frame, so anything on the desktop path can leave its own numbers
       // in it between renders.
       const eye = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-      eye.matrixWorld.decompose(headPos, headQuat, new THREE.Vector3());
+      eye.matrixWorld.decompose(pos, quat, new THREE.Vector3());
     }
+    return { pos, quat };
+  }
+
+  /**
+   * Set the windows' frame from the head: each window's own layout is in
+   * metres in front of the eyes, so the root goes where a head would have
+   * to be for the window to sit centred on the gaze, at the usual distance -
+   * but turned by the gaze's yaw alone, so the window stands upright on the
+   * floor however far up or down the head was tilted. The root being the
+   * scene's, the window stays there when the head moves on. Called as a
+   * window opens, on the first pose of a session, and by every recentre.
+   */
+  let vrWindowYaw = 0; // kept for a gaze too vertical to have a heading
+  function placeVrWindows(headPose) {
+    // the last rendered frame's pose first: between frames the XR camera can
+    // be behind or, before any frame, still identity
+    const head = headPoseNow(headPose || vr.lastHeadPose);
+    const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(head.quat);
+    // where the window's plane meets the gaze
+    const centre = head.pos.clone().addScaledVector(gaze, -VR_MODAL_Z);
+    const flat = new THREE.Vector3(gaze.x, 0, gaze.z);
+    if (flat.lengthSq() > 1e-4) vrWindowYaw = Math.atan2(-flat.x, -flat.z);
+    vrWindowRoot.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), vrWindowYaw);
+    vrWindowRoot.position.copy(centre).sub(
+      new THREE.Vector3(0, 0, VR_MODAL_Z).applyQuaternion(vrWindowRoot.quaternion));
+    vrWindowsPlaced = true;
+  }
+
+  function placeDioramaForXR(headPose) {
+    if (!session) return false;
+    const s = VR_PIXEL_SCALE;
+    const head = headPoseNow(headPose);
+    const headPos = head.pos, headQuat = head.quat;
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(headQuat);
     fwd.y = 0;
     if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
@@ -2606,6 +2727,9 @@
     vrWarningSign.scale.set(signW, signH, 1);
     vrWarningSign.position.set(
       startX, session.level.height + signH / 2 + 30, 40);
+    // the bar goes with the board, unless it is riding the head by choice
+    if (barAutoPlace || !barLocked) placeBarBelowDiorama();
+    barAutoPlace = false;
     return true;
   }
 
@@ -2619,8 +2743,10 @@
     // OrbitControls would silently accumulate wheel/drag input during the
     // session and apply it as a jump on exit
     controls.enabled = false;
-    resetBar();
+    resetBar();          // on the head until the board is placed...
+    barAutoPlace = true; // ...then below the board, unlocked
     layoutGuiPanel();
+    vrWindowsPlaced = false; // the first frame's pose places them
     // no level chosen yet: the headset gets the catalog the monitor shows
     if (!state.levelId) setVrCatalog(true);
   });
@@ -2744,6 +2870,8 @@
       else panDioramaBy(x, y, seconds);
     },
     placeDiorama: placeDioramaForXR,
+    // a recentre brings the windows to the new view along with the board
+    onRecenter: (headPose) => placeVrWindows(headPose),
   });
 
   function togglePause() {
@@ -3047,6 +3175,9 @@
     if (renderer.xr.isPresenting) {
       // grabs, sticks and hover; the headset pose drives the camera
       vr.update(dt / 1000);
+      // a window opened before the first pose (the catalog, at a session's
+      // start) was placed on an identity head; place it on the real one
+      if (!vrWindowsPlaced && vr.lastHeadPose) placeVrWindows(vr.lastHeadPose);
       // the sign is parked over the level, so it has nowhere to be without one
       vrWarningSign.visible = vrMouseFallback() && !!session;
     } else {
