@@ -373,8 +373,10 @@ or miner's tunnel, a digger's hole, a bomber's crater, a jumper's arc, a
 shimmier's or glider's path, a laserer's beam, a cloner's twin - the way
 `LemRendering.pas` draws them: a copy of the lemming is simulated with the
 skill frame by frame (`simulateTransitionLem`, `simulateLem` with the
-physics map put back afterwards). NeoLemmix draws them flat, a contrasting
-grey; the diorama gives them its depth: the terrain a tunnel or crater
+physics map put back afterwards). NeoLemmix marks outlines from tables and
+draws them flat, a contrasting grey; here the terrain the simulated action
+removes or lays is read off the physics map itself, so the shadows are
+solids, and the diorama gives them its depth: the terrain a tunnel or crater
 would take is a dark translucent cut through the whole slab, the bricks a
 builder, platformer or stacker would lay are light slab-deep blocks, and a
 path (a jumper's arc, a glider's flight) a thin ribbon at the lemmings'

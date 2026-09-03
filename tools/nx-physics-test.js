@@ -49,8 +49,6 @@ function makeGame(level, x, y, dx, skills) {
   return game;
 }
 
-const BASH_END_COUNT = 11; // BasherEnd's pixels
-
 function run(game, frames, onFrame) {
   for (let f = 0; f < frames; f++) { game.update(); if (onFrame && onFrame(f) === false) break; }
 }
@@ -437,16 +435,17 @@ async function main() {
     check("builder shadow: 12 bricks x 6 pixels rising a row each", sh.bricks.length === 72 && sh.high.length === 0 && sh.low.length === 0 &&
       sh.bricks.every(([x, y]) => y < y0 && y >= y0 - 12) && Math.max(...sh.bricks.map((p) => p[0])) === x0 + 2 * 11 + 5 && Math.min(...sh.bricks.map((p) => p[1])) === y0 - 12, { n: sh.bricks.length, maxX: Math.max(...sh.bricks.map((p) => p[0])) - x0 });
     check("...and leaves the game as it was", solidCount(level) === before && L.x === x0 && L.y === y0 && L.action === action);
-    // --- a digger through the 40-px floor: a hole outline, high pixels only
+    // --- a digger through the 40-px floor: the whole hole, 9 wide, down to the bottom of the level
     const dig = Lemmix.Shadows.compute(game, L, "DIGGER");
-    check("digger shadow: the sides and the bottom of the hole, over terrain", dig.high.length > 20 && dig.low.length === 0 &&
-      dig.high.every(([x, y]) => Math.abs(x - x0) === 4 || y === Math.max(...dig.high.map((p) => p[1]))), { n: dig.high.length });
-    // --- a bomber: the crater outline, 72 pixels
+    check("digger shadow: the solid hole, nine wide, through the floor", dig.high.length === 9 * 40 && dig.low.length === 0 &&
+      dig.high.every(([x, y]) => Math.abs(x - x0) <= 4 && y >= y0 && y < 100), { n: dig.high.length });
+    check("...and the floor is whole again", solidCount(level) === before);
+    // --- a bomber: the crater as a solid, the mask's pixels that were terrain
     const bomb = Lemmix.Shadows.compute(game, L, "BOMBER");
-    check("bomber shadow: the crater's outline", bomb.high.length > 0 && bomb.high.every(([x, y]) => Math.abs(x - x0) <= 8 && y >= y0 - 14 && y <= y0 + 7), { n: bomb.high.length });
-    // --- a walker on flat ground bashes nothing: the tunnel's end only
+    check("bomber shadow: the solid crater, below the feet only on open ground", bomb.high.length > 40 && bomb.high.every(([x, y]) => Math.abs(x - x0) <= 8 && y >= y0 && y <= y0 + 7), { n: bomb.high.length });
+    // --- a walker on flat ground bashes nothing: no terrain taken, no shadow
     const bash = Lemmix.Shadows.compute(game, L, "BASHER");
-    check("basher shadow on open ground: one stroke and the tunnel's end", bash.high.length === 12 + BASH_END_COUNT, { n: bash.high.length });
+    check("basher shadow on open ground: nothing", bash.high.length === 0, { n: bash.high.length });
     check("no shadow for a skill without one", Lemmix.Shadows.compute(game, L, "CLIMBER").high.length === 0 && Lemmix.Shadows.compute(game, L, "CLIMBER").low.length === 0);
   }
 
