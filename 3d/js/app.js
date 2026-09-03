@@ -193,6 +193,7 @@
     for (const b of iconButtons) {
       setBarToolState(b, { hovered: b.name === "vr-" + name });
     }
+    noteVrTipHover(name);
     const onSlider = name === "volume";
     if (vrVolumeSlider.userData.hovered !== onSlider) {
       vrVolumeSlider.userData.hovered = onSlider;
@@ -1089,6 +1090,107 @@
     paintVrCatalog();
   }
 
+  // --------------------------------------------------------- tooltips (VR)
+  /**
+   * The icon buttons carry no words, so a beam that rests on one for a
+   * moment gets a label: a small strip just above the button, in the
+   * button's own plane, saying what it does (and, for a switch, which way
+   * it would go). It comes after a delay so that a beam merely crossing the
+   * row does not flash labels, and it goes the moment the beam leaves.
+   */
+  const VR_TIP_DELAY = 1500;              // ms of rest before the label shows
+  const VR_TIP_H = 56, VR_TIP_PAD = 22;   // canvas px
+  const VR_TIP_HEIGHT = 0.03;             // metres
+  const vrTipTexts = {
+    lock: () => barLocked ? "let the bar go: it stays where it hangs" : "lock the bar to your head",
+    move: () => "hold the trigger here and move your hand to carry the bar",
+    park: () => "put the bar back below the board",
+    settings: () => "settings",
+    pause: () => session && !session.game.getGameTimer().isRunning() ? "resume" : "pause",
+    restart: () => "restart the level (asks first)",
+    prev: () => "previous level (asks first)",
+    next: () => "next level (asks first)",
+    worlds: () => "world library: choose a level",
+    mute: () => audio.enabled ? "sound off" : "sound on",
+    catclose: () => "close the library",
+    setclose: () => "close the settings",
+  };
+  let vrTipName = null;   // the icon button under the beam, by bare name
+  let vrTipSince = 0;     // when the beam arrived on it
+  let vrTipText = "";     // what the label says now
+  const vrTip = (() => {
+    const cv = document.createElement("canvas");
+    cv.width = 256; cv.height = VR_TIP_H;
+    const cx = cv.getContext("2d");
+    let tex = new THREE.CanvasTexture(cv);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false,
+      }));
+    mesh.name = "vr-tip";
+    mesh.renderOrder = GUI_ORDER_MODAL_BTN + 1; // over every window and button
+    mesh.visible = false;
+    mesh.userData.paint = (text) => {
+      cx.font = "bold 28px monospace";
+      const w = Math.ceil(cx.measureText(text).width) + 2 * VR_TIP_PAD;
+      if (cv.width !== w) { cv.width = w; }        // resizing clears the canvas
+      cx.clearRect(0, 0, cv.width, cv.height);
+      cx.fillStyle = "rgba(10, 14, 22, 0.96)";
+      cx.beginPath();
+      cx.roundRect ? cx.roundRect(2, 2, w - 4, VR_TIP_H - 4, 12) : cx.rect(2, 2, w - 4, VR_TIP_H - 4);
+      cx.fill();
+      cx.strokeStyle = "#ffd866";
+      cx.lineWidth = 3;
+      cx.stroke();
+      cx.fillStyle = "#f0f3f8";
+      cx.font = "bold 28px monospace";
+      cx.textAlign = "center";
+      cx.textBaseline = "middle";
+      cx.fillText(text, w / 2, VR_TIP_H / 2 + 1);
+      // a resized canvas needs a fresh texture; a repaint of the same size
+      // just re-uploads
+      tex.dispose();
+      tex = new THREE.CanvasTexture(cv);
+      mesh.material.map = tex;
+      mesh.material.needsUpdate = true;
+      mesh.scale.set(VR_TIP_HEIGHT * w / VR_TIP_H, VR_TIP_HEIGHT, 1);
+    };
+    scene.add(mesh);
+    return mesh;
+  })();
+
+  /** The beam is on this button (or, null, on none): restart the wait. */
+  function noteVrTipHover(name) {
+    if (name === vrTipName) return;
+    vrTipName = name && vrTipTexts[name] ? name : null;
+    vrTipSince = performance.now();
+    vrTip.visible = false;
+  }
+
+  /** Per frame in a session: show the label once the beam has rested, and
+   *  keep it just above its button, in the button's plane. */
+  function updateVrTip() {
+    const button = vrTipName && iconButtons.find((b) => b.name === "vr-" + vrTipName);
+    if (!button || !button.visible || performance.now() - vrTipSince < VR_TIP_DELAY) {
+      vrTip.visible = false;
+      return;
+    }
+    const text = vrTipTexts[vrTipName]();
+    if (text !== vrTipText || !vrTip.visible) {
+      vrTipText = text;
+      vrTip.userData.paint(text);
+    }
+    button.updateWorldMatrix(true, false);
+    const q = button.parent.getWorldQuaternion(new THREE.Quaternion());
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+    const size = button.getWorldScale(new THREE.Vector3()).y;
+    vrTip.position.copy(button.getWorldPosition(new THREE.Vector3()))
+      .addScaledVector(up, size / 2 + VR_TIP_HEIGHT / 2 + 0.012);
+    vrTip.quaternion.copy(q);
+    vrTip.visible = true;
+  }
+
   // --------------------------------------------------------- settings (VR)
   /**
    * The render switches, in the scene. They are DOM buttons on a monitor,
@@ -1708,6 +1810,8 @@
     // clear physics mode's own layer over the terrain (Lemmix): trigger
     // areas, blocker fields, the spawn-point marks
     const cpmOverlay = game.sim ? makeClearPhysicsOverlay(level, worldGroup, resources) : null;
+    // the skill shadows (Lemmix): what the selected skill would do to the lemming under the cursor
+    const shadowOverlay = game.sim ? makeShadowOverlay(level, worldGroup, resources) : null;
 
     // selection highlight ring
     const ring = new THREE.Mesh(
@@ -1851,6 +1955,11 @@
         terrain.setPhysicsPaint(game.clearPhysics ? level.physics : null, cpmHighlightBits(level));
         cpmOverlay.update(game);
       }
+      if (shadowOverlay) {
+        const choice = shadowChoice(game);
+        shadowOverlay.update(game.sim, choice && choice.lem, choice && choice.skill,
+          choice && (choice.lem.index + "/" + choice.skill + "/" + game.sim.currentIteration + "/" + choice.lem.x + "," + choice.lem.y + "/" + choice.lem.action + "/" + choice.lem.dx));
+      }
       if (portalIndices.size > 0) {
         const tick = game.getGameTimer().getGameTicks();
         for (const portal of portals) {
@@ -1886,7 +1995,7 @@
         }
       }
       objectPool.sync(objectItems, (layer) =>
-        layer < 0 ? OBJECT_BG_Z : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z, false);
+        layer < 0 ? OBJECT_BG_Z : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z, false, !!game.clearPhysics);
 
       lemCapture.begin();
       const lems = game.getLemmingManager().lemmings;
@@ -2269,6 +2378,76 @@
         tex.needsUpdate = true;
       },
     };
+  }
+
+  // ------------------------------------------------ skill shadows (Lemmix)
+  /**
+   * NeoLemmix's skill shadows over the level: what the selected skill would
+   * do to the lemming under the cursor (shadows.js). A layer of the level's
+   * size: a "low" pixel where no terrain is (a path, a brick), a "high" one
+   * on destructible terrain (a tunnel, a crater), each the contrasting grey
+   * of what is beneath at three-quarter alpha (CombinePixelsShadow). Drawn
+   * over everything without a depth test; repainted when the lemming, the
+   * skill or the frame changes.
+   */
+  function makeShadowOverlay(level, worldGroup, resources) {
+    const w = level.width, h = level.height;
+    const data = new Uint8Array(w * h * 4);
+    const tex = resources.track(new THREE.DataTexture(data, w, h, THREE.RGBAFormat));
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    const mesh = new THREE.Mesh(
+      resources.track(new THREE.PlaneGeometry(1, 1)),
+      resources.track(new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+      })));
+    mesh.scale.set(w, h, 1);
+    mesh.position.set(w / 2, h / 2, OBJECT_DECAL_Z + 0.6);
+    mesh.renderOrder = -4;
+    mesh.visible = false;
+    worldGroup.add(mesh);
+    const phys = level.physics, img = level.groundImage;
+    const bg = (level.background && level.background.color) || 0;
+    const mod = (c) => (c < 0x80 ? 0xC0 : 0x40);
+    const put = (x, y, overTerrain) => {
+      const j = y * w + x, bits = phys[j];
+      const solid = (bits & 1) !== 0;
+      if (overTerrain ? (!solid || (bits & 2)) : solid) return; // high: destructible terrain only; low: under the terrain
+      const r = solid ? img[j * 4] : (bg >> 16) & 255, g = solid ? img[j * 4 + 1] : (bg >> 8) & 255, b = solid ? img[j * 4 + 2] : bg & 255;
+      const i = j * 4;
+      data[i] = mod(r); data[i + 1] = mod(g); data[i + 2] = mod(b); data[i + 3] = 0xC0;
+    };
+    let lastKey = null;
+    return {
+      mesh,
+      /** Paint for this lemming and skill (null: none); `key` says when nothing changed. */
+      update(sim, lem, skill, key) {
+        if (!lem || !skill) { mesh.visible = false; lastKey = null; return; }
+        if (key === lastKey) return;
+        lastKey = key;
+        const shadow = Lemmix.Shadows.compute(sim, lem, skill);
+        data.fill(0);
+        for (const [x, y] of shadow.low) put(x, y, false);
+        for (const [x, y] of shadow.high) put(x, y, true);
+        tex.needsUpdate = true;
+        mesh.visible = shadow.low.length + shadow.high.length > 0;
+      },
+    };
+  }
+
+  /**
+   * CheckForNewShadow: which lemming casts which skill's shadow now - the
+   * one the selected skill would go to, for a skill that has a shadow; else
+   * a glider under the cursor while it falls or glides, whatever the skill.
+   */
+  function shadowChoice(game) {
+    const sim = game.sim;
+    if (!sim || !cursorSim) return null;
+    const skill = sim.selectedSkill;
+    if (game.cursorLemming && skill && Lemmix.Shadows.SHADOW_SKILLS.has(skill)) return { lem: game.cursorLemming, skill };
+    const any = sim.getPriorityLemming(Lemmix.BA.NONE, Math.round(cursorSim.x), Math.round(cursorSim.y)).lemming;
+    if (any && any.isGlider && (any.action === Lemmix.BA.FALLING || any.action === Lemmix.BA.GLIDING)) return { lem: any, skill: "GLIDER" };
+    return null;
   }
 
   /** Default desktop framing: the level's intended start area, slightly above. */
@@ -2680,9 +2859,13 @@
       // the lemming NeoLemmix marks (red shirt, named in the info strip): the
       // one the selected skill would go to, at the cursor as it is now
       const marked = cursorSim ? session.game.getLemmingManager().getSelectedLemmingAt(cursorSim.x, cursorSim.y) : null;
-      if (marked !== session.game.cursorLemming) {
-        session.game.cursorLemming = marked;
-        // paused, no tick will redraw it: draw the frame again, quietly
+      const markedChanged = marked !== session.game.cursorLemming;
+      session.game.cursorLemming = marked;
+      const shadow = shadowChoice(session.game); // from the marked lemming as it is now
+      const shadowKey = shadow ? shadow.lem.index + "/" + shadow.skill : null;
+      if (markedChanged || shadowKey !== session.game.shadowKey) {
+        session.game.shadowKey = shadowKey;
+        // paused, no tick will redraw it (the red shirt, the skill shadow): draw the frame again, quietly
         if (!session.game.getGameTimer().isRunning() && session.syncScene) session.syncScene(true);
       }
     }
@@ -3108,6 +3291,7 @@
     setVrModal(false);
     setVrCatalog(false);
     setVrSettings(false);
+    noteVrTipHover(null); // and no label lingers from a headset beam
     // an unlocked bar is a VR notion: on the desktop it rides the camera
     resetBar();
     if (session) frameDesktopCamera(session.level);
@@ -3532,6 +3716,7 @@
       layoutVrModal();
       layoutVrCatalog();
       layoutVrSettings();
+      updateVrTip();
     } else if (vrCatalog.visible || vrModal.visible || vrSettings.visible) {
       setVrModal(false);
       setVrCatalog(false);
@@ -3740,6 +3925,8 @@
     get cursor() { return gameCursor; },
     // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
+    // the beam's label on an icon button, for the same: update() is the per-frame step
+    vrTip: { update: updateVrTip, mesh: vrTip, text: () => vrTipText },
     get session() { return session; },
   };
 

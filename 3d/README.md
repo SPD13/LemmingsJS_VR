@@ -44,6 +44,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   of the camera)
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
+- on a NeoLemmix level, with a skill selected and a lemming under the
+  pointer, a shadow shows what the skill would do: the builder's bricks,
+  the basher's, miner's or digger's tunnel, the bomber's crater, the
+  jumper's arc and so on, in a contrasting grey over the level
 - with the NeoLemmix assets installed the pointer is NeoLemmix's cursor on
   every level: a cross, a square over a lemming, an arrow beside it while
   the direction filter is on (in VR, at the end of the beam)
@@ -163,7 +167,9 @@ intended start area.
   Both are remembered in localStorage, and the mute switch is the same one the
   desktop speaker icon throws.
 - **the row above the toolbar** — eight buttons riding the bar, so they keep
-  station with it wherever it is dragged or unpinned to. The bar starts in
+  station with it wherever it is dragged or unpinned to. Rest the beam on
+  any of these icons (or a window's close) for a moment and a label says
+  what it does. The bar starts in
   the room, unlocked: just below the board, centred on the part of the level
   in front of you, and a recenter (or a level change) puts it back there. At
   the left end the padlock locks it to your head instead, from wherever it
@@ -209,10 +215,7 @@ intended start area.
   hands (0.15×–8×)
 - **the face buttons of the other hand** — the upper one (Y, or B when the
   left hand points) zooms the board in and the lower one (X, or A) zooms it
-  out, for as long as it is held. It is a dolly along your line of sight:
-  whatever you are looking at stays dead centre and comes closer or
-  recedes, wherever the board has been panned to, and the rest grows or
-  shrinks with it in perspective.
+  out, for as long as it is held, about the level's focus point.
 - **A/X** (the pointing hand) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale. The in-scene windows -
   the world catalog, the restart question, the settings - open centred in
