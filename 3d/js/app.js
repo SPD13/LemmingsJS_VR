@@ -1685,9 +1685,10 @@
    * the bar to the head, which is then their choice to keep.
    */
   let barAutoPlace = false; // the first placement of a session
-  function placeBarBelowDiorama() {
-    if (!session) return;
-    setBarLocked(false);
+  /** Where guiRoot goes for the bar to sit in its default spot: {pos, quat}
+   *  in the world, or null without a level. */
+  function barDefaultPlacement() {
+    if (!session) return null;
     const level = session.level;
     dioramaRoot.updateMatrixWorld(true);
     // the level's bottom edge, under the focus, on the terrain's front face
@@ -1700,12 +1701,71 @@
     const above = VR_BAR_TOOL_SIZE * 1.55;
     const centre = edge.clone();
     centre.y -= 0.02 + above + barH / 2;
-    guiRoot.quaternion.setFromAxisAngle(
+    const quat = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0), dioramaRoot.rotation.y);
+    const pos = centre.sub(new THREE.Vector3(0, VR_GUI_Y, VR_GUI_Z).applyQuaternion(quat));
+    return { pos, quat };
+  }
+
+  /**
+   * The bar's place as the player left it, kept in localStorage so a new
+   * session - and a new level, and a recentre - starts with it there. In
+   * the room it is the offset from the default spot, in the default's own
+   * frame and in metres, so it follows the board wherever that goes; on
+   * the head it is the head-relative hang, and that it is locked. Saved
+   * when the player moves the bar: a drag let go, the padlock, the park
+   * button - never while a window has it parked.
+   */
+  const BAR_PREFS_KEY = "lem3d-bar";
+  let barPrefs = null; // { locked, pos: [x, y, z], quat: [x, y, z, w] }
+  try {
+    const raw = localStorage.getItem(BAR_PREFS_KEY);
+    if (raw) barPrefs = JSON.parse(raw);
+  } catch (e) { barPrefs = null; }
+  function saveBarPrefs() {
+    if (!session || barParked) return;
+    let pos, quat;
+    if (barLocked) {
+      pos = guiRoot.position.clone();
+      quat = guiRoot.quaternion.clone();
+    } else {
+      const d = barDefaultPlacement();
+      if (!d) return;
+      const inv = d.quat.clone().invert();
+      pos = guiRoot.position.clone().sub(d.pos).applyQuaternion(inv);
+      quat = inv.clone().multiply(guiRoot.quaternion);
+    }
+    barPrefs = { locked: barLocked, pos: pos.toArray(), quat: quat.toArray() };
+    try { localStorage.setItem(BAR_PREFS_KEY, JSON.stringify(barPrefs)); } catch (e) {}
+  }
+
+  /** The bar in the room, in its default spot below the board - moved by
+   *  the offset the player left it at, unless `plain`. */
+  function placeBarBelowDiorama(plain) {
+    const d = barDefaultPlacement();
+    if (!d) return;
+    setBarLocked(false);
     guiRoot.scale.setScalar(1);
-    guiRoot.position.copy(centre).sub(
-      new THREE.Vector3(0, VR_GUI_Y, VR_GUI_Z).applyQuaternion(guiRoot.quaternion));
+    guiRoot.quaternion.copy(d.quat);
+    guiRoot.position.copy(d.pos);
+    const p = !plain && barPrefs && !barPrefs.locked ? barPrefs : null;
+    if (p && p.pos && p.quat) {
+      guiRoot.position.add(new THREE.Vector3().fromArray(p.pos).applyQuaternion(d.quat));
+      guiRoot.quaternion.multiply(new THREE.Quaternion().fromArray(p.quat));
+    }
     barDragFrom = null;
+  }
+
+  /** A session's first placement: where the player left the bar - on the
+   *  head as it hung, or in the room at its offset. */
+  function placeBarAtStart() {
+    if (barPrefs && barPrefs.locked && barPrefs.pos && barPrefs.quat) {
+      setBarLocked(true);
+      guiRoot.position.fromArray(barPrefs.pos);
+      guiRoot.quaternion.fromArray(barPrefs.quat);
+      guiRoot.scale.setScalar(1);
+      barDragFrom = null;
+    } else placeBarBelowDiorama();
   }
 
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -3485,7 +3545,8 @@
     vrWarningSign.position.set(
       startX, session.level.height + VR_STATUS_GAP + strip.h * 1.35 + 24 + signH / 2, 40);
     // the bar goes with the board, unless it is riding the head by choice
-    if (barAutoPlace || !barLocked) placeBarBelowDiorama();
+    if (barAutoPlace) placeBarAtStart();
+    else if (!barLocked) placeBarBelowDiorama();
     barAutoPlace = false;
     return true;
   }
@@ -3534,10 +3595,13 @@
   function actOnPick(p) {
     if (p.barTool === "lock") {
       setBarLocked(!barLocked);
+      saveBarPrefs();
     } else if (p.barTool === "park") {
-      // back where a session starts it: in the room, below the board
+      // back to the default: in the room, below the board, and that is
+      // where it will be from now on
       barParked = null;
-      placeBarBelowDiorama();
+      placeBarBelowDiorama(true);
+      saveBarPrefs();
     } else if (p.barTool === "move") {
       // nothing on a tap; it is the drag that moves the bar
     } else if (p.barTool === "volume") {
@@ -3619,6 +3683,7 @@
     onScrubEnd: (what) => { if (what === "minimap" && session) session.gui.onMouseUp(null); },
     onScrubOff: (what) => { if (what === "minimap" && session) session.gui.onMouseMove(null); },
     onBarDragStart: () => { barDragFrom = guiRoot.position.clone(); },
+    onBarDragEnd: () => saveBarPrefs(), // where it was let go is where it stays
     // the hand moves in world space; the bar hangs off the head or the scene,
     // so the delta is turned into whichever space it is living in
     onBarDrag: (worldDelta) => {

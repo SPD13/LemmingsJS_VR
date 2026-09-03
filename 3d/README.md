@@ -213,7 +213,11 @@ intended start area.
   any of these icons (or a window's close) for a moment and a label says
   what it does. The bar starts in
   the room, unlocked: just below the board, centred on the part of the level
-  in front of you, and a recenter (or a level change) puts it back there. At
+  in front of you, and a recenter (or a level change) puts it back there.
+  Where you leave it is remembered (in localStorage): carried somewhere
+  else, it comes back at that same offset from the board on the next level,
+  recenter or session; locked to your head, it starts there next time; the
+  park button returns it to the default for good. At
   the left end the padlock locks it to your head instead, from wherever it
   is hanging, and a second click lets go of it again where it has ended up
   (it never jumps at the click, either way). A bar on the head would sit

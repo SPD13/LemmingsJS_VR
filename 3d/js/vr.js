@@ -125,6 +125,7 @@ class VRManager {
    *  - onVrButtonHeld(code, dt)     -> (optional) per frame while it stays down
    *  - onStick(code, x, y, dt)      -> thumbstick (VrPointStick or VrFreeStick),
    *                                    y flipped to "away is positive"
+   *  - onBarDragEnd()                -> (optional) the toolbar was let go after a drag
    *  - onBarDragStart(), onBarDrag(worldDelta) -> dragging the toolbar by its
    *                                    move handle, instead of the world
    *  - placeDiorama()               -> position dioramaRoot for the headset
@@ -402,6 +403,9 @@ class VRManager {
     this._press = null;
     if (p && p.c === controller && p.slider && this.hooks.onScrubEnd) {
       this.hooks.onScrubEnd(p.scrub); // the hold is over, whatever it was on
+    }
+    if (p && p.c === controller && p.bar && p.dragging && this.hooks.onBarDragEnd) {
+      this.hooks.onBarDragEnd(); // the bar was carried and let go
     }
     if (!p || p.c !== controller || p.dragging || !this.presenting) return;
     const pick = this.hooks.pickWithRaycaster(this._rayFrom(controller));
