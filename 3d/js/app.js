@@ -485,7 +485,7 @@
         map: tex, transparent: true, depthTest: false, depthWrite: false,
       }));
     mesh.renderOrder = GUI_ORDER_MODAL;
-    mesh.userData.ask = (title) => {
+    mesh.userData.ask = (title, body) => {
       cx.clearRect(0, 0, 512, 192);
       cx.fillStyle = "rgba(10, 14, 22, 0.95)";
       cx.beginPath();
@@ -500,7 +500,7 @@
       cx.fillText(title, 256, 76);
       cx.fillStyle = "#8fa1bb";
       cx.font = "24px monospace";
-      cx.fillText("progress on this level is lost", 256, 114);
+      cx.fillText(body || "progress on this level is lost", 256, 114);
       tex.needsUpdate = true;
     };
     mesh.userData.ask("Restart level?");
@@ -562,16 +562,19 @@
     }
   }
 
-  function setVrModal(open) {
+  let vrModalNotice = false; // one button (OK) rather than a yes and a no
+  function setVrModal(open, notice) {
     if (open && renderer.xr.isPresenting && !anyVrWindowUp()) placeVrWindows();
     vrModal.visible = open && renderer.xr.isPresenting;
+    vrModalNotice = vrModal.visible && !!notice;
     for (const b of [vrYesBtn, vrNoBtn]) {
-      b.visible = vrModal.visible;
+      b.visible = vrModal.visible && !(vrModalNotice && b === vrNoBtn);
       setBarToolState(b, { hovered: false });
     }
     if (vrModal.visible) holdSim("vr-modal");
     else { vrConfirmAction = null; releaseSim("vr-modal"); }
     syncBarForWindows();
+    if (vrModal.visible) layoutVrModal(); // its buttons where this dialog wants them, now
   }
 
   let vrConfirmAction = null;
@@ -582,13 +585,19 @@
     vrConfirmAction = action; // after setVrModal, which clears it on close
   }
 
+  /** A notice in the same frame, with one button to take it away. */
+  function askVrNotice(title, body) {
+    vrModalPanel.userData.ask(title, body);
+    setVrModal(true, true);
+  }
+
   /** Lay the dialog out in front of the eyes, in metres of camera space. */
   function layoutVrModal() {
     const w = VR_MODAL_WIDTH, h = w * 192 / 512;
     vrModalPanel.scale.set(w, h, 1);
     vrModalPanel.position.set(0, VR_MODAL_Y, VR_MODAL_Z);
     const size = VR_BAR_TOOL_SIZE * 1.3;
-    for (const [b, side] of [[vrYesBtn, -1], [vrNoBtn, 1]]) {
+    for (const [b, side] of [[vrYesBtn, vrModalNotice ? 0 : -1], [vrNoBtn, 1]]) {
       const hot = b.userData.state.hovered;
       b.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
       b.position.set(side * w * 0.22, VR_MODAL_Y - h * 0.62,
@@ -1675,8 +1684,14 @@
       game.onRestore.on((info) => refreshAfterRestore(game, info));
       // the load-replay half of the last cell: a file picker (desktop only)
       game.onLoadReplayRequest = () => {
+        if (renderer.xr.isPresenting) {
+          askVrNotice("Load replay", "load a replay file from the desktop");
+          return;
+        }
         const input = document.getElementById("replay-file");
-        if (input && !renderer.xr.isPresenting) input.click();
+        if (!input) return;
+        holdSim("replay-file"); // NeoLemmix suspends play while its file dialog is up
+        input.click();
       };
     }
 
@@ -2213,6 +2228,7 @@
     // that can be hit, so nothing behind it can be pressed by accident.
     if (vrModal.visible) {
       for (const b of [vrYesBtn, vrNoBtn]) {
+        if (!b.visible) continue; // a notice has no "no"
         const hit = rc.intersectObject(b, false);
         if (hit.length) return hit[0];
       }
@@ -3009,9 +3025,9 @@
   let confirmAction = null;
 
   /** Ask before anything that throws away a level in progress. */
-  function askConfirm(title, verb, action) {
+  function askConfirm(title, verb, action, body) {
     confirmDom.title.textContent = title;
-    confirmDom.body.textContent = "Progress on this level is lost.";
+    confirmDom.body.textContent = body || "Progress on this level is lost.";
     confirmDom.yes.textContent = verb;
     confirmAction = action;
     confirmDom.panel.hidden = false;
@@ -3387,14 +3403,29 @@
   // the panel's load-replay half opens this picker: the file plays from the start
   const replayFile = document.getElementById("replay-file");
   if (replayFile) {
+    // NeoLemmix's StartReplay: the file is read, a replay that names another
+    // level draws a warning first, then the level plays it from the start at
+    // normal speed
     replayFile.addEventListener("change", async () => {
       const file = replayFile.files && replayFile.files[0];
       replayFile.value = "";
+      releaseSim("replay-file");
       if (!file || !session || !session.game.loadReplayFile) return;
-      try {
-        session.game.loadReplayFile(Lemmix.Replay.parse(await file.text()));
-      } catch (e) { console.warn("[3d] replay file:", e); }
+      let parsed;
+      try { parsed = Lemmix.Replay.parse(await file.text()); }
+      catch (e) { console.warn("[3d] replay file:", e); return; }
+      const game = session.game;
+      const load = () => { if (session && session.game === game) game.loadReplayFile(parsed); };
+      const own = String(game.level.info && game.level.info.id || "").toUpperCase();
+      const theirs = String(parsed.meta.id || "").toUpperCase();
+      if (theirs && own && theirs !== own) {
+        askConfirm("Replay from another level?", "load it anyway",
+          load, "This replay appears to be from a different level. Whatever it does here will make little sense.");
+      } else load();
     });
+    // the dialog closed without a file: the clock goes on (Chrome fires cancel; focus is the fallback)
+    replayFile.addEventListener("cancel", () => releaseSim("replay-file"));
+    window.addEventListener("focus", () => releaseSim("replay-file"));
   }
   renderMode(); // billing, catalog labels and editor availability
 
