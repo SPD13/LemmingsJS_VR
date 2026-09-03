@@ -32,3 +32,17 @@ The server itself is `server.js`: a static file server for the repo root
 (the game at `/`, the 3D/VR app at `/3d/`), started in-process by the
 Electron main process — no `http-server` child process to manage. It listens
 on all interfaces so headsets and other machines on the LAN can reach it.
+`node launcher/server.js [port]` runs it from a terminal without Electron,
+over plain HTTP (default port 8123).
+
+Besides the files it serves three things of its own:
+
+- `GET /levels/index.json` — the level browser's tree, built from `levels/`
+  as it is now (`tools/levels-index.js`).
+- `GET /neolemmix/styles/index.json` — the sprite galleries' list of every
+  NeoLemmix style's terrain pieces, built from `neolemmix/styles/`
+  (`tools/styles-index.js`).
+- `POST /3d/profiles/<pack>-g<set>.json` and `POST /3d/profiles/nx-<style>.json`
+  — the depth profile of a sprite gallery, written by the 3D page's piece
+  editor and its galleries page. Only those names are writable; the reply
+  is `{"ok":true}` once the file is on disk.
