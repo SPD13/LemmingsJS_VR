@@ -151,13 +151,18 @@ intended start area.
   Both are remembered in localStorage, and the mute switch is the same one the
   desktop "sound" button throws.
 - **the row above the toolbar** — seven buttons riding the bar, so they keep
-  station with it wherever it is dragged or unpinned to. At the left end the
-  padlock unlocks the bar from your head: it stays where it is hanging in the
-  room while you look around, and a second click hands it back to the head
-  from wherever it has ended up (it never jumps at the click, either way);
-  beside it the four-way arrows are a grab handle — hold the trigger on them
-  and move your hand to carry the bar, locked or not. Leaving VR puts it back
-  on the head, square in front. In the middle, pause, which becomes a play
+  station with it wherever it is dragged or unpinned to. The bar starts in
+  the room, unlocked: just below the board, centred on the part of the level
+  in front of you, and a recenter (or a level change) puts it back there. At
+  the left end the padlock locks it to your head instead, from wherever it
+  is hanging, and a second click lets go of it again where it has ended up
+  (it never jumps at the click, either way). A bar on the head would sit
+  across the catalog or a question, so while one of those is up it is parked
+  below the board and comes back to the head, as it was, when the window
+  goes; beside it the four-way arrows
+  are a grab handle — hold the trigger on them and move your hand to carry
+  the bar, locked or not. Leaving VR puts it back on the head, square in
+  front. In the middle, pause, which becomes a play
   triangle once the game is stopped and tracks the clock however it was
   stopped: this button, the panel, the space bar or the catalog. At the right
   end, prev, restart and next, each asking before it throws the level away —
@@ -190,7 +195,10 @@ intended start area.
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
 - **A/X** (either controller) — recenter: bring the diorama back in front of
-  where you are looking right now, at default scale
+  where you are looking right now, at default scale. The in-scene windows -
+  the world catalog, the restart question, the settings - open centred in
+  your view and then stay put in the world rather than riding your head; a
+  recenter brings them to the new view too
 - **desktop keys while in VR** (handy in mouse-fallback): `v` re-places the
   diorama at your current gaze; `[` / `]` tune the pose yaw correction by 15°
   and re-place (default 0° — kept in case a runtime reports a rotated

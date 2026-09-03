@@ -33,7 +33,9 @@ const VR_BAR_TOOL_SIZE = 0.045; // metres: the lock/move handles above the bar
 const VR_BAR_TOOL_HOVER = 1.18; // how much a handle grows under the beam
 const VR_VOLUME_HEIGHT = 0.15;  // the volume slider, standing off the bar's end
 const VR_SOUND_LINGER = 2000;   // ms the slider stays up once the beam leaves
-// The restart question, head-fixed in metres of camera space.
+// The restart question, in metres in front of the eyes. The windows are
+// laid out in the head's frame but fixed in the world where they opened
+// (app.js placeVrWindows); a recentre brings them to the new view.
 const VR_MODAL_WIDTH = 0.42;
 const VR_MODAL_Y = 0.02;
 const VR_MODAL_Z = VR_GUI_Z;  // the toolbar's plane: one surface to focus on
@@ -104,6 +106,7 @@ class VRManager {
    *  - onBarDragStart(), onBarDrag(worldDelta) -> dragging the toolbar by its
    *                                    move handle, instead of the world
    *  - placeDiorama()               -> position dioramaRoot for the headset
+   *  - onRecenter(headPose)         -> (optional) whatever else a recentre moves
    */
   constructor(renderer, scene, camera, dioramaRoot, hooks) {
     this.renderer = renderer;
@@ -268,11 +271,16 @@ class VRManager {
       e[1] === 0 && e[2] === 0 && e[4] === 0 && e[6] === 0 && e[8] === 0 && e[9] === 0;
   }
 
-  /** Re-place the diorama using the most recent head pose. */
+  /** Re-place the diorama - and whatever else follows a recentre - using
+   *  the most recent head pose. */
   recenterNow() {
     this._grab = null;
     this.hooks.placeDiorama(this._lastHeadPose);
+    if (this.hooks.onRecenter) this.hooks.onRecenter(this._lastHeadPose);
   }
+
+  /** The head's pose from the last rendered frame, or null before one. */
+  get lastHeadPose() { return this._lastHeadPose || null; }
 
   resetDiorama() {
     this.dioramaRoot.position.set(0, 0, 0);
