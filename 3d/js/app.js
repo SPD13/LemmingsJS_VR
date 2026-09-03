@@ -1701,8 +1701,9 @@
     const prevBricks = new Map();  // lemming id -> bricks laid, for the warning
     let doorSfxPlayed = false;     // the hatches open together; one sound
     // (named, so the page can run it once after the game jumps to another frame)
-    const syncScene = () => {
-      lastTickTime = performance.now();
+    // (`redrawOnly`: the same frame again - a hover changed how a lemming is drawn - with no sound)
+    const syncScene = (redrawOnly) => {
+      if (!redrawOnly) lastTickTime = performance.now();
 
       objCapture.begin();
       game.objectManager.render(objCapture);
@@ -1742,7 +1743,7 @@
 
       lemCapture.begin();
       const lems = game.getLemmingManager().lemmings;
-      if (game.sounds) {
+      if (game.sounds && !redrawOnly) {
         for (const cue of game.sounds) {
           audio.playCue(cue.name, cue.x != null ? sfxPos(cue.x, cue.y) : null, SFX_BY_CUE[cue.name]);
         }
@@ -1778,7 +1779,7 @@
         tickSfx = { sfx: SFX.TRAP, x: trapSfxAt.x, y: trapSfxAt.y };
         trapSfxAt = null;
       }
-      if (tickSfx != null) audio.playSfx(tickSfx.sfx, sfxPos(tickSfx.x, tickSfx.y));
+      if (tickSfx != null && !redrawOnly) audio.playSfx(tickSfx.sfx, sfxPos(tickSfx.x, tickSfx.y));
       lemmingPool.sync(lemCapture.items, () => LEMMING_Z, true);
       particles.sync(lemCapture.particles);
 
@@ -2412,7 +2413,16 @@
     }
     if (!cursorSim) lem = null;
     hoveredLemming = lem;
-    if (session.game.sim) session.game.cursorLemming = lem; // the info strip names it
+    if (session.game.sim) {
+      // the lemming NeoLemmix marks (red shirt, named in the info strip): the
+      // one the selected skill would go to, at the cursor as it is now
+      const marked = cursorSim ? session.game.getLemmingManager().getSelectedLemmingAt(cursorSim.x, cursorSim.y) : null;
+      if (marked !== session.game.cursorLemming) {
+        session.game.cursorLemming = marked;
+        // paused, no tick will redraw it: draw the frame again, quietly
+        if (!session.game.getGameTimer().isRunning() && session.syncScene) session.syncScene(true);
+      }
+    }
     if (lem) {
       // with NeoLemmix's cursor in use the square is the mark; the ring is the page's own
       session.ring.visible = !cursorReady();
