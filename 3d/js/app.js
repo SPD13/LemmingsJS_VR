@@ -1604,6 +1604,10 @@
     pickPlane.name = "pick-plane";
     worldGroup.add(pickPlane);
 
+    // clear physics mode's own layer over the terrain (Lemmix): trigger
+    // areas, blocker fields, the spawn-point marks
+    const cpmOverlay = game.sim ? makeClearPhysicsOverlay(level, worldGroup, resources) : null;
+
     // selection highlight ring
     const ring = new THREE.Mesh(
       resources.track(new THREE.RingGeometry(7, 9, 24)),
@@ -1683,6 +1687,10 @@
       };
       game.onRestore.on((info) => refreshAfterRestore(game, info));
       // the load-replay half of the last cell: a file picker (desktop only)
+      // an option changed how the level is drawn (clear physics): paused, redraw now
+      game.onOptionChanged = () => {
+        if (session && session.game === game && !game.getGameTimer().isRunning() && session.syncScene) session.syncScene(true);
+      };
       game.onLoadReplayRequest = () => {
         if (renderer.xr.isPresenting) {
           askVrNotice("Load replay", "load a replay file from the desktop");
@@ -1725,8 +1733,16 @@
       // objects drawn as openings have their own geometry: drop the flat copy
       // (ObjectManager emits exactly one draw per object, in list order) and
       // keep their texture in step with the animation
-      const objectItems = portalIndices.size === 0 ? objCapture.items
+      let objectItems = portalIndices.size === 0 ? objCapture.items
         : objCapture.items.filter((_, i) => !portalIndices.has(i));
+      if (cpmOverlay) {
+        // clear physics: the terrain as its physics map, the background
+        // gadgets gone (NeoLemmix leaves rlBackgroundObjects out), the layer
+        // of trigger areas and marks repainted for this frame
+        terrain.setPhysicsPaint(game.clearPhysics ? level.physics : null, cpmHighlightBits(level));
+        if (game.clearPhysics) objectItems = objectItems.filter((it) => it.layer >= 0);
+        cpmOverlay.update(game);
+      }
       if (portalIndices.size > 0) {
         const tick = game.getGameTimer().getGameTicks();
         for (const portal of portals) {
@@ -2026,6 +2042,98 @@
       const y = -(dist - pop) * tanHalf + tileBottom + height * 0.04; // + slack
       session.gui.place(width, y, -dist);
     }
+  }
+
+  // ------------------------------------------------- clear physics (Lemmix)
+  // Trigger areas NeoLemmix does not draw: none, the windows (their spawn
+  // point is marked instead), backgrounds, paint, blockers' own fields (a
+  // blocking lemming's are drawn from the lemming), and the one-way walls.
+  const CPM_NO_TRIGGER = new Set(["NONE", "WINDOW", "BACKGROUND", "PAINT", "BLOCKER",
+    "ONEWAYLEFT", "ONEWAYRIGHT", "ONEWAYDOWN", "ONEWAYUP"]);
+  const PM_ONEWAYFLAGS = 0x78; // left, right, down, up
+
+  /** The one-way wall under the pointer, as its direction bits: terrain of the same kind lights up blue. */
+  function cpmHighlightBits(level) {
+    if (!cursorSim) return 0;
+    const x = Math.round(cursorSim.x), y = Math.round(cursorSim.y);
+    if (x < 0 || y < 0 || x >= level.width || y >= level.height) return 0;
+    return level.physics[x + y * level.width] & PM_ONEWAYFLAGS;
+  }
+
+  /**
+   * Clear physics mode's own layer, the level's size, over the terrain:
+   * NeoLemmix's trigger areas (DrawTriggerAreaRectOnLayer - a pink checker,
+   * darker over terrain and darker still over steel, and darker where two
+   * overlap), a blocker's two fields, and the gold-and-orange mark at each
+   * hatch's spawn point (DrawAllGadgets). Repainted every frame the mode is
+   * on, hidden otherwise. Drawn first among the transparent things and
+   * without a depth test, so it lies on the slab under the lemmings.
+   */
+  function makeClearPhysicsOverlay(level, worldGroup, resources) {
+    const w = level.width, h = level.height;
+    const data = new Uint8Array(w * h * 4);
+    const tex = resources.track(new THREE.DataTexture(data, w, h, THREE.RGBAFormat));
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    const mesh = new THREE.Mesh(
+      resources.track(new THREE.PlaneGeometry(1, 1)),
+      resources.track(new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.75, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+      })));
+    mesh.scale.set(w, h, 1);
+    mesh.position.set(w / 2, h / 2, OBJECT_DECAL_Z + 0.5);
+    mesh.renderOrder = -5;
+    mesh.visible = false;
+    worldGroup.add(mesh);
+    const phys = level.physics;
+    const put = (x, y, r, g, b) => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return;
+      const i = (y * w + x) * 4;
+      data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255;
+    };
+    const triggerRect = (x0, y0, x1, y1) => {
+      for (let y = Math.max(0, y0); y < Math.min(h, y1); y++) {
+        for (let x = Math.max(0, x0); x < Math.min(w, x1); x++) {
+          const i = (y * w + x) * 4, bits = phys[y * w + x];
+          const present = data[i + 3] !== 0;
+          let c = !(bits & 1) ? 0xFF : (bits & 2) ? 0x60 : 0xA0; // free / steel / terrain
+          if ((x - y) & 1) c -= 0x20;
+          if (present) c -= 0x30;
+          data[i] = c; data[i + 1] = 0; data[i + 2] = c; data[i + 3] = 255;
+        }
+      }
+    };
+    return {
+      mesh,
+      update(game) {
+        const on = !!game.clearPhysics;
+        mesh.visible = on;
+        if (!on) return;
+        data.fill(0);
+        for (const g of level.gadgets) {
+          if (g.offMap || CPM_NO_TRIGGER.has(g.effect)) continue;
+          if ((g.effectBase === "TELEPORT" || g.effectBase === "RECEIVER") && g.pairingId < 0) continue;
+          const t = g.triggerRect;
+          triggerRect(t.x0, t.y0, t.x1, t.y1);
+        }
+        for (const L of game.sim.lemmings) {
+          if (L.removed || L.action !== Lemmix.BA.BLOCKING) continue;
+          let left = L.x - 6;
+          if (L.dx === 1) left++;
+          const top = L.y - 6;
+          triggerRect(left, top, left + 4, top + 11);
+          triggerRect(left + 8, top, left + 12, top + 11);
+        }
+        for (const g of level.gadgets) {
+          if (g.offMap || g.effectBase !== "WINDOW") continue;
+          const x = g.triggerRect.x0, y = g.triggerRect.y0;
+          put(x, y, 0xFF, 0xD7, 0x00);
+          put(x - 1, y, 0xFF, 0x45, 0x00); put(x + 1, y, 0xFF, 0x45, 0x00);
+          put(x, y - 1, 0xFF, 0x45, 0x00); put(x, y + 1, 0xFF, 0x45, 0x00);
+        }
+        tex.needsUpdate = true;
+      },
+    };
   }
 
   /** Default desktop framing: the level's intended start area, slightly above. */
@@ -2429,6 +2537,10 @@
     }
     if (!cursorSim) lem = null;
     hoveredLemming = lem;
+    if (session.game.sim && session.game.clearPhysics) {
+      // clear physics: the one-way walls like the one under the pointer light up
+      session.terrain.setPhysicsPaint(session.level.physics, cpmHighlightBits(session.level));
+    }
     if (session.game.sim) {
       // the lemming NeoLemmix marks (red shirt, named in the info strip): the
       // one the selected skill would go to, at the cursor as it is now
@@ -3085,6 +3197,7 @@
         break;
       case "b": if (session.game.backFrames) session.game.backFrames(1); break; // one frame back (Lemmix)
       case "i": if (session.game.toggleReplayInsert) session.game.toggleReplayInsert(); break;
+      case "t": if (session.game.toggleClearPhysics) session.game.toggleClearPhysics(); break; // clear physics mode (Lemmix)
       case "+": case "=": timer.speedFactor = Math.min(10, timer.speedFactor + 1); break;
       case "-": timer.speedFactor = Math.max(0.5, timer.speedFactor - 0.5); break;
       case "e":

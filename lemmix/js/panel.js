@@ -356,6 +356,10 @@
       const lit = (what) => { const i = this.cells.indexOf(what); if (i >= 0) this._highlight(out, i * CELL, BUTTON_Y, 15, 24); };
       if (!timer.isRunning()) lit("pause");
       if (timer.speedFactor > 1) lit("speed");
+      if (this.game.clearPhysics) {
+        const i = this.cells.indexOf("cpmreplay");
+        if (i >= 0) this._highlight(out, i * CELL, BUTTON_Y, 15, HALF_UPPER_BOTTOM - BUTTON_Y + 1);
+      }
       if (sim.selectDx !== 0) {
         const i = this.cells.indexOf("directional");
         if (i >= 0) {
@@ -404,7 +408,8 @@
         if (upper) game.setSelectDx(game.sim.selectDx === -1 ? 0 : -1);
         else if (lower) game.setSelectDx(game.sim.selectDx === 1 ? 0 : 1);
       } else if (what === "cpmreplay") {
-        if (lower) game.requestLoadReplay(); // clear physics (the upper half) is not drawn here
+        if (upper) game.toggleClearPhysics();
+        else if (lower) game.requestLoadReplay();
       } else if (what === "rrminus") { this.rrHeld = -1; game.queueCmmand(new Lemmings.CommandReleaseRateDecrease(1)); }
       else if (what === "rrplus") { this.rrHeld = 1; game.queueCmmand(new Lemmings.CommandReleaseRateIncrease(1)); }
       else if (what === "pause") game.getGameTimer().toggle();

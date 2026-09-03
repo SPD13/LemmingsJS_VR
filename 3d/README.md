@@ -55,16 +55,20 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   control at any point and the rest of the attempt is dropped), frame back
   over frame forward (right-click 17 frames, middle-click 85, hold to
   repeat), direction left over direction right (pick only lemmings facing
-  that way), and load replay (a `.nxrp` file picked from the desktop, with
-  a warning first when it names another level, then played from the start
-  at normal speed; in a headset the button only says to load it from the
-  desktop; the clear-physics half above it does nothing yet). An R in the
-  info strip means the attempt is
+  that way), clear physics (the level as its physics map: grey terrain,
+  darker steel, a blue tint on the one-way walls like the one under the
+  pointer, trigger areas in pink, a blocker's fields, an orange mark at each
+  hatch's spawn point, lemmings in flat colours - blue, cyan for an athlete,
+  reddened under the pointer; key `t`), and load replay (a `.nxrp` file
+  picked from the desktop, with a warning first when it names another
+  level, then played from the start at normal speed; in a headset the
+  button only says to load it from the desktop). An R in the info strip
+  means the attempt is
   replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
   replay-insert mode (your actions add to the replay instead of cutting it)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
   level, `R` dump the replay string to the console
-- "prev", "restart" and "next" ask before throwing away a level in progress —
+- the prev, restart and next icons ask before throwing away a level in progress —
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
   stops to ask is no longer a shortcut.
@@ -73,7 +77,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   validation mode, opens the piece editor, and turns the catalog over to
   tagging status. `?edit=1` selects it too, and pressing `e` enters it, since
   the piece editor is its tool. Remembered in localStorage.
-- `w` (or the "worlds" button) opens the world library, which is also where
+- `w` (or the globe icon) opens the world library, which is also where
   the page starts when its URL names no level (at the root, and without a
   close until a level is picked). It is browsed the way the
   `levels/` directory is laid out: a row per level pack — its name, whether
@@ -155,8 +159,8 @@ intended start area.
   slider is one surface: point anywhere on it and pull, and it takes the value
   from where the beam lands and keeps following while the trigger is held.
   Both are remembered in localStorage, and the mute switch is the same one the
-  desktop "sound" button throws.
-- **the row above the toolbar** — seven buttons riding the bar, so they keep
+  desktop speaker icon throws.
+- **the row above the toolbar** — eight buttons riding the bar, so they keep
   station with it wherever it is dragged or unpinned to. The bar starts in
   the room, unlocked: just below the board, centred on the part of the level
   in front of you, and a recenter (or a level change) puts it back there. At
@@ -167,7 +171,8 @@ intended start area.
   below the board and comes back to the head, as it was, when the window
   goes; beside it the four-way arrows
   are a grab handle — hold the trigger on them and move your hand to carry
-  the bar, locked or not. Leaving VR puts it back on the head, square in
+  the bar, locked or not; the board-over-bar icon next to them puts the bar
+  back where a session starts it, below the board. Leaving VR puts it back on the head, square in
   front. In the middle, pause, which becomes a play
   triangle once the game is stopped and tracks the clock however it was
   stopped: this button, the panel, the space bar or the catalog. At the right
@@ -200,7 +205,10 @@ intended start area.
   pans. With the catalog up, both of them scroll it instead
 - **grip** — grab and drag the diorama; **both grips** — scale it about your
   hands (0.15×–8×)
-- **A/X** (either controller) — recenter: bring the diorama back in front of
+- **the face buttons of the other hand** — the upper one (Y, or B when the
+  left hand points) zooms the board in and the lower one (X, or A) zooms it
+  out, for as long as it is held, about the level's focus point.
+- **A/X** (the pointing hand) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale. The in-scene windows -
   the world catalog, the restart question, the settings - open centred in
   your view and then stay put in the world rather than riding your head; a

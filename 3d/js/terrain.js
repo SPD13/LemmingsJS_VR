@@ -134,17 +134,44 @@ class TerrainMesh {
   }
 
   _refillTexRect(x0, y0, w, h) {
-    const src = this.level.groundImage;
-    const mask = this.maskLayer.groundMask;
     for (let y = y0; y < y0 + h; y++) {
-      for (let x = x0; x < x0 + w; x++) {
-        const i = (y * this.w + x) * 4;
-        this.texData[i] = src[i];
-        this.texData[i + 1] = src[i + 1];
-        this.texData[i + 2] = src[i + 2];
-        this.texData[i + 3] = mask[y * this.w + x] ? 255 : 0;
-      }
+      for (let x = x0; x < x0 + w; x++) this._paintPixel(x, y);
     }
+  }
+
+  /**
+   * One texture pixel from the level: its picture, or - with a physics map
+   * set (clear physics mode) - NeoLemmix's DrawClearPhysicsTerrain: grey for
+   * terrain, darker for steel, bluish where a one-way wall runs the way the
+   * one under the pointer does (the highlight bits), every other pixel a
+   * shade darker in a fine checker.
+   */
+  _paintPixel(x, y) {
+    const i = (y * this.w + x) * 4, j = y * this.w + x;
+    const solid = this.maskLayer.groundMask[j] ? 255 : 0;
+    if (this.physicsPaint) {
+      const bits = this.physicsPaint[j];
+      let c = (bits & 2) ? 0x60 : 0xB0; // PM_STEEL : terrain
+      let b = c;
+      if (!(bits & 2) && (bits & this.physicsHighlight)) { c = 0x60; b = 0xB0; } // a one-way wall like the pointed one
+      const shade = ((x & 1) !== (y & 1)) ? 0x20 : 0;
+      this.texData[i] = c - shade; this.texData[i + 1] = c - shade; this.texData[i + 2] = b - shade;
+    } else {
+      const src = this.level.groundImage;
+      this.texData[i] = src[i]; this.texData[i + 1] = src[i + 1]; this.texData[i + 2] = src[i + 2];
+    }
+    this.texData[i + 3] = solid;
+  }
+
+  /** Paint the terrain from this physics map (Uint16Array of PM bits) with these
+   *  one-way bits lit, or from its picture again with null. */
+  setPhysicsPaint(physics, highlight) {
+    highlight = physics ? (highlight | 0) : 0;
+    if ((this.physicsPaint || null) === (physics || null) && (this.physicsHighlight | 0) === highlight) return;
+    this.physicsPaint = physics || null;
+    this.physicsHighlight = highlight;
+    this._refillTexRect(0, 0, this.w, this.h);
+    this.texture.needsUpdate = true;
   }
 
   /** Wrap the two Level methods every terrain mutation funnels through. */
@@ -166,12 +193,7 @@ class TerrainMesh {
     if (x < 0 || x >= this.w || y < 0 || y >= this.h) return;
     this.depth[x + y * this.w] = depthClass;
     this.relief[x + y * this.w] = 0; // dug holes and built bricks are flat
-    const i = (y * this.w + x) * 4;
-    const src = this.level.groundImage;
-    this.texData[i] = src[i];
-    this.texData[i + 1] = src[i + 1];
-    this.texData[i + 2] = src[i + 2];
-    this.texData[i + 3] = this.maskLayer.groundMask[y * this.w + x] ? 255 : 0;
+    this._paintPixel(x, y);
     this.texture.needsUpdate = true;
 
     const cx = Math.floor(x / TERRAIN_CHUNK);

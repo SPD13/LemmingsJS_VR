@@ -99,15 +99,31 @@
       if (this.variants.has(key)) return this.variants.get(key);
       const side = dx > 0 ? anim.right : anim.left;
       let bmp = side.frames[f];
-      const pairs = [];
-      for (const kind of (variant || "normal").split("+")) {
-        if (kind !== "normal" && this.recolor[kind]) pairs.push(...this.recolor[kind]);
+      if (variant && variant.startsWith("flat:")) {
+        // clear physics: every pixel of the lemming in one colour (CombineLemmingPixels with ClearPhysics)
+        bmp = flat(bmp, parseInt(variant.slice(5), 16));
+      } else {
+        const pairs = [];
+        for (const kind of (variant || "normal").split("+")) {
+          if (kind !== "normal" && this.recolor[kind]) pairs.push(...this.recolor[kind]);
+        }
+        if (pairs.length) bmp = recolored(bmp, pairs);
       }
-      if (pairs.length) bmp = recolored(bmp, pairs);
       const frame = Lemmix.LevelBuilder.frameFromBitmap(bmp, -side.footX, -side.footY);
       this.variants.set(key, frame);
       return frame;
     }
+  }
+
+  /** The sprite's shape in one colour. */
+  function flat(bmp, rgb) {
+    const out = bmp.clone();
+    const d = out.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      d[i] = (rgb >> 16) & 255; d[i + 1] = (rgb >> 8) & 255; d[i + 2] = rgb & 255;
+    }
+    return out;
   }
 
   /** SwapColors: each swap is matched against the sprite's own colour; the last match wins. */
