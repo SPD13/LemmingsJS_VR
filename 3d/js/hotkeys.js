@@ -16,11 +16,19 @@
  * are NeoLemmix's hardcoded US ones, or the labels of the keyboard in use
  * when the browser can say (the "hardcoded names" switch of its options).
  *
+ * The headset's controllers are in the same table, under their own key
+ * names (VrPointA, VrFreeStick, ...): the face buttons and thumbstick of
+ * the pointing hand (the one with the beam) and of the free hand, each
+ * given a function - a button any function a key can have, a stick one of
+ * the stick functions (pan, tilt, dolly). The trigger and the grips stay
+ * what they are: the click, the drag, the scale.
+ *
  * The table lives in localStorage; the dialog (FEditHotkeys.pas) is the
- * page's: a list of keys, a function for the chosen one with its detail,
- * "show unassigned keys", "find key", the three layouts. A function that
- * does nothing on a DOS level is tagged Lemmix; one that is the page's own
- * and not NeoLemmix's is tagged 3D view.
+ * page's: a keyboard tab and a VR tab, a list of keys, a function for the
+ * chosen one with its detail, "show unassigned keys", "find key", the
+ * three layouts. A function that does nothing on a DOS level is tagged
+ * Lemmix; one that is the page's own and not NeoLemmix's is tagged 3D view
+ * or VR.
  */
 (function (root) {
   const STORAGE_KEY = "lem3d-hotkeys";
@@ -82,7 +90,15 @@
     { id: "cycle_class", label: "Cycle Piece Class (editor)", tag: "view" },
     { id: "yaw_left", label: "VR Yaw Correction −", tag: "view" },
     { id: "yaw_right", label: "VR Yaw Correction +", tag: "view" },
+    // the headset's own: a button held dollies, a stick moves the board
+    { id: "vr_dolly_in", label: "Dolly In (held)", tag: "vr", vr: "button" },
+    { id: "vr_dolly_out", label: "Dolly Out (held)", tag: "vr", vr: "button" },
+    { id: "vr_pan", label: "Pan the Board", tag: "vr", vr: "stick" },
+    { id: "vr_tilt", label: "Tilt the Board", tag: "vr", vr: "stick" },
+    { id: "vr_zoom", label: "Dolly (forward in, back out)", tag: "vr", vr: "stick" },
   ];
+  // what a headset cannot do (the page's DOM): not offered on its buttons
+  const DESKTOP_ONLY = new Set(["piece_editor", "cycle_class"]);
   const ACTION_BY_ID = new Map(ACTIONS.map((a) => [a.id, a]));
 
   // The keys, with NeoLemmix's hardcoded names (GetKeyNames), in its order.
@@ -136,6 +152,40 @@
   key("Quote", "'");
   key("IntlBackslash", "< >");
   const KEY_BY_CODE = new Map(KEYS.map((k) => [k.code, k]));
+
+  /**
+   * The headset's inputs, by the hand's role rather than its side: the beam
+   * moves to whichever hand pulls its trigger, and the functions follow it.
+   * A "stick" kind takes the stick functions, a "button" any other.
+   */
+  const VR_KEYS = [
+    { code: "VrPointA", name: "Pointing hand: A / X", kind: "button" },
+    { code: "VrPointB", name: "Pointing hand: B / Y", kind: "button" },
+    { code: "VrPointStickClick", name: "Pointing hand: stick click", kind: "button" },
+    { code: "VrPointStick", name: "Pointing hand: thumbstick", kind: "stick" },
+    { code: "VrFreeA", name: "Free hand: A / X", kind: "button" },
+    { code: "VrFreeB", name: "Free hand: B / Y", kind: "button" },
+    { code: "VrFreeStickClick", name: "Free hand: stick click", kind: "button" },
+    { code: "VrFreeStick", name: "Free hand: thumbstick", kind: "stick" },
+  ];
+  const VR_KEY_BY_CODE = new Map(VR_KEYS.map((k) => [k.code, k]));
+  const isVrCode = (code) => VR_KEY_BY_CODE.has(code);
+  // the controllers as they work today: the pointing hand recentres and
+  // pans, the free hand dollies and tilts
+  const VR_PRESET = [
+    ["VrPointA", "recenter_vr"], ["VrPointStick", "vr_pan"],
+    ["VrFreeB", "vr_dolly_in"], ["VrFreeA", "vr_dolly_out"], ["VrFreeStick", "vr_tilt"],
+  ];
+
+  /** Can this function go on this input? A stick takes stick functions, a button the rest. */
+  function allowedOn(code, action) {
+    const a = ACTION_BY_ID.get(action);
+    if (!a) return false;
+    const vk = VR_KEY_BY_CODE.get(code);
+    if (!vk) return !a.vr; // a keyboard key: nothing that is the headset's own
+    if (vk.kind === "stick") return a.vr === "stick";
+    return a.vr !== "stick" && !DESKTOP_ONLY.has(action);
+  }
 
   /** A KeyboardEvent's code as the table names it: one Shift, Ctrl, Alt, Cmd each. */
   function normalizeCode(code) {
@@ -244,7 +294,7 @@
     if (!binding) return "";
     const a = ACTION_BY_ID.get(binding.action);
     if (!a) return "";
-    if (a.tag) return a.tag;
+    if (a.tag) return a.tag; // "lemmix", "view" or "vr"
     if (a.id === "skill" && !DOS_SKILLS.has(binding.mod)) return "lemmix";
     if (a.id === "skip" && (binding.mod | 0) < 0) return "lemmix";
     return "";
@@ -270,26 +320,38 @@
               const b = data.keys[code];
               if (b && ACTION_BY_ID.has(b.action)) this.table.set(code, { action: b.action, mod: b.mod == null ? defaultMod(b.action) : b.mod });
             }
+            // a table saved before the controllers were in it: theirs as they were
+            if (!data.vr) this.applyVrPreset(false);
             return;
           }
         } catch (e) { /* unreadable: start over */ }
       }
       this.applyPreset(DEFAULT_PRESET, false);
+      this.applyVrPreset(false);
     }
 
     save() {
       const keys = {};
       for (const [code, b] of this.table) keys[code] = { action: b.action, mod: b.mod };
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: VERSION, keys })); } catch (e) { /* no storage */ }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: VERSION, vr: true, keys })); } catch (e) { /* no storage */ }
     }
 
     _changed() { if (this.onChange) this.onChange(); }
 
+    /** A keyboard layout: the keyboard's half of the table replaced, the controllers kept. */
     applyPreset(name, save = true) {
       const preset = PRESETS[name];
       if (!preset) return;
-      this.table.clear();
+      for (const code of Array.from(this.table.keys())) if (!isVrCode(code)) this.table.delete(code);
       for (const [code, action, mod] of preset) this.table.set(code, { action, mod: mod == null ? defaultMod(action) : mod });
+      if (save) this.save();
+      this._changed();
+    }
+
+    /** The controllers as they started out, the keyboard kept. */
+    applyVrPreset(save = true) {
+      for (const code of Array.from(this.table.keys())) if (isVrCode(code)) this.table.delete(code);
+      for (const [code, action, mod] of VR_PRESET) this.table.set(code, { action, mod: mod == null ? defaultMod(action) : mod });
       if (save) this.save();
       this._changed();
     }
@@ -321,8 +383,9 @@
     /** The name of the first key bound to a function, "" when none. */
     keyNameFor(action, mod) {
       const codes = this.codesFor(action, mod);
-      // a keyboard key over a mouse button, when both do it
-      codes.sort((a, b) => (a.startsWith("Mouse") ? 1 : 0) - (b.startsWith("Mouse") ? 1 : 0));
+      // a keyboard key over a mouse button or a controller, when both do it
+      const rank = (c) => (c.startsWith("Mouse") ? 1 : isVrCode(c) ? 2 : 0);
+      codes.sort((a, b) => rank(a) - rank(b));
       return codes.length ? keyName(codes[0]) : "";
     }
   }
@@ -333,7 +396,7 @@
   /** A key's name: the layout's label when asked for and known, else NeoLemmix's. */
   function keyName(code, useLayout) {
     if (useLayout && layoutNames && layoutNames.has(code)) return layoutNames.get(code);
-    const k = KEY_BY_CODE.get(code);
+    const k = KEY_BY_CODE.get(code) || VR_KEY_BY_CODE.get(code);
     return k ? k.name : code;
   }
 
@@ -376,6 +439,12 @@
   #hotkeys .tag { display: inline-block; font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 3px; letter-spacing: 0.04em; }
   #hotkeys .tag.lemmix { background: #2f6b3d; color: #d7f5dd; }
   #hotkeys .tag.view { background: #26485c; color: #d5eef7; }
+  #hotkeys .tag.vr { background: #4a3a6b; color: #e6dcf7; }
+  #hotkeys .hk-tabs { display: flex; gap: 0; margin-bottom: 10px; border-bottom: 1px solid #2a3446; }
+  #hotkeys .hk-tabs button { border: 1px solid transparent; border-bottom: none; background: transparent; color: #8fa1bb;
+    border-radius: 4px 4px 0 0; padding: 4px 14px; font-size: 12px; }
+  #hotkeys .hk-tabs button.hk-on { color: #ffd866; border-color: #2a3446; background: #161c28; }
+  #hotkeys .hk-tools[hidden] { display: none !important; }
   #hotkeys .hk-edit { width: 250px; display: flex; flex-direction: column; gap: 8px; }
   #hotkeys .hk-edit label { display: flex; flex-direction: column; gap: 3px; color: #8fa1bb; }
   #hotkeys .hk-edit label.hk-inline { flex-direction: row; align-items: center; gap: 6px; }
@@ -405,6 +474,7 @@
       this.showAll = false;   // unassigned keys too
       this.useLayout = false; // names from the keyboard in use
       this.finding = false;   // the next key pressed is the one to edit
+      this.tab = "keyboard";  // or "vr"
       this._build();
     }
 
@@ -419,15 +489,19 @@
       rootEl.hidden = true;
       const skillOptions = SKILLS.map((s) => `<option value="${s}">${s[0].toUpperCase() + s.slice(1)}${DOS_SKILLS.has(s) ? "" : " [Lemmix]"}</option>`).join("");
       const specialOptions = SPECIAL_SKIPS.map((s, i) => `<option value="${i}">${s}</option>`).join("");
-      const funcOptions = ACTIONS.map((a) => `<option value="${a.id}">${a.label}${a.tag === "lemmix" ? " [Lemmix]" : a.tag === "view" ? " [3D view]" : ""}</option>`).join("");
+      const funcOptions = ACTIONS.map((a) => `<option value="${a.id}">${a.label}${a.tag === "lemmix" ? " [Lemmix]" : a.tag === "view" ? " [3D view]" : a.tag === "vr" ? " [VR]" : ""}</option>`).join("");
       rootEl.innerHTML = `
         <div class="hk-dlg" role="dialog" aria-modal="true" aria-labelledby="hk-title">
           <div class="hk-head">
-            <h2 id="hk-title">CONFIGURE HOTKEYS</h2>
-            <span class="hk-note">click a key, give it a function; saved in this browser</span>
+            <h2 id="hk-title">CONFIGURE CONTROLS</h2>
+            <span class="hk-note">click a key or a controller input, give it a function; saved in this browser</span>
             <button class="hk-close" title="close">&times;</button>
           </div>
-          <div class="hk-tools">
+          <div class="hk-tabs">
+            <button data-tab="keyboard" class="hk-on">Keyboard</button>
+            <button data-tab="vr">VR</button>
+          </div>
+          <div class="hk-tools hk-tools-keyboard">
             <span>layout:</span>
             <button data-preset="traditional">traditional</button>
             <button data-preset="functional">functional</button>
@@ -436,8 +510,12 @@
             <label><input type="checkbox" class="hk-layoutnames"> names from my keyboard</label>
             <button class="hk-find">find key</button>
           </div>
+          <div class="hk-tools hk-tools-vr" hidden>
+            <button class="hk-vr-reset">back to the default controls</button>
+            <span class="hk-hint">the pointing hand is the one with the beam; a trigger pull on the other hand moves it there</span>
+          </div>
           <div class="hk-body">
-            <div class="hk-list"><table><thead><tr><th>key</th><th>function</th><th></th></tr></thead><tbody></tbody></table></div>
+            <div class="hk-list"><table><thead><tr><th class="hk-keyhead">key</th><th>function</th><th></th></tr></thead><tbody></tbody></table></div>
             <div class="hk-edit">
               <div class="hk-editing">click a key in the list</div>
               <label>function <select class="hk-func"><option value="">(none)</option>${funcOptions}</select></label>
@@ -445,10 +523,15 @@
               <label class="hk-frames" hidden>frames <input type="number" step="1"><span class="hk-hint">17 frames = 1 second; negative goes back</span></label>
               <label class="hk-hold hk-inline" hidden><input type="checkbox"> hold: on while the key is down</label>
               <label class="hk-special" hidden>skip to <select>${specialOptions}</select></label>
-              <div class="hk-legend">
+              <div class="hk-legend hk-legend-keyboard">
                 <span class="tag lemmix">Lemmix</span> NeoLemmix levels only, nothing on a DOS level<br>
                 <span class="tag view">3D view</span> this page's own, not in NeoLemmix<br>
                 fixed: arrows pan, shift+arrows orbit; Escape closes what is open
+              </div>
+              <div class="hk-legend hk-legend-vr" hidden>
+                <span class="tag lemmix">Lemmix</span> NeoLemmix levels only, nothing on a DOS level<br>
+                <span class="tag vr">VR</span> the headset's own; <span class="tag view">3D view</span> this page's own<br>
+                fixed: the trigger clicks, held and moved it drags the board; a grip drags, both grips scale; the buttons on the bar do the rest
               </div>
             </div>
           </div>
@@ -463,7 +546,12 @@
         holdRow: q(".hk-hold"), hold: q(".hk-hold input"),
         specialRow: q(".hk-special"), special: q(".hk-special select"),
         unassigned: q(".hk-unassigned"), layoutNames: q(".hk-layoutnames"), find: q(".hk-find"),
+        toolsKeyboard: q(".hk-tools-keyboard"), toolsVr: q(".hk-tools-vr"),
+        legendKeyboard: q(".hk-legend-keyboard"), legendVr: q(".hk-legend-vr"),
+        tabs: Array.from(rootEl.querySelectorAll(".hk-tabs button")),
       };
+      for (const b of this.dom.tabs) b.addEventListener("click", () => this.showTab(b.dataset.tab));
+      q(".hk-vr-reset").addEventListener("click", () => { this.manager.applyVrPreset(); this.refresh(); });
       if (!(navigator.keyboard && navigator.keyboard.getLayoutMap)) {
         this.dom.layoutNames.disabled = true;
         this.dom.layoutNames.parentElement.title = "this browser cannot tell the keyboard's labels";
@@ -515,11 +603,26 @@
       rootEl.addEventListener("contextmenu", (e) => { if (this.finding) e.preventDefault(); });
     }
 
-    open() {
+    open(tab) {
       if (this.isOpen) return;
       this.dom.root.hidden = false;
-      this.refresh();
+      if (tab) this.showTab(tab); else this.refresh();
       if (this.hooks.onOpen) this.hooks.onOpen();
+    }
+
+    /** The keyboard's keys or the headset's inputs. */
+    showTab(tab) {
+      this.tab = tab === "vr" ? "vr" : "keyboard";
+      this._setFinding(false);
+      this.selected = null;
+      const vr = this.tab === "vr";
+      for (const b of this.dom.tabs) b.classList.toggle("hk-on", b.dataset.tab === this.tab);
+      this.dom.toolsKeyboard.hidden = vr;
+      this.dom.toolsVr.hidden = !vr;
+      this.dom.legendKeyboard.hidden = vr;
+      this.dom.legendVr.hidden = !vr;
+      this.dom.root.querySelector(".hk-keyhead").textContent = vr ? "input" : "key";
+      this.refresh();
     }
 
     close() {
@@ -553,14 +656,15 @@
     /** The list: every key with a function, all of them when asked. */
     refresh() {
       const rows = [];
-      for (const k of KEYS) {
+      const vr = this.tab === "vr";
+      for (const k of (vr ? VR_KEYS : KEYS)) {
         const b = this.manager.get(k.code);
-        if (!b && !this.showAll) continue;
+        if (!b && !this.showAll && !vr) continue; // the headset's few inputs are always listed
         const tag = tagOf(b);
         rows.push(`<tr data-code="${k.code}" class="${b ? "" : "hk-empty"}${this.selected === k.code ? " hk-sel" : ""}">` +
           `<td>${escapeHtml(keyName(k.code, this.useLayout))}</td>` +
           `<td class="hk-fn">${b ? escapeHtml(describe(b)) : "(none)"}</td>` +
-          `<td>${tag === "lemmix" ? '<span class="tag lemmix">Lemmix</span>' : tag === "view" ? '<span class="tag view">3D view</span>' : ""}</td></tr>`);
+          `<td>${tagChip(tag)}</td></tr>`);
       }
       this.dom.tbody.innerHTML = rows.join("");
       if (this.selected && !this.dom.tbody.querySelector(`tr[data-code="${this.selected}"]`)) this.selected = null;
@@ -578,8 +682,10 @@
       const d = this.dom;
       const code = this.selected;
       const b = code ? this.manager.get(code) : null;
-      d.editing.textContent = code ? "editing key: " + keyName(code, this.useLayout) : "click a key in the list";
+      d.editing.textContent = code ? "editing: " + keyName(code, this.useLayout) : (this.tab === "vr" ? "click an input in the list" : "click a key in the list");
       d.func.disabled = !code;
+      // only the functions this input can take
+      for (const opt of d.func.options) opt.hidden = !!(code && opt.value && !allowedOn(code, opt.value));
       d.func.value = b ? b.action : "";
       const a = b ? ACTION_BY_ID.get(b.action) : null;
       const mod = a ? a.mod : null;
@@ -616,13 +722,20 @@
     }
   }
 
+  function tagChip(tag) {
+    if (tag === "lemmix") return '<span class="tag lemmix">Lemmix</span>';
+    if (tag === "view") return '<span class="tag view">3D view</span>';
+    if (tag === "vr") return '<span class="tag vr">VR</span>';
+    return "";
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
 
   root.Hotkeys = {
-    ACTIONS, ACTION_BY_ID, KEYS, SKILLS, DOS_SKILLS, SPECIAL_SKIPS, PRESETS, DEFAULT_PRESET,
-    HotkeyManager, HotkeyDialog, normalizeCode, keyName, describe, tagOf, loadLayoutNames,
+    ACTIONS, ACTION_BY_ID, KEYS, VR_KEYS, VR_PRESET, SKILLS, DOS_SKILLS, SPECIAL_SKIPS, PRESETS, DEFAULT_PRESET,
+    HotkeyManager, HotkeyDialog, normalizeCode, keyName, describe, tagOf, allowedOn, isVrCode, loadLayoutNames,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = root.Hotkeys;
 })(typeof window !== "undefined" ? window : globalThis);

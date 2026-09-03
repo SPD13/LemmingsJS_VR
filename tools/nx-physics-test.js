@@ -513,6 +513,17 @@ async function main() {
     hk.applyPreset("functional");
     check("functional layout: F1 restarts, D is the walker, space pauses", hk.get("F1").action === "restart" && hk.get("KeyD").mod === "walker" && hk.get("Space").action === "pause");
     check("Shift and Ctrl are keys like any other", Hotkeys.normalizeCode("ShiftLeft") === "Shift" && Hotkeys.normalizeCode("ControlRight") === "Control" && hk.get("Shift").action === "previous_skill");
+    // --- the headset's inputs share the table, on their own codes
+    check("the controllers as they were: pointing A recentres and its stick pans, the free hand dollies and tilts",
+      hk.get("VrPointA").action === "recenter_vr" && hk.get("VrPointStick").action === "vr_pan" && hk.get("VrFreeB").action === "vr_dolly_in" &&
+      hk.get("VrFreeA").action === "vr_dolly_out" && hk.get("VrFreeStick").action === "vr_tilt" && Hotkeys.tagOf(hk.get("VrFreeStick")) === "vr");
+    check("a keyboard layout leaves the controllers alone, and the reverse", (hk.applyPreset("minimal"), hk.get("VrFreeStick").action === "vr_tilt") &&
+      (hk.set("VrFreeStickClick", "pause"), hk.applyVrPreset(), hk.get("VrFreeStickClick") === null && hk.get("Escape").action === "quit"));
+    check("a stick takes stick functions, a button any other, a key none of the headset's",
+      Hotkeys.allowedOn("VrFreeStick", "vr_zoom") && !Hotkeys.allowedOn("VrFreeStick", "pause") && Hotkeys.allowedOn("VrPointB", "pause") &&
+      !Hotkeys.allowedOn("VrPointB", "vr_pan") && !Hotkeys.allowedOn("VrPointB", "piece_editor") && !Hotkeys.allowedOn("KeyQ", "vr_pan"));
+    hk.set("VrFreeStickClick", "pause");
+    check("a keyboard key names a function before a controller does", hk.keyNameFor("pause") === "Middle-Click" || hk.keyNameFor("pause") === "P");
   }
 
   console.log(passed + " passed, " + failed + " failed");

@@ -90,7 +90,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   Alt the athlete info in the panel while held, Esc the world library; the
   page's own view keys sit on keys the layout leaves free (Home reset the
   view, PgUp/PgDn zoom, V recentre in VR, J the piece editor, K its class
-  cycle). "configure hotkeys" (top right, under "controls") opens the configuration, laid out
+  cycle). "configure controls" (top right, under "controls") opens the
+  configuration. Its Keyboard tab is laid out
   like NeoLemmix's: the list of keys with their functions, a function and
   its detail for the chosen key, "show unassigned keys", "find key" (press
   the key to jump to it), the key names from your own keyboard layout when
@@ -101,7 +102,15 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   still reaches the page); the configuration is the web page's only. Fixed,
   outside the table: arrows pan and shift+arrows orbit, alongside whatever
   held function the arrow keys carry; Escape closes what is open; Enter
-  answers a question
+  answers a question. The VR tab does the same for the controllers: the
+  face buttons, stick clicks and thumbsticks of the pointing hand (the one
+  with the beam) and of the free hand, each given a function - a button any
+  function a key can have (pause, a skill, a time skip, a held direction
+  filter...) or a dolly held, a thumbstick pan, tilt or dolly. The default
+  is the controls as they were: the pointing hand's A/X recentres and its
+  stick pans, the free hand's B/Y and A/X dolly in and out and its stick
+  tilts; "back to the default controls" restores it. The trigger (click,
+  drag), the grips (drag, scale) and the bar's buttons stay fixed
 - the prev, restart and next icons ask before throwing away a level in progress —
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that
@@ -135,7 +144,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   NeoLemmix's own mechanics, with NeoLemmix's skill panel in place of the
   DOS one; they need the styles and player assets described in the root
   README under "Levels and assets".
-- "3D effects" (top right, under "configure hotkeys") unfolds the four render
+- "3D effects" (top right, under "configure controls") unfolds the four render
   switches. "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle

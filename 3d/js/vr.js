@@ -16,6 +16,9 @@
  *   instead, in all three axes, so pulling back walks it in along Z.
  * - Grip drags the diorama; both grips scale it about the hands' midpoint.
  *   The world itself never moves, so there is nothing to feel sick about.
+ * - The face buttons, stick clicks and thumbsticks are reported by the
+ *   hand's role (pointing or free); the page's controls table (hotkeys.js)
+ *   says what each does.
  */
 
 const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
@@ -52,14 +55,17 @@ const VR_MARK_ORDER = 60;
 const VR_STICK_DEADZONE = 0.15;
 const VR_STICK_PAN = 0.8;   // metres per second at full deflection
 const VR_STICK_TILT = 1.0;  // radians per second at full deflection
-// The face buttons of the hand that is not pointing zoom the board: the
-// upper one (B/Y) in, the lower one (A/X) out, for as long as it is held.
-// It is a dolly: the board slides along the line of sight, so what is being
-// looked at comes closer or recedes.
+// The face buttons and the stick clicks are reported to the page by the
+// hand's role (pointing or free) and go through its controls table; by
+// default the free hand's upper one (B/Y) dollies in and its lower one
+// (A/X) out for as long as it is held, and the pointing hand's A/X
+// recentres. A dolly slides the board along the line of sight, so what is
+// being looked at comes closer or recedes.
 const VR_ZOOM_RATE = 2.0;   // the distance to it, divided per second held
 const VR_ZOOM_NEAR = 0.2;   // metres: no closer than this to the eyes
 const VR_ZOOM_FAR = 6.0;    // and no farther
-const VR_BTN_LOWER = 4;     // A or X in the standard gamepad mapping
+const VR_BTN_STICK = 3;     // the thumbstick pressed, in the xr-standard mapping
+const VR_BTN_LOWER = 4;     // A or X
 const VR_BTN_UPPER = 5;     // B or Y
 // How far the hand has to travel with the trigger held before it counts as a
 // drag rather than a click. A trigger pull moves the hand a little on its own.
@@ -112,9 +118,13 @@ class VRManager {
    *  - onHoverPick(pick|null)       -> aiming feedback (highlight ring)
    *  - cursorSprite()               -> a sprite for the beam's landing on the board, or null
    *  - dressCursor(sprite)          -> its picture and size for this frame
-   *  - onZoom(dir, dt)              -> (optional) a zoom button held: dir +1 in, -1 out
-   *  - onStick("pan"|"tilt", x, y, dt) -> thumbstick, already resolved to a
-   *                                    role, y flipped to "away is positive"
+   *  - onVrButton(code, down)       -> (optional) a face button or stick click
+   *                                    went down or came up; the code names the
+   *                                    hand's role and the button (VrPointA,
+   *                                    VrFreeB, VrFreeStickClick, ...)
+   *  - onVrButtonHeld(code, dt)     -> (optional) per frame while it stays down
+   *  - onStick(code, x, y, dt)      -> thumbstick (VrPointStick or VrFreeStick),
+   *                                    y flipped to "away is positive"
    *  - onBarDragStart(), onBarDrag(worldDelta) -> dragging the toolbar by its
    *                                    move handle, instead of the world
    *  - placeDiorama()               -> position dioramaRoot for the headset
@@ -248,38 +258,37 @@ class VRManager {
       this.floor.visible = false;
       this.resetDiorama();
     });
-    this._recenterHeld = false;
+    this._buttonsDown = new Set(); // the codes down last frame
   }
 
-  /** A/X button (xr-standard button 4) on either controller = recenter:
-   *  snap the diorama back to its session-start placement and scale. */
   /**
-   * The face buttons. On the pointing hand the lower one (A/X) recentres,
-   * once per press. On the other hand the two zoom the board for as long as
-   * they are held: the upper one (B/Y) in, the lower one (A/X) out. When
-   * the left hand points, that puts the zoom on the right controller.
+   * The face buttons and the stick clicks, named by the hand's role and
+   * reported on their edges and while held; what they do is the page's
+   * controls table. When the beam changes hands a held button changes its
+   * name, which reads as a release and a press - fine, since the function
+   * it stood for changes with it.
    */
   _pollButtons(dt) {
     const session = this.renderer.xr.getSession();
     if (!session) return;
-    let pressed = false;
-    let zoom = 0;
+    const now = new Set();
     for (const source of session.inputSources) {
       const buttons = source.gamepad && source.gamepad.buttons;
       if (!buttons) continue;
-      const lower = buttons[VR_BTN_LOWER], upper = buttons[VR_BTN_UPPER];
-      if (this._handPoints(source.handedness)) {
-        if (lower && lower.pressed) pressed = true;
-      } else {
-        if (upper && upper.pressed) zoom += 1;
-        if (lower && lower.pressed) zoom -= 1;
+      const role = this._handPoints(source.handedness) ? "Point" : "Free";
+      for (const [index, name] of [[VR_BTN_LOWER, "A"], [VR_BTN_UPPER, "B"], [VR_BTN_STICK, "StickClick"]]) {
+        const b = buttons[index];
+        if (b && b.pressed) now.add("Vr" + role + name);
       }
     }
-    if (pressed && !this._recenterHeld) {
-      this.recenterNow();
+    for (const code of now) {
+      if (!this._buttonsDown.has(code)) { if (this.hooks.onVrButton) this.hooks.onVrButton(code, true); }
+      else if (dt && this.hooks.onVrButtonHeld) this.hooks.onVrButtonHeld(code, dt);
     }
-    this._recenterHeld = pressed;
-    if (zoom && dt && this.hooks.onZoom) this.hooks.onZoom(zoom, dt);
+    for (const code of this._buttonsDown) {
+      if (!now.has(code) && this.hooks.onVrButton) this.hooks.onVrButton(code, false);
+    }
+    this._buttonsDown = now;
   }
 
   get presenting() {
@@ -461,10 +470,12 @@ class VRManager {
   }
 
   /**
-   * The thumbsticks: the pointing hand's pans the board, the other tilts it -
-   * the same two moves as right-drag and left-drag on the desktop. They
-   * follow the beam, so handing it to the left hand brings pan with it and
-   * sends tilt to the right, and the pointing thumb keeps the same job.
+   * The thumbsticks, by the hand's role: by default the pointing hand's pans
+   * the board and the other tilts it - the same two moves as right-drag and
+   * left-drag on the desktop. They follow the beam, so handing it to the
+   * left hand brings pan with it and sends tilt to the right, and the
+   * pointing thumb keeps the same job. The page's controls table says
+   * which does what.
    *
    * xr-standard puts the stick on axes 2 and 3, leaving 0 and 1 for a
    * trackpad, but a device with no trackpad may report it at 0 and 1, so
@@ -482,7 +493,7 @@ class VRManager {
       const x = dead(axes[i] || 0), y = dead(axes[i + 1] || 0);
       if (!x && !y) continue;
       this.hooks.onStick(
-        this._handPoints(source.handedness) ? "pan" : "tilt", x, -y, dt);
+        this._handPoints(source.handedness) ? "VrPointStick" : "VrFreeStick", x, -y, dt);
     }
   }
 
