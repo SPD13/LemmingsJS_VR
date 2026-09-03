@@ -359,8 +359,12 @@ repainted every frame with the trigger areas in a pink checker shaded by
 what lies under them, a blocker's two fields, and the gold-and-orange mark
 at each hatch's spawn point; lemmings draw in NeoLemmix's flat colours
 (blue, cyan for an athlete, red added under the pointer, neutrals and
-zombies as `CPM_LEMMING_*` combine them). NeoLemmix's helper icons over a
-pointed gadget are not drawn.
+zombies as `CPM_LEMMING_*` combine them); every gadget - the object
+billboards, the doors and hatches' own geometry, the water bodies - draws
+as a silhouette in the one colour NeoLemmix's `CombineFixedColor` gives
+them, walking the hues every five seconds (`SpriteMaterialCache.flatMaterialFor`,
+`setFlatColor`). NeoLemmix's helper icons over a pointed gadget are not
+drawn.
 
 **The replay is the game's authority**, as in NeoLemmix: a player's
 assignment, release-rate change or nuke is written into `recorded[]` at the

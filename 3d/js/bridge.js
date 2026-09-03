@@ -167,7 +167,38 @@ class SpriteGeometryCache {
     this.resources = resources;
     this.byFrame = new Map();
     this.byMask = new Map();
+    this.flatByFrame = new Map();   // the silhouettes of clear physics mode
+    this.flatColor = new THREE.Color(0xffffff);
     this._emptyGeom = resources.track(new THREE.BufferGeometry());
+  }
+
+  /**
+   * A frame's shape in one colour (NeoLemmix's CombineFixedColor, how every
+   * gadget draws in clear physics mode): a white cut-out of the frame,
+   * tinted by the shared colour - one colour for all, set by setFlatColor.
+   */
+  flatMaterialFor(frame) {
+    let material = this.flatByFrame.get(frame);
+    if (material) return material;
+    const w = frame.width, h = frame.height;
+    const mask = frame.getMask();
+    const rgba = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      if (mask[i] !== 0) rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = rgba[i * 4 + 3] = 255;
+    }
+    material = this.resources.track(new THREE.MeshBasicMaterial({
+      map: this._makeTexture(rgba, w, h), color: this.flatColor.clone(),
+      alphaTest: 0.5, side: THREE.DoubleSide,
+    }));
+    this.flatByFrame.set(frame, material);
+    return material;
+  }
+
+  /** The one colour every silhouette wears now. */
+  setFlatColor(hex) {
+    if (this.flatColor.getHex() === hex) return;
+    this.flatColor.setHex(hex);
+    for (const m of this.flatByFrame.values()) m.color.setHex(hex);
   }
 
   _makeTexture(rgba, w, h) {
@@ -312,7 +343,7 @@ class BillboardPool {
    * Rebuild sprites from captured draw calls.
    * zFor(layer) maps a capture layer (-1 background / 0 normal / 1 decal) to depth.
    */
-  sync(items, zFor, interpolate) {
+  sync(items, zFor, interpolate, flat) {
     const nextPositions = interpolate ? new Map() : null;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -322,7 +353,8 @@ class BillboardPool {
       const src = item.frame || item.mask;
       const mesh = this._acquire(i);
       mesh.geometry = entry.geometry;
-      mesh.material = entry.material;
+      // clear physics: the shape only, in the one colour
+      mesh.material = flat && item.frame ? this.geometryCache.flatMaterialFor(item.frame) : entry.material;
       // geometry origin is the sprite's top-left corner
       const bx = item.x + src.offsetX;
       const by = item.y + src.offsetY + (item.flipY ? entry.h : 0);

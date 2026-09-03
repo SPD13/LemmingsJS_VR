@@ -1712,6 +1712,7 @@
     // water: a translucent body under the wave sprites, which keep animating
     // on top of it. Deep enough to fill the slab, so a drowning lemming is
     // seen through it rather than in front of it.
+    const waterMeshes = [];
     for (const pool of state.doors ? waterObjectsFrom(level, profile, OBJECT_Z) : []) {
       const w = pool.x1 - pool.x0, h = pool.y1 - pool.y0, d = pool.z1 - pool.z0;
       if (w <= 0 || h <= 0 || d <= 0) continue;
@@ -1724,6 +1725,7 @@
       mesh.position.set(pool.x0 + w / 2, pool.y0 + h / 2, pool.z0 + d / 2);
       mesh.renderOrder = 1; // after the terrain, so it tints what is behind it
       worldGroup.add(mesh);
+      waterMeshes.push({ mesh, colour: pool.colour });
     }
 
     const lemmingPool = new BillboardPool(worldGroup, materialCache);
@@ -1793,14 +1795,19 @@
       // objects drawn as openings have their own geometry: drop the flat copy
       // (ObjectManager emits exactly one draw per object, in list order) and
       // keep their texture in step with the animation
-      let objectItems = portalIndices.size === 0 ? objCapture.items
-        : objCapture.items.filter((_, i) => !portalIndices.has(i));
+      // (clear physics: the background gadgets and the on-terrain ones are left
+      // out, as NeoLemmix leaves rlBackgroundObjects and rlOnTerrainGadgets out)
+      const cpmHides = (i) => {
+        const g = level.objects[i] && level.objects[i].gadget;
+        return !!g && (g.effectBase === "BACKGROUND" || g.effectBase === "PAINT" || g.onlyOnTerrain);
+      };
+      const cpmOn = !!(cpmOverlay && game.clearPhysics);
+      const objectItems = portalIndices.size === 0 && !cpmOn ? objCapture.items
+        : objCapture.items.filter((_, i) => !portalIndices.has(i) && !(cpmOn && cpmHides(i)));
       if (cpmOverlay) {
-        // clear physics: the terrain as its physics map, the background
-        // gadgets gone (NeoLemmix leaves rlBackgroundObjects out), the layer
-        // of trigger areas and marks repainted for this frame
+        // clear physics: the terrain as its physics map, the layer of
+        // trigger areas and marks repainted for this frame
         terrain.setPhysicsPaint(game.clearPhysics ? level.physics : null, cpmHighlightBits(level));
-        if (game.clearPhysics) objectItems = objectItems.filter((it) => it.layer >= 0);
         cpmOverlay.update(game);
       }
       if (portalIndices.size > 0) {
@@ -1810,8 +1817,16 @@
           // A hatch keeps the open frame on its ceiling square: the doors are
           // real geometry now, so following the animation there would leave
           // the painted ones lying in the opening as the real ones swing.
-          if (frame && !portal.hatch) {
-            portal.mesh.material = materialCache.forFrame(frame).material;
+          // (clear physics: the opening's geometry in the one colour, doors included)
+          const shown = portal.hatch ? portal.animation.frames[0] : (frame || portal.animation.frames[0]);
+          if (shown) {
+            portal.mesh.material = game.clearPhysics
+              ? materialCache.flatMaterialFor(shown) : materialCache.forFrame(shown).material;
+          }
+          if (portal.flaps) {
+            const doorMaterial = game.clearPhysics
+              ? materialCache.flatMaterialFor(portal.closedFrame) : materialCache.forFrame(portal.closedFrame).material;
+            for (const flap of portal.flaps) flap.mesh.material = doorMaterial;
           }
           if (!portal.flaps || !portal.openness) continue;
           // swing the doors by however far this frame has the hatch open
@@ -2012,6 +2027,18 @@
       groundData, profileUrl, musicTrack, pieceMap,
       getLastTickTime: () => lastTickTime,
       syncScene, resetSceneMemory,
+      // clear physics: the gadgets' one colour walks the hues every five
+      // seconds (MakeFixedDrawColor), between ticks too; the water bodies with it
+      cpmAnimate: (now) => {
+        if (!cpmOverlay) return;
+        if (game.clearPhysics) {
+          const c = new THREE.Color().setHSL((now % 5000) / 5000, 1, 0.375);
+          materialCache.setFlatColor(c.getHex());
+          for (const w of waterMeshes) w.mesh.material.color.copy(c);
+        } else {
+          for (const w of waterMeshes) if (w.mesh.material.color.getHex() !== w.colour) w.mesh.material.color.setHex(w.colour);
+        }
+      },
       // re-derive the colour-keyed relief (master switch or a per-piece tag)
       rebuildRelief: () => {
         session.terrain.setRelief(
@@ -3440,6 +3467,7 @@
       // here: grips, sticks and drags all change that scale mid-session
       session.particles.updateScale();
       updateHoverRing(); // ring keeps following the hovered lemming
+      if (session.cpmAnimate) session.cpmAnimate(now);
       session.gui.setViewRect(visibleLevelRect()); // the minimap's frame
       session.gui.update();
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
