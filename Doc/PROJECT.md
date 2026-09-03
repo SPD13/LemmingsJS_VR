@@ -366,6 +366,19 @@ them, walking the hues every five seconds (`SpriteMaterialCache.flatMaterialFor`
 `setFlatColor`). NeoLemmix's helper icons over a pointed gadget are not
 drawn.
 
+**Skill shadows** (`lemmix/js/shadows.js`, `makeShadowOverlay` in
+`app.js`): with a skill selected and a lemming under the cursor, the level
+shows what the skill would do - the bricks a builder would lay, a basher's
+or miner's tunnel, a digger's hole, a bomber's crater, a jumper's arc, a
+shimmier's or glider's path, a laserer's beam, a cloner's twin - the way
+`LemRendering.pas` draws them: a copy of the lemming is simulated with the
+skill frame by frame (`simulateTransitionLem`, `simulateLem` with the
+physics map put back afterwards), "low" pixels lie under the terrain and
+"high" ones on destructible terrain, each the contrasting grey of what is
+beneath at three-quarter alpha. A glider falling under the cursor shows its
+path whatever the skill. Repainted on every tick and, paused, when the
+lemming or the skill under the cursor changes.
+
 While an attempt is replaying - the replay still has actions ahead - a red
 REPLAY badge shows over the play area: a label in the page on the desktop,
 a plate in the bar's space above the status strip in a headset

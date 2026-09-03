@@ -2265,12 +2265,23 @@
       }
     }
 
+    /** SimulateTransition: a transition with nothing drawn or heard (for a shadow). */
+    simulateTransitionLem(L, action) {
+      this.simulationDepth++;
+      if (action === BA.STACKING) L.stackLow = !this.hasPixelAt(L.x + L.dx, L.y);
+      this.transition(L, action);
+      this.simulationDepth--;
+    }
+
+    /** SimulateLem: the lemming advanced one frame with nothing drawn or heard;
+     *  returns the positions it passed (with `doCheckObjects`), for the shadows. */
     simulateLem(L, doCheckObjects) {
       this.simulationDepth++;
       let handle = this.handleLemming(L);
       if (handle) handle = this.checkLevelBoundaries(L);
+      let pos = [];
       if (handle && doCheckObjects) {
-        const pos = this.getGadgetCheckPositions(L);
+        pos = this.getGadgetCheckPositions(L);
         for (let i = 0; i < pos.length; i++) {
           const px = pos[i][0], py = pos[i][1];
           if (this.lemNextAction !== BA.NONE && px === L.x && py === L.y) {
@@ -2284,7 +2295,7 @@
             || (this.hasTriggerAt(px, py, "PORTAL") && this.findGadgetId(px, py, "PORTAL") !== NO_OBJECT)) {
             L.action = BA.EXPLODING;
             this.simulationDepth--;
-            return;
+            return pos;
           }
           if (this.hasTriggerAt(px, py, "WATER") && L.isSwimmer) this.lemNextAction = BA.SWIMMING;
           if (this.hasTriggerAt(px, py, "TRAP") && this.hasPixelAt(px, py) && L.isDisarmer) this.lemNextAction = BA.FIXING;
@@ -2294,6 +2305,7 @@
         else if (this.hasTriggerAt(L.x, L.y, "FORCERIGHT", L)) this.handleForceField(L, 1);
       }
       this.simulationDepth--;
+      return pos;
     }
 
     checkLemTeleporting(L) {
