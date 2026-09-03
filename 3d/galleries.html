@@ -33,6 +33,7 @@
     background: #161c28; border: 1px solid #2a3446; border-radius: 6px;
     padding: 8px 12px; cursor: pointer; font-size: 12px;
   }
+  .lib-row[hidden] { display: none; } /* the filter hides rows; flex would win otherwise */
   .lib-row:hover { border-color: #6fce7e; background: #1a2231; }
   .lib-row.here { border-color: #ffd866; background: #1e2130; }
   .lib-row.empty { opacity: 0.5; }
