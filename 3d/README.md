@@ -90,7 +90,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   Alt the athlete info in the panel while held, Esc the world library; the
   page's own view keys sit on keys the layout leaves free (Home reset the
   view, PgUp/PgDn zoom, V recentre in VR, J the piece editor, K its class
-  cycle). "configure hotkeys" (top left) opens the configuration, laid out
+  cycle). "configure hotkeys" (top right, under "controls") opens the configuration, laid out
   like NeoLemmix's: the list of keys with their functions, a function and
   its detail for the chosen key, "show unassigned keys", "find key" (press
   the key to jump to it), the key names from your own keyboard layout when
@@ -135,7 +135,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   NeoLemmix's own mechanics, with NeoLemmix's skill panel in place of the
   DOS one; they need the styles and player assets described in the root
   README under "Levels and assets".
-- "3D effects" (top right, under "controls") unfolds the four render
+- "3D effects" (top right, under "configure hotkeys") unfolds the four render
   switches. "3D terrain" toggles colour-keyed relief on the terrain: within a tileset's
   shading of one hue, lighter pixels are pushed up to 4px toward the viewer,
   giving rock and grass real texture. It multiplies the terrain's triangle
