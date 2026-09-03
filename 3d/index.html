@@ -19,6 +19,12 @@
   #game-state { color: #8fa1bb; }
   #game-state.won { color: #6fce7e; }
   #game-state.lost { color: #e07a6a; }
+  /* a level's own text (a NeoLemmix opening or closing text), behind a label */
+  #level-text[hidden] { display: none; }
+  #level-text-toggle { color: #7fd6e8; text-decoration: none; font-size: 11px; }
+  #level-text-toggle:hover { color: #a9e6f4; }
+  #level-text-body { color: #8fa1bb; margin-top: 4px; white-space: pre-wrap; }
+  #level-text-body[hidden] { display: none; }
   #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
   /* the folding panels down the right edge: each is a button that unfolds
      into its panel, which folds back once the mouse has left it */
@@ -165,6 +171,10 @@
   <div id="level-name">&nbsp;</div>
   <div id="level-meta">&nbsp;</div>
   <div id="game-state">&nbsp;</div>
+  <div id="level-text" hidden>
+    <a href="#" id="level-text-toggle">detail &#9656;</a>
+    <div id="level-text-body" hidden></div>
+  </div>
   <div class="btnrow">
     <button id="btn-prev">&larr; prev</button>
     <button id="btn-restart">restart</button>
