@@ -2463,7 +2463,7 @@
           buildReliefMap(level, pieceMap, session.profile, state.emboss, groundData));
       },
     };
-    session.editor = new PieceEditor(session, profileFiles, timer);
+    session.editor = new PieceEditor(session, profileFiles, timer, { confirm: askConfirm });
     if (state.edit) session.editor.enable(); // a level loaded in edit mode opens on its editor
     layoutGuiPanel();
     if (renderer.xr.isPresenting) placeDioramaForXR();
