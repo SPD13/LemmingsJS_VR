@@ -3407,14 +3407,28 @@
       if (role === "tilt") tiltDioramaBy(x, y, seconds);
       else panDioramaBy(x, y, seconds);
     },
-    // the free hand's face buttons zoom the board about its focus, as the
-    // PgUp/PgDn keys do - not while a window is up, which owns the hands
+    // The free hand's face buttons dolly the board along the line of sight:
+    // the point of it being looked at - wherever the board has been panned
+    // to - comes closer or recedes, staying dead centre, and the rest grows
+    // or shrinks with it in perspective. (Scaling about the level's focus,
+    // as the keys do, pulls a panned board toward its middle instead.) A
+    // gaze off the board dollies its focus point. Not while a window is up,
+    // which owns the hands.
     onZoom: (dir, seconds) => {
       if (!session || anyVrWindowUp()) return;
+      const head = vr.lastHeadPose;
+      if (!head) return;
+      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(head.quat);
+      const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(dioramaRoot.quaternion);
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, dioramaFocusWorld());
+      const point = new THREE.Ray(head.pos, gaze).intersectPlane(plane, new THREE.Vector3())
+        || dioramaFocusWorld();
+      const line = point.sub(head.pos);
+      const dist = line.length();
+      if (dist < 1e-4) return;
       const next = THREE.MathUtils.clamp(
-        dioramaRoot.scale.x * Math.pow(VR_ZOOM_RATE, dir * seconds),
-        VR_PIXEL_SCALE * 0.15, VR_PIXEL_SCALE * 8);
-      scaleDioramaAbout(next, dioramaFocusWorld());
+        dist / Math.pow(VR_ZOOM_RATE, dir * seconds), VR_ZOOM_NEAR, VR_ZOOM_FAR);
+      dioramaRoot.position.addScaledVector(line.normalize(), next - dist);
     },
     placeDiorama: placeDioramaForXR,
     // a recentre brings the windows to the new view along with the board
