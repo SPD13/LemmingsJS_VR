@@ -73,6 +73,26 @@ const listFiles = (p, ext) => fs.readdirSync(p, { withFileTypes: true })
   .sort((a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" }));
 const toUrl = (repoRoot, abs) => path.relative(repoRoot, abs).split(path.sep).join("/");
 
+/**
+ * The styles a level's terrain pieces come from: the STYLE of every $TERRAIN
+ * block, lowercased, sorted, once each. A `*group` pseudo-style (a piece
+ * group defined in the level) names no folder and is left out. This is what
+ * the tagging status and the sprite galleries go by, since a level's theme
+ * says nothing about where its pieces are from.
+ */
+function terrainStyles(text) {
+  const styles = new Set();
+  const re = /^\s*\$TERRAIN\s*$([\s\S]*?)^\s*\$END\s*$/gmi;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const s = /^\s*STYLE\s+(.+?)\s*$/mi.exec(m[1]);
+    if (!s) continue;
+    const style = s[1].toLowerCase();
+    if (style && style[0] !== "*") styles.add(style);
+  }
+  return Array.from(styles).sort();
+}
+
 /** The header of a .nxlv: the keys before the first section, plus what the browser lists. */
 function readLevelHeader(file) {
   const text = readText(file);
@@ -82,6 +102,7 @@ function readLevelHeader(file) {
   return {
     title: first(nx, "TITLE") || path.basename(file, ".nxlv").replace(/_/g, " "),
     theme: first(nx, "THEME") || null,
+    styles: terrainStyles(text),
     nxId: first(nx, "ID") || null,
     width: num("WIDTH"), height: num("HEIGHT"),
     lemmings: num("LEMMINGS"), save: num("SAVE_REQUIREMENT"),
@@ -257,4 +278,4 @@ if (require.main === module) {
     " · " + index.count + " levels");
 }
 
-module.exports = { buildIndex, parseNx, readLevelHeader };
+module.exports = { buildIndex, parseNx, readLevelHeader, terrainStyles };

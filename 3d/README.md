@@ -172,8 +172,27 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
 - `e` enters edit mode and toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
-  re-meshes live. "export JSON" downloads the profile for `profiles/`; a tag
-  applies to the piece id, so it covers every level of the same tileset.
+  re-meshes live. A tag belongs to the sprite, not the placement, so it is
+  kept with the sprite's gallery: a DOS tileset's file
+  (`profiles/<pack>-g<set>.json`) or a NeoLemmix style folder's
+  (`profiles/nx-<style>.json`, pieces keyed `<style>:<piece>`), and covers
+  every level that draws the sprite. A Lemmix level reads the file of each
+  style its pieces come from (the editor's info line names the file);
+  "save" posts every changed file to the launcher, "export JSON" downloads
+  them for `profiles/`. "galleries" (or "this piece in its gallery") opens
+  the sprite galleries page.
+- `galleries.html` is the sprite galleries page, web only: every DOS tileset
+  and every NeoLemmix style down the left (a filter box narrows the list, a
+  green mark says which have a profile file), and for the open one a
+  miniature of each terrain sprite with the same tag buttons as the editor,
+  the current tag lit. Tags are saved, exported or reset per gallery, and
+  are the same files the editor writes, so the 3D page shows them on its
+  next level load. `?gallery=<id>` opens a gallery (`nx:<style>` or
+  `<pack>-g<set>`), `&piece=<key>` scrolls to and outlines a sprite. The
+  NeoLemmix list comes from `neolemmix/styles/index.json`, which the
+  launcher builds live and `node tools/styles-index.js` writes for static
+  hosting. The library's edit mode links each rank's styles to their gallery
+  and has a "sprite galleries" button.
 
 All three start on, as does "sound". Pressing a button remembers that choice
 in localStorage, so only the settings you actually change are stored and the
@@ -371,9 +390,18 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   compositor's terrain piece list with the original draw-flag semantics.
   Everything drawn defaults to the terrain slab — in Lemmings nearly every
   drawn pixel is standable ground — and the other classes come only from
-  per-tileset JSON profiles in `profiles/` (e.g. `lemmings-g0.json`), tagged
-  per piece id in the editor. A reconcile pass enforces depth>0 ⇔
+  per-gallery JSON profiles in `profiles/` (`lemmings-g0.json` for a DOS
+  tileset, `nx-orig_marble.json` for a NeoLemmix style), tagged per sprite
+  in the editor or the galleries page. A reconcile pass enforces depth>0 ⇔
   pixel-solid, so classification can never disagree with collision.
+- `js/profile-store.js` — the profile files: which file a piece's tag lives
+  in, the merged view of the files a level uses, unsaved-change tracking
+  (a clean file is re-fetched on every level load, a changed one is kept),
+  saving through the launcher's POST route with a write receipt and
+  read-back, the export download, and the tag buttons both tools share.
+- `js/galleries.js` — the sprite galleries page: the DOS tilesets by probing
+  each classic pack's ground files, the styles from the styles index, the
+  sprites drawn from the ground palette or the style's PNGs.
 - `js/terrain.js` — destructible extruded terrain. The level's solidity mask
   (which IS the collision data) plus the depth buffer are greedy-meshed per
   32×32-pixel chunk — front/back faces per class at its own Z band, step
@@ -415,10 +443,11 @@ camera, renderer, controls}` for console debugging and automated checks.
 ## Known gaps / next steps
 
 - Only one tileset has been hand-tagged (`profiles/lemmings-g0.json`, seven
-  pieces of the dirt set marked backdrop); the other eight fall back to
-  "everything is terrain". The editor exists (`e`), the authoring sessions
-  have not happened. Exported profiles must be saved into `3d/profiles/`
-  manually.
+  pieces of the dirt set marked backdrop); the other eight, and every
+  NeoLemmix style, fall back to "everything is terrain". The tools exist
+  (the editor, `e`, and the galleries page), the authoring sessions have not
+  happened. Saving needs the launcher's server; on a static host the
+  exported profiles must be copied into `3d/profiles/` by hand.
 - Objects that are not openings or water still extrude like any sprite, at
   fixed depths (background objects behind the slab, others in front).
 - Audio (music + SFX) plays through the engine's own AdLib/OPL synth

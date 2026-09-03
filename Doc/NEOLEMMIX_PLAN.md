@@ -187,6 +187,18 @@ From `3d/js/app.js`, `gui.js`, `bridge.js`, `portals.js`, `depth.js`, `terrain.j
 
 ## Status (2 September 2026)
 
+- 3 September 2026: tagging per sprite gallery. A depth profile is now
+  one file per gallery — a DOS tileset (`profiles/<pack>-g<set>.json`) or a
+  NeoLemmix style folder (`profiles/nx-<style>.json`, the piece's own style
+  rather than the level's theme) — merged per level by
+  `3d/js/profile-store.js`, which the piece editor and the new sprite
+  galleries page (`3d/galleries.html`: every tileset and style, a miniature
+  per sprite with the editor's tag buttons, save/export/reset per gallery,
+  `?gallery=&piece=` deep links) both write through. `levels/index.json`
+  lists each level's `styles`; the launcher serves
+  `neolemmix/styles/index.json` live (`tools/styles-index.js` writes it) and
+  runs standalone with `node launcher/server.js`; `tools/profiles-test.js`
+  (54 fixtures) covers the store, the indexes and the routes.
 - 3 September 2026: NeoLemmix's hotkeys (`3d/js/hotkeys.js`): the key
   table with its three layouts (traditional by default), the held filters
   (direction, walkers only, athlete info), save/load state, the special
@@ -256,7 +268,7 @@ Trigger dispatch per `CheckTriggerArea` order; gadget animation state machine (R
 `lemmix/js/audio.js`: music resolution per 1.1 (`MUSIC` key, `;` fallback list, rotation by level ordinal, typo tolerance), tracker playback through libopenmpt (`AudioWorklet`, gain node into the existing `3d/js/audio.js` volume chain), `.ogg/.wav` via `decodeAudioData`; SFX from `sound/`. Extend `3d/js/audio.js` with a "file source" alongside the OPL source, keeping VR panning.
 
 ### Phase 7 — 3D-layer generalisation
-1. Engine-neutral piece data: string piece keys (`"g0/12"` for DOS, `"orig_fire:bricks_01"` for Lemmix) in `depth.js`, `editor.js`, `DepthProfiles` (`profiles/<slug>-g<n>.json` stays for DOS; `profiles/nx-<style>.json` for Lemmix); the launcher's profile POST route accepts the new pattern; edit-mode "tagged" marks on lemmix directory rows per style.
+1. Engine-neutral piece data: string piece keys (`"g0/12"` for DOS, `"orig_fire:bricks_01"` for Lemmix) in `depth.js`, `editor.js`, `DepthProfiles` (`profiles/<slug>-g<n>.json` stays for DOS; `profiles/nx-<style>.json` for Lemmix); the launcher's profile POST route accepts the new pattern; edit-mode "tagged" marks on lemmix directory rows per style. *Done, 3 September 2026:* the Lemmix file is the piece's own style's (not the level theme's), a level merges the files of every style it uses (`3d/js/profile-store.js`), and the sprite galleries page (`3d/galleries.html`) tags any tileset or style sprite by sprite; `levels/index.json` lists each level's `styles`, `neolemmix/styles/index.json` (launcher route, `tools/styles-index.js`) lists each style's pieces.
 2. Engine-neutral object descriptors for `portals.js` (`{kind, x, y, trigger, animation, closedFrame}`) produced by both engines, so entrances/exits/water get doors and bodies in Lemmix levels too.
 3. `app.js` status strip: pre-text before start, post-text and postview result line on end, talisman achievements (`lem3d-talismans`); custom per-pack `skill_panels.png` honoured by `panel.js`.
 

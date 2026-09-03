@@ -73,8 +73,19 @@ removing a pack:
 node tools/levels-index.js
 ```
 
-The Electron launcher (`launcher/`) serves that index live from the folders,
-so with it no regeneration step is needed.
+The 3D page's sprite galleries (`3d/galleries.html`) read
+`neolemmix/styles/index.json`, the terrain pieces of every NeoLemmix style.
+Write it after unpacking the styles package:
+
+```
+node tools/styles-index.js
+```
+
+The Electron launcher (`launcher/`) serves both indexes live from the
+folders, so with it no regeneration step is needed; it is also what saves the
+tagging done in the piece editor and the galleries page (`3d/profiles/`).
+`node launcher/server.js [port]` runs the same server from a terminal without
+Electron, over plain HTTP.
 
 ## Credits
 

@@ -113,6 +113,9 @@
   }
   .lib-mark { font-size: 11px; color: #5a6a7c; }
   .lib-mark.tagged { color: #6fce7e; font-weight: 600; }
+  /* editing, a rank's styles link to their sprite galleries (galleries.html) */
+  #lib-status a.lib-style { color: #7fd6e8; text-decoration: none; }
+  #lib-status a.lib-style:hover { color: #a9e6f4; text-decoration: underline; }
   /* the directory browser: where we are, and one row per thing inside */
   #lib-crumb { font-size: 12px; color: #8fa1bb; display: flex; gap: 8px; align-items: baseline; }
   #lib-crumb .lib-part { color: #cdd6e4; text-decoration: none; }
@@ -276,6 +279,7 @@
   <div class="btnrow">
     <button id="ed-save">save</button>
     <button id="ed-export">export JSON</button>
+    <button id="ed-galleries">galleries</button>
   </div>
   <div id="ed-msg"></div>
 </div>
@@ -302,6 +306,7 @@
 <script src="js/audio.js"></script>
 <script src="js/bridge.js"></script>
 <script src="js/depth.js"></script>
+<script src="js/profile-store.js"></script>
 <script src="js/portals.js"></script>
 <script src="js/steel.js"></script>
 <script src="js/terrain.js"></script>

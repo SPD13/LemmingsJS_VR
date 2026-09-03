@@ -1781,6 +1781,7 @@
   });
 
   const factory = new Lemmings.GameFactory("../");
+  const profileFiles = new ProfileFiles(); // the depth profiles, one file per sprite gallery
   const raycaster = new THREE.Raycaster();
 
   const audio = new GameAudio();
@@ -1996,23 +1997,21 @@
       window.__lem3dGroundData = lemmixEngine.groundData(level);
     }
 
-    // depth compositing (plan §5.1): per-tileset profile + per-pixel classes
+    // depth compositing (plan §5.1): per-gallery profiles + per-pixel classes.
+    // A DOS level's pieces are tagged in its tileset's file, named after the
+    // pack's folder; a Lemmix level's by name in the file of each style its
+    // pieces come from, merged into one view (profile-store.js)
     const config = await factory.getConfig(state.gameType);
     const groundData = window.__lem3dGroundData;
-    let profile = null;
     let profileUrl = null;
-    if (state.engine === "lemmix") {
-      // a Lemmix level's pieces are tagged by name, in a profile per theme style
-      profileUrl = "profiles/nx-" + (level.themeName || "default").replace(/[^a-z0-9_]/gi, "") + ".json";
-      profile = await DepthProfiles.load(profileUrl);
-    } else if (groundData && groundData.lr) {
-      // the profile is named after the pack's folder, wherever it lives
+    if (state.engine !== "lemmix" && groundData && groundData.lr) {
       const slug = (config.path || "game").split("/").pop()
         .replace(/[^a-z0-9]/gi, "").toLowerCase();
       const setId = groundData.lr.graphicSet1 != null ? groundData.lr.graphicSet1 : 0;
       profileUrl = "profiles/" + slug + "-g" + setId + ".json";
-      profile = await DepthProfiles.load(profileUrl);
     }
+    const profileUrls = ProfileStore.urlsForGroundData(groundData, profileUrl);
+    const profile = await profileFiles.loadAll(profileUrls);
     const depthMap = buildDepthMap(level, groundData, profile);
     const pieceMap = buildPieceMap(level, groundData);
     const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss, groundData);
@@ -2438,7 +2437,7 @@
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
       lemmingPool, objectPool, particles, resources, depthMap, profile,
-      groundData, profileUrl, musicTrack, playMusic, pieceMap,
+      groundData, profileUrl, profileUrls, musicTrack, playMusic, pieceMap,
       getLastTickTime: () => lastTickTime,
       syncScene, resetSceneMemory, shadowOverlay,
       // clear physics: the gadgets' one colour walks the hues every five
@@ -2459,7 +2458,7 @@
           buildReliefMap(level, pieceMap, session.profile, state.emboss, groundData));
       },
     };
-    session.editor = new PieceEditor(session, profileUrl || "profiles/profile.json", timer);
+    session.editor = new PieceEditor(session, profileFiles, timer);
     layoutGuiPanel();
     if (renderer.xr.isPresenting) placeDioramaForXR();
 
