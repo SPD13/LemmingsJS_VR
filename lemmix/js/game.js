@@ -277,6 +277,12 @@
       if (pick.lemming) return pick.lemming;
       return sim.getPriorityLemming(BA.NONE, x, y).lemming; // hover: any lemming under the cursor
     }
+    /** The lemming NeoLemmix marks at this cursor position - the one the selected skill would go to - or null. */
+    getSelectedLemmingAt(x, y) {
+      const sim = this.game.sim;
+      const action = sim.selectedSkill ? SKILL_TO_ACTION[sim.selectedSkill] : BA.NONE;
+      return sim.getPriorityLemming(action, x, y).lemming;
+    }
     doLemmingAction(lem, skillIndex) {
       const name = this.game.sim.activeSkills[skillIndex];
       return !!name && this.game.sim.assignSkillTo(lem, name);
@@ -303,7 +309,8 @@
   Lemming.prototype.render = function (display) {
     if (this.removed || this.teleporting || !this.game) return;
     if (this.portalWarpFrame >= 3 && this.portalWarpFrame <= 4) return; // mid-warp
-    const variant = this.isZombie ? "zombie" : this.isNeutral ? "neutral" : this.hasPermanentSkills ? "athlete" : "normal";
+    let variant = this.isZombie ? "zombie" : this.isNeutral ? "neutral" : this.hasPermanentSkills ? "athlete" : "normal";
+    if (this.game.cursorLemming === this) variant += "+selected"; // the one the skill would go to
     const frame = this.game.sprites.frame(this.action, this.dx, this.frame, variant);
     if (frame) display.drawFrame(frame, this.x, this.y);
     // the countdown over a lemming about to blow (DrawLemmingCountdown)

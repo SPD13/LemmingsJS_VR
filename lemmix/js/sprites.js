@@ -9,8 +9,12 @@
  * lem.x, lem.y)` puts the feet on the lemming's position.
  *
  * State recolouring (scheme.nxmi $STATE_RECOLORING): an athlete (any
- * permanent skill), a zombie or a neutral lemming swaps the listed colours;
- * each variant is built once and kept.
+ * permanent skill), a zombie or a neutral lemming swaps the listed colours,
+ * and the lemming under the cursor - the one the skill would go to - swaps
+ * the $SELECTED ones on top (the shirt turns red in the default set), the
+ * way TRecolorImage.SwapColors does: every applicable swap is tried against
+ * the sprite's own colour and the last one registered wins. Each variant
+ * is built once and kept.
  *
  * Also here: the physics masks of gfx/mask (bomber, stoner, basher, fencer,
  * miner, laser) the game carves terrain with.
@@ -47,7 +51,7 @@
       const animsSec = nx.section("ANIMATIONS");
       const recolor = nx.section("STATE_RECOLORING");
       if (recolor) {
-        for (const kind of ["ATHLETE", "ZOMBIE", "NEUTRAL"]) {
+        for (const kind of ["ATHLETE", "ZOMBIE", "NEUTRAL", "SELECTED"]) {
           this.recolor[kind.toLowerCase()] = recolor.sectionsNamed(kind)
             .map((s) => [NxParser.color(s.get("FROM")), NxParser.color(s.get("TO"))]).filter((p) => p[0] !== null && p[1] !== null);
         }
@@ -80,7 +84,8 @@
 
     /**
      * The frame to draw for a lemming: `variant` is "normal", "athlete",
-     * "zombie" or "neutral". Frames past the end wrap by frameDiff, the way
+     * "zombie" or "neutral", with "+selected" appended for the lemming
+     * under the cursor. Frames past the end wrap by frameDiff, the way
      * DrawThisLemming does.
      */
     frame(action, dx, frameIndex, variant) {
@@ -94,22 +99,27 @@
       if (this.variants.has(key)) return this.variants.get(key);
       const side = dx > 0 ? anim.right : anim.left;
       let bmp = side.frames[f];
-      if (variant && variant !== "normal" && this.recolor[variant] && this.recolor[variant].length) bmp = recolored(bmp, this.recolor[variant]);
+      const pairs = [];
+      for (const kind of (variant || "normal").split("+")) {
+        if (kind !== "normal" && this.recolor[kind]) pairs.push(...this.recolor[kind]);
+      }
+      if (pairs.length) bmp = recolored(bmp, pairs);
       const frame = Lemmix.LevelBuilder.frameFromBitmap(bmp, -side.footX, -side.footY);
       this.variants.set(key, frame);
       return frame;
     }
   }
 
+  /** SwapColors: each swap is matched against the sprite's own colour; the last match wins. */
   function recolored(bmp, pairs) {
     const out = bmp.clone();
     const d = out.data;
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] === 0) continue;
       const c = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
-      for (const [from, to] of pairs) {
-        if (c === from) { d[i] = (to >> 16) & 255; d[i + 1] = (to >> 8) & 255; d[i + 2] = to & 255; break; }
-      }
+      let to = -1;
+      for (const pair of pairs) if (c === pair[0]) to = pair[1];
+      if (to >= 0) { d[i] = (to >> 16) & 255; d[i + 1] = (to >> 8) & 255; d[i + 2] = to & 255; }
     }
     return out;
   }
