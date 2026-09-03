@@ -126,6 +126,9 @@
         sharedBorder: false, // each cell is its own tile; nothing is drawn on a shared line
         minimap: { x: this.cells.length * CELL + REGION_X + MINIMAP.dx, y: REGION_Y + MINIMAP.dy, w: MINIMAP.w, h: MINIMAP.h,
           scaleX: MINIMAP.scale, scaleY: MINIMAP.scale, pad: 1 },
+        // the cells that are two buttons, one over the other, and where they part
+        splitCells: ["frameskip", "directional", "cpmreplay"].map((w) => this.cells.indexOf(w)),
+        halfRows: { upperBottom: HALF_UPPER_BOTTOM, lowerTop: HALF_LOWER_TOP },
         // the toolbar's relief comes from these, once the graphics are in
         // (until then the canvas is black and there is nothing to emboss)
         reliefFromMasks: true, reliefMasks: null };
