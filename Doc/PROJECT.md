@@ -366,6 +366,11 @@ them, walking the hues every five seconds (`SpriteMaterialCache.flatMaterialFor`
 `setFlatColor`). NeoLemmix's helper icons over a pointed gadget are not
 drawn.
 
+While an attempt is replaying - the replay still has actions ahead - a red
+REPLAY badge shows over the play area: a label in the page on the desktop,
+a plate in the bar's space above the status strip in a headset
+(`setReplayBadge`, driven from the frame loop).
+
 **The replay is the game's authority**, as in NeoLemmix: a player's
 assignment, release-rate change or nuke is written into `recorded[]` at the
 current frame (cutting whatever the replay had from that frame on,

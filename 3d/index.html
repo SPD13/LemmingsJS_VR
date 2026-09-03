@@ -26,6 +26,11 @@
   #level-text-body { color: #8fa1bb; margin-top: 4px; white-space: pre-wrap; }
   #level-text-body[hidden] { display: none; }
   #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
+  /* the red REPLAY over the play area while a NeoLemmix attempt is replaying */
+  #replay-badge { position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+    color: #ff3b3b; border: 2px solid #ff3b3b; border-radius: 6px; background: rgba(40, 8, 8, 0.75);
+    padding: 4px 14px; font: bold 15px monospace; letter-spacing: 3px; pointer-events: none; z-index: 5; }
+  #replay-badge[hidden] { display: none; }
   /* the folding panels down the right edge: each is a button that unfolds
      into its panel, which folds back once the mouse has left it */
   .fold { right: 12px; padding-top: 26px; }
@@ -237,6 +242,7 @@
 </div>
 
 <div id="hud-hover" class="hud">&nbsp;</div>
+<div id="replay-badge" hidden>REPLAY</div>
 
 <div id="confirm" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="confirm-title">

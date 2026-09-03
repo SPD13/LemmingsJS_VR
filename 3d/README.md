@@ -63,7 +63,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   picked from the desktop, with a warning first when it names another
   level, then played from the start at normal speed; in a headset the
   button only says to load it from the desktop). An R in the info strip
-  means the attempt is
+  and a red REPLAY over the play area (in a headset, above the status
+  strip) mean the attempt is
   replaying. Keys: `r` replay, `b` frame back, `n` frame forward, `i`
   replay-insert mode (your actions add to the replay instead of cutting it)
 - `space` pause, `n` single tick while paused, `+`/`-` speed, `,`/`.` prev/next
@@ -208,7 +209,10 @@ intended start area.
   hands (0.15×–8×)
 - **the face buttons of the other hand** — the upper one (Y, or B when the
   left hand points) zooms the board in and the lower one (X, or A) zooms it
-  out, for as long as it is held, about the level's focus point.
+  out, for as long as it is held. It is a dolly along your line of sight:
+  whatever you are looking at stays dead centre and comes closer or
+  recedes, wherever the board has been panned to, and the rest grows or
+  shrinks with it in perspective.
 - **A/X** (the pointing hand) — recenter: bring the diorama back in front of
   where you are looking right now, at default scale. The in-scene windows -
   the world catalog, the restart question, the settings - open centred in
