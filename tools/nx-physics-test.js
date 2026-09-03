@@ -434,8 +434,8 @@ async function main() {
     run(game, 30);
     const L = game.lemmings[0], before = solidCount(level), x0 = L.x, y0 = L.y, action = L.action;
     const sh = Lemmix.Shadows.compute(game, L, "BUILDER");
-    check("builder shadow: 12 bricks x 6 low pixels rising a row each", sh.low.length === 72 && sh.high.length === 0 &&
-      sh.low.every(([x, y]) => y < y0 && y >= y0 - 12) && Math.max(...sh.low.map((p) => p[0])) === x0 + 2 * 11 + 5 && Math.min(...sh.low.map((p) => p[1])) === y0 - 12, { n: sh.low.length, maxX: Math.max(...sh.low.map((p) => p[0])) - x0 });
+    check("builder shadow: 12 bricks x 6 pixels rising a row each", sh.bricks.length === 72 && sh.high.length === 0 && sh.low.length === 0 &&
+      sh.bricks.every(([x, y]) => y < y0 && y >= y0 - 12) && Math.max(...sh.bricks.map((p) => p[0])) === x0 + 2 * 11 + 5 && Math.min(...sh.bricks.map((p) => p[1])) === y0 - 12, { n: sh.bricks.length, maxX: Math.max(...sh.bricks.map((p) => p[0])) - x0 });
     check("...and leaves the game as it was", solidCount(level) === before && L.x === x0 && L.y === y0 && L.action === action);
     // --- a digger through the 40-px floor: a hole outline, high pixels only
     const dig = Lemmix.Shadows.compute(game, L, "DIGGER");
