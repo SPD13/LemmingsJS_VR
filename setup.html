@@ -69,6 +69,7 @@
   .where { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 8px; border: 1px solid; text-transform: uppercase; letter-spacing: .04em; }
   .where.server { color: #7fd6e8; border-color: #35707c; }
   .where.browser { color: #c9b26a; border-color: #6a5b2c; }
+  .nx-state { flex: 0 0 100%; padding-left: 83px; } /* its own line, under the name */
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; }
   .dot.on { background: #6fce7e; color: #6fce7e; }
   .dot.off { background: #e0554a; color: #e0554a; }
@@ -154,19 +155,19 @@
       <span class="where browser" id="where-engine">browser</span>
       <span class="dot off" id="dot-engine"></span>
       <span class="lib-row-name">NeoLemmix <span class="dim">gfx, sounds, music, the classic styles and its two level packs</span></span>
-      <span id="state-engine" class="dim"></span>
       <button id="btn-get-engine" data-busy>1. get NeoLemmix</button>
       <button id="btn-zip-engine" data-busy>2. install zip…</button>
       <input type="file" id="file-engine" accept=".zip,application/zip">
+      <span id="state-engine" class="dim nx-state"></span>
     </div>
     <div class="row" id="row-styles">
       <span class="where browser" id="where-styles">browser</span>
       <span class="dot off" id="dot-styles"></span>
       <span class="lib-row-name">Styles package <span class="dim">every style the level packs use</span></span>
-      <span id="state-styles" class="dim"></span>
       <button id="btn-get-styles" data-busy>1. get the styles</button>
       <button id="btn-zip-styles" data-busy>2. install zip…</button>
       <input type="file" id="file-styles" accept=".zip,application/zip">
+      <span id="state-styles" class="dim nx-state"></span>
     </div>
     <div id="msg-nx" class="msg"></div>
   </div>
