@@ -2438,6 +2438,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     const depthMap = buildDepthMap(level, groundData, profile);
     const pieceMap = buildPieceMap(level, groundData);
     const reliefMap = buildReliefMap(level, pieceMap, profile, state.emboss, groundData);
+    // which pixels may draw their neighbours' colours down the extrusion, and
+    // where each of those colours is sampled from (depth.js)
+    const blendMap = buildBlendMap(level, pieceMap, profile, groundData);
     // entrances/exits become real openings; this also carves the terrain
     // behind them (render only - collision is untouched). Switched off, they
     // stay the flat sprites the original draws and nothing is carved.
@@ -2469,7 +2472,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     worldGroup.position.y = level.height;
     dioramaRoot.add(worldGroup);
 
-    const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources);
+    const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources, blendMap);
     if (state.smooth) terrain.setSmooth(true);
     if (state.smoothTerrain) terrain.setSmoothTerrain(true);
 
@@ -2959,6 +2962,13 @@ Vfs.boot("", "setup.html").then(function (booted) {
       rebuildRelief: () => {
         session.terrain.setRelief(
           buildReliefMap(level, pieceMap, session.profile, state.emboss, groundData));
+      },
+      // re-derive the surface blend (a per-piece tag; there is no master switch).
+      // A saved state put back needs nothing of its own: resync() restores each
+      // pixel's slot from the map the level was built with.
+      rebuildBlend: () => {
+        session.terrain.setBlend(
+          buildBlendMap(level, pieceMap, session.profile, groundData));
       },
       // the 2D view: the terrain as one quad, the openings as the original's
       // sprites again (their geometry and the water hidden), the bar flat

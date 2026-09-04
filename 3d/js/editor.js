@@ -51,6 +51,7 @@ class PieceEditor {
       autoBtn: document.getElementById("ed-auto"),
       embossBtn: document.getElementById("ed-emboss"),
       invertBtn: document.getElementById("ed-invert"),
+      blendBtn: document.getElementById("ed-blend"),
       resetBtn: document.getElementById("ed-reset"),
       saveBtn: document.getElementById("ed-save"),
       exportBtn: document.getElementById("ed-export"),
@@ -61,6 +62,7 @@ class PieceEditor {
     this._onAutoBtn = () => this.setClass(null);
     this._onEmbossBtn = () => this.toggleEmboss();
     this._onInvertBtn = () => this.toggleEmbossInvert();
+    this._onBlendBtn = () => this.toggleBlend();
     this._onResetBtn = () => this.resetAll();
     this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
@@ -69,6 +71,7 @@ class PieceEditor {
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
     this.dom.invertBtn.addEventListener("click", this._onInvertBtn);
+    this.dom.blendBtn.addEventListener("click", this._onBlendBtn);
     this.dom.resetBtn.addEventListener("click", this._onResetBtn);
     this.dom.saveBtn.addEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.addEventListener("click", this._onExportBtn);
@@ -223,6 +226,22 @@ class PieceEditor {
     this._setEmboss(ProfileStore.nextEmbossInvert(this._key(this.selectedId), this.s.profile));
   }
 
+  /**
+   * Turn surface blend on/off for the selected piece: only the colours down
+   * the extrusion change, so the depth buffer is untouched and the blend map
+   * alone is re-derived.
+   */
+  toggleBlend() {
+    if (this.selectedId == null) return;
+    const url = this._urlFor(this.selectedId);
+    if (!url) return;
+    const key = this._key(this.selectedId);
+    this.files.setBlend(key, ProfileStore.nextBlendToggle(key, this.s.profile), url);
+    this._refreshProfile();
+    if (this.s.rebuildBlend) this.s.rebuildBlend();
+    this._renderInfo();
+  }
+
   cycleClass() {
     if (this.selectedId == null) return;
     this.setClass(ProfileStore.nextClass(this._override(this.selectedId)));
@@ -280,7 +299,8 @@ class PieceEditor {
       const gallery = ProfileStore.galleryForUrl(url);
       const dirty = this.files.isDirty(url);
       const profile = this.files.get(url);
-      const tags = Object.keys(profile.terrain.byId).length + Object.keys(profile.emboss.byId).length;
+      const tags = Object.keys(profile.terrain.byId).length +
+        Object.keys(profile.emboss.byId).length + Object.keys(profile.blend.byId).length;
       const line = document.createElement("div");
       line.className = "ed-file";
       const a = document.createElement("a");
@@ -340,6 +360,7 @@ class PieceEditor {
         ? (embossInvertedFor(key, this.s.profile)
             ? "on (dark raised)" : "on (light raised)")
         : "off") +
+      " · surface blend " + (surfaceBlendFor(key, this.s.profile) ? "on" : "off") +
       (url ? " · file " + ProfileStore.fileName(url) + (this.files.isDirty(url) ? " (unsaved)" : "") : "");
   }
 
@@ -368,6 +389,7 @@ class PieceEditor {
     this._refreshProfile();
     this._applyProfile();
     if (this.s.rebuildRelief) this.s.rebuildRelief();
+    if (this.s.rebuildBlend) this.s.rebuildBlend();
     this._renderInfo();
     this._msg("all tags reset in " + urls.map(ProfileStore.fileName).join(", ") + " (not saved yet)", true);
   }
@@ -393,6 +415,7 @@ class PieceEditor {
     this.dom.autoBtn.removeEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.removeEventListener("click", this._onEmbossBtn);
     this.dom.invertBtn.removeEventListener("click", this._onInvertBtn);
+    this.dom.blendBtn.removeEventListener("click", this._onBlendBtn);
     this.dom.resetBtn.removeEventListener("click", this._onResetBtn);
     this.dom.saveBtn.removeEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.removeEventListener("click", this._onExportBtn);

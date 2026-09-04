@@ -64,6 +64,12 @@ async function main() {
     check("gallery <-> url round trip (nx)", ProfileStore.galleryForUrl(ProfileStore.urlForGallery("nx:orig_dirt")) === "nx:orig_dirt");
     check("gallery <-> url round trip (dos)", ProfileStore.galleryForUrl(ProfileStore.urlForGallery("ohno-g2")) === "ohno-g2");
     check("a bad gallery id has no url", ProfileStore.urlForGallery("../etc") === null && ProfileStore.urlForGallery("nx:Bad Name") === null);
+    // app.js and library.js build a DOS tileset's url by hand off PROFILE_DIR,
+    // so it has to be exported, not just a local of the module: when it was not,
+    // every one of them asked for "undefinedlemmings-g0.json"
+    check("the profile directory is exported, and both ways of building a url agree",
+      ProfileStore.PROFILE_DIR === "3d/profiles/" &&
+      ProfileStore.PROFILE_DIR + "lemmings-g0.json" === ProfileStore.urlForGallery("lemmings-g0"));
 
     const lemmix = {
       lr: { terrains: [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 1 }] },
@@ -79,10 +85,11 @@ async function main() {
   // ================= merging
   {
     console.log("merging");
-    const a = { tileset: "A", terrain: { default: "terrain", byId: { "a:x": "backdrop" } }, emboss: { byId: { "a:x": false } }, objects: { byId: { 4: { kind: "water" } } } };
+    const a = { tileset: "A", terrain: { default: "terrain", byId: { "a:x": "backdrop" } }, emboss: { byId: { "a:x": false } }, blend: { byId: { "a:x": true } }, objects: { byId: { 4: { kind: "water" } } } };
     const b = { terrain: { byId: { "b:y": "relief", "a:x": "overlay" } } };
     const m = ProfileStore.merge([{ url: "a", profile: a }, { url: "none", profile: null }, { url: "b", profile: b }]);
     check("byId maps are unioned", m.terrain.byId["b:y"] === "relief" && m.emboss.byId["a:x"] === false);
+    check("surface blend rides along", m.blend.byId["a:x"] === true);
     check("a later file wins a duplicate key", m.terrain.byId["a:x"] === "overlay");
     check("object settings ride along", m.objects.byId[4].kind === "water");
     check("the default class is terrain", m.terrain.default === "terrain");
@@ -109,17 +116,93 @@ async function main() {
     ProfileStore.withEmboss(p, "k", "invert");
     check("invert from inverted goes back to light raised", ProfileStore.nextEmbossInvert("k", p) === true);
     check("the depth pass reads the tag", D.depthClassForPiece({ key: "k" }, ProfileStore.withClass(p, "k", "backdrop")) === D.DepthClass.BACKDROP);
-    check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} } }));
+    check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} }, blend: { byId: {} } }));
 
-    const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton() };
+    check("surface blend is off by default and toggles on", ProfileStore.nextBlendToggle("k", p) === true);
+    ProfileStore.withBlend(p, "k", true);
+    check("...and off again", ProfileStore.nextBlendToggle("k", p) === false &&
+      D.surfaceBlendFor("k", p) === true);
+    ProfileStore.withBlend(p, "k", false);
+    check("off removes the entry", !("k" in p.blend.byId) && D.surfaceBlendFor("k", p) === false);
+
+    const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton(), blendBtn: fakeButton() };
     renderTagButtons(dom, "k", p, true);
     check("buttons: the class and inverted shade are lit", dom.classBtns[0].classList.contains("active") && !dom.autoBtn.classList.contains("active") &&
       dom.embossBtn.classList.contains("active") && dom.invertBtn.classList.contains("active"));
+    check("buttons: surface blend is dark until it is tagged", !dom.blendBtn.classList.contains("active"));
+    ProfileStore.withBlend(p, "k", true);
+    renderTagButtons(dom, "k", p, true);
+    check("buttons: ...and lit once it is", dom.blendBtn.classList.contains("active"));
+    ProfileStore.withBlend(p, "k", false);
     renderTagButtons(dom, "other", p, true);
     check("buttons: an untagged piece lights auto and 3D shade only", dom.autoBtn.classList.contains("active") && dom.embossBtn.classList.contains("active") &&
       !dom.invertBtn.classList.contains("active") && !dom.classBtns[0].classList.contains("active"));
     renderTagButtons(dom, null, p, false);
     check("buttons: nothing selected disables them all", dom.classBtns.every((b) => b.disabled) && dom.autoBtn.disabled && dom.embossBtn.disabled);
+  }
+
+  // ================= surface blend: which colours a pixel may draw from
+  {
+    console.log("surface blend");
+    // a 4x4 sprite in three stripes: dark green, light green, brown. Only the
+    // light green touches the dark green - the brown is two rows away.
+    const DARK = [20, 80, 20], LIGHT = [60, 180, 60], BROWN = [120, 80, 40];
+    const W = 4, H = 4;
+    const rows = [DARK, LIGHT, BROWN, BROWN];
+    const groundImage = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const o = (y * W + x) * 4, c = rows[y];
+        groundImage[o] = c[0]; groundImage[o + 1] = c[1]; groundImage[o + 2] = c[2];
+        groundImage[o + 3] = 255;
+      }
+    }
+    const level = {
+      width: W, height: H, groundImage,
+      getGroundMaskLayer: () => ({ groundMask: new Uint8Array(W * H).fill(1) }),
+    };
+    const pieceMap = new Uint16Array(W * H).fill(1); // one piece, id 0
+    const groundData = { terraImages: { 0: { name: "s:p" } } };
+    const has = (palette, c) => palette.some((d) => d.r === c[0] && d.g === c[1] && d.b === c[2]);
+
+    const off = D.buildBlendMap(level, pieceMap, { blend: { byId: {} } }, groundData);
+    check("an untagged piece yields no donors", off.donors.length === 0 &&
+      off.slot.every((v) => v === 0));
+
+    const on = D.buildBlendMap(level, pieceMap, { blend: { byId: { "s:p": true } } }, groundData);
+    const dark = on.donors[on.slot[0 * W + 0] - 1];
+    check("the dark green zone may use the light green that touches it",
+      has(dark, DARK) && has(dark, LIGHT));
+    check("...but not the brown two rows away", !has(dark, BROWN));
+    const brown = on.donors[on.slot[3 * W + 0] - 1];
+    check("the brown zone reaches the light green it borders, not the dark",
+      has(brown, BROWN) && has(brown, LIGHT) && !has(brown, DARK));
+    check("a donor is a pixel of the colour it stands for", on.donors.every((palette) =>
+      palette.every((d) => {
+        const o = d.index * 4;
+        return groundImage[o] === d.r && groundImage[o + 1] === d.g && groundImage[o + 2] === d.b;
+      })));
+
+    // one colour everywhere: nothing to blend with, so nothing is marked
+    const flat = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < W * H; i++) {
+      flat[i * 4] = DARK[0]; flat[i * 4 + 1] = DARK[1]; flat[i * 4 + 2] = DARK[2]; flat[i * 4 + 3] = 255;
+    }
+    const plain = D.buildBlendMap({ ...level, groundImage: flat }, pieceMap,
+      { blend: { byId: { "s:p": true } } }, groundData);
+    check("a single-colour zone is dropped", plain.donors.length === 0 &&
+      plain.slot.every((v) => v === 0));
+
+    // a near-identical shade is one colour, not two: the anti-aliasing rule
+    const aa = groundImage.slice();
+    for (let x = 0; x < W; x++) { // row 1 nudged a hair away from LIGHT
+      const o = (1 * W + x) * 4;
+      aa[o] = LIGHT[0] + 4; aa[o + 1] = LIGHT[1] + 4; aa[o + 2] = LIGHT[2] + 4;
+    }
+    const merged = D.buildBlendMap({ ...level, groundImage: aa }, pieceMap,
+      { blend: { byId: { "s:p": true } } }, groundData);
+    check("shades within the merge threshold count as one colour",
+      merged.donors[merged.slot[0] - 1].length === 2);
   }
 
   // ================= the file cache
@@ -140,8 +223,10 @@ async function main() {
     check("save writes the file and clears dirty", r.ok && !files.isDirty("3d/profiles/nx-b.json") && files.exists("3d/profiles/nx-b.json") &&
       JSON.parse(table["3d/profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
     check("export is the file's JSON", JSON.parse(files.exportJson("3d/profiles/nx-b.json")).terrain.byId["b:q"] === "relief");
+    files.setBlend("b:q", true, "3d/profiles/nx-b.json");
     files.resetAll("3d/profiles/nx-b.json");
-    check("reset clears every tag of the file", same(files.get("3d/profiles/nx-b.json").terrain.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
+    check("reset clears every tag of the file", same(files.get("3d/profiles/nx-b.json").terrain.byId, {}) &&
+      same(files.get("3d/profiles/nx-b.json").blend.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
 
     const st = new ProfileFiles({ fetch: fakeFetch({ "3d/profiles/nx-c.json": "{}" }, { postAs: "static" }).fetch });
     st.setClass("c:p", "relief", "3d/profiles/nx-c.json");
@@ -151,6 +236,11 @@ async function main() {
     mg.setClass("c:p", "relief", "3d/profiles/nx-c.json");
     const r3 = await mg.save("3d/profiles/nx-c.json");
     check("a read-back that differs is not a save", !r3.ok && r3.error === "read-back mismatch");
+    const mb = new ProfileFiles({ fetch: fakeFetch({}, { mangle: (json) => JSON.stringify({ ...JSON.parse(json), blend: { byId: {} } }) }).fetch });
+    mb.setBlend("c:p", true, "3d/profiles/nx-c.json");
+    const r4 = await mb.save("3d/profiles/nx-c.json");
+    check("a read-back that drops the surface blend is not a save", !r4.ok && r4.error === "read-back mismatch");
+
     const two = new ProfileFiles({ fetch: fakeFetch({}).fetch });
     two.setClass("a:p", "relief", "3d/profiles/nx-a.json");
     two.setEmboss(5, "invert", "3d/profiles/lemmings-g0.json");
