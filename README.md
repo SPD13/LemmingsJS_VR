@@ -46,7 +46,9 @@ Url parameters are leveraged to save game state automatically (shortcut in brack
 
 ## Levels and assets
 
-Git ships the engine only. The game data - the level packs under `levels/`
+Git ships the engine only - no copyrighted asset is part of the
+distribution; `setup.md` is the player's guide to what to download, where,
+and how to install it, the original games' own files included. The game data - the level packs under `levels/`
 and NeoLemmix's own files under `neolemmix/` (styles, panel graphics, masks,
 sound effects, music) - comes from elsewhere, in one of two **asset modes**
 the 3D page chooses with the URL (`?assets=static` or `?assets=server`,
