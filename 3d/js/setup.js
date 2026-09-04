@@ -130,7 +130,7 @@
    * fflate and writes every BATCH entries, so the package never sits in
    * memory whole. Returns {files, bytes}.
    */
-  async function unpackZip(file, map, label, put = browserLevels.put) {
+  async function unpackZip(file, map, label, put = browserStore.put) {
     const unzipper = new fflate.Unzip();
     unzipper.register(fflate.UnzipInflate);
     let ready = [];
@@ -234,12 +234,21 @@
     return { dirs: [dir], map: (n) => ({ path: "levels/" + dir + "/" + n, unit: "levels/" + dir }) };
   }
 
-  // ---- where the levels go: this browser's store, or the server's levels/ folder ----
+  // ---- where the files go: this browser's store, or the server's folders ----
+
+  // NeoLemmix's folders that make up each unit on the server
+  const NX_UNIT_FOLDERS = { engine: ["gfx", "data", "music"], styles: ["styles", "sound"] };
 
   /** The browser's store (static mode): what the service worker serves. */
-  const browserLevels = {
+  const browserStore = {
     where: "browser",
     writable: true,
+    async units() {
+      const all = await unitsById();
+      return { engine: all.engine || null, styles: all.styles || null };
+    },
+    deleteUnit: (kind) => Vfs.deleteUnit(kind),
+    recordUnit: (kind, info) => Vfs.put("units", { id: kind, name: KINDS[kind].label, ...info }),
     async dirs() {
       const units = await unitsById();
       return (await Vfs.levelDirs()).map((dir) => {
@@ -259,14 +268,38 @@
   };
 
   /**
-   * The server's levels/ folder (server mode): the launcher lists it,
-   * takes a pack file by file and removes a directory (launcher/README.md).
-   * A plain web server answers none of that: its index names the
-   * directories, read-only.
+   * The server's neolemmix/ and levels/ folders (server mode): the launcher
+   * reports and lists them, takes a batch of files and removes a folder
+   * (launcher/README.md). A plain web server answers none of that: what
+   * its indexes name is shown, read-only.
    */
-  const serverLevels = {
+  const serverStore = {
     where: "server",
-    writable: false, // until dirs.json answers
+    writable: false, // until the launcher answers
+    async units() {
+      const st = await fetchJson("neolemmix/state.json");
+      this.writable = !!st;
+      if (!st) {
+        // probed the way the game page finds them
+        const [engine, styles] = await Promise.all([
+          fetchOk("neolemmix/gfx/panel/empty_slot.png"),
+          fetchJson("neolemmix/styles/index.json").then((i) => !!(i && i.count)),
+        ]);
+        const unknown = { files: null, bytes: null, installedAt: null, version: "", source: "" };
+        return { engine: engine ? unknown : null, styles: styles ? unknown : null };
+      }
+      const unit = (kind) => {
+        const parts = NX_UNIT_FOLDERS[kind].map((f) => st[f]).filter(Boolean);
+        if (!st[NX_UNIT_FOLDERS[kind][0]] || !st[NX_UNIT_FOLDERS[kind][0]].files) return null;
+        return {
+          files: parts.reduce((n, f) => n + f.files, 0), bytes: parts.reduce((n, f) => n + f.bytes, 0),
+          installedAt: Math.max(...parts.map((f) => f.mtime)), version: "", source: "",
+        };
+      };
+      return { engine: unit("engine"), styles: unit("styles") };
+    },
+    async deleteUnit(kind) { for (const f of NX_UNIT_FOLDERS[kind]) await this.remove("neolemmix/" + f); },
+    recordUnit: async () => {},
     async dirs() {
       const list = await fetchJson("levels/dirs.json");
       this.writable = Array.isArray(list);
@@ -277,34 +310,35 @@
     },
     index: () => fetchJson(Vfs.INDEX_PATH),
     persist: async () => {},
+    /** One POST for the batch: per file a u32 path length, the path, a u32 size, the bytes (the launcher's readBatch). */
     async put(batch) {
-      const queue = batch.slice();
-      const worker = async () => {
-        for (;;) {
-          const e = queue.shift();
-          if (!e) return;
-          const res = await fetch(ROOT + e.path.split("/").map(encodeURIComponent).join("/"), { method: "PUT", body: e.blob });
-          if (!res.ok) throw new Error("the server answered " + res.status + " for " + e.path);
-        }
-      };
-      await Promise.all(Array.from({ length: 6 }, worker));
+      const enc = new TextEncoder();
+      const parts = [];
+      const u32 = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n, true); return b; };
+      for (const e of batch) {
+        const name = enc.encode(e.path);
+        parts.push(u32(name.length), name, u32(e.blob.size), e.blob);
+      }
+      const res = await fetch(ROOT + "upload", { method: "POST", body: new Blob(parts) });
+      if (!res.ok) throw new Error("the server answered " + res.status + ": " + (await res.text()));
     },
-    async deleteDir(dir) {
-      const res = await fetch(ROOT + "levels/" + encodeURIComponent(dir), { method: "DELETE" });
+    async remove(dir) {
+      const res = await fetch(ROOT + dir.split("/").map(encodeURIComponent).join("/"), { method: "DELETE" });
       if (!res.ok && res.status !== 404) throw new Error("the server answered " + res.status);
     },
+    deleteDir(dir) { return this.remove("levels/" + dir); },
     record: async () => {},
     // the launcher builds levels/index.json live; only the classic scan cache is stale
     async changed() { try { localStorage.removeItem(SCAN_CACHE_KEY); } catch (e) {} },
   };
 
   /** The store the Levels section works on, in the mode in force. */
-  const levels = () => Vfs.mode === "server" ? serverLevels : browserLevels;
+  const store = () => Vfs.mode === "server" ? serverStore : browserStore;
 
-  /** False, with a message, when the server in force takes no installs. */
-  function levelsWritable() {
-    if (levels().writable) return true;
-    say("msg-levels", "this server does not take level installs (only the launcher does)", true);
+  /** False, with a message on `msgId`, when the server in force takes no installs. */
+  function writable(msgId) {
+    if (store().writable) return true;
+    say(msgId, "this server does not take installs (only the launcher does)", true);
     return false;
   }
 
@@ -338,32 +372,36 @@
 
   /** NeoLemmix or the styles package: replaces the previous install of the same kind. */
   async function installUnit(kind, file, names) {
-    const units = await unitsById();
+    const s = store();
+    if (!writable("msg-nx")) return;
+    const units = await s.units();
     const label = KINDS[kind].label;
-    if (units[kind]) {
+    const u = units[kind];
+    if (u) {
       const ok = await askConfirm("Replace " + label + "?", "replace",
-        "The " + units[kind].files + " files installed on " + fmtDate(units[kind].installedAt) + " are removed first.");
+        "The " + (u.files != null ? u.files + " files" : "files") + " installed" + (u.installedAt ? " on " + fmtDate(u.installedAt) : "") +
+        " on the " + s.where + " are removed first.");
       if (!ok) return;
     }
     // the level directories NeoLemmix's zip carries replace their namesakes
     const dirs = kind === "engine" ? levelDirsIn(names.map((e) => e.name)) : [];
-    if (dirs.length && !(await confirmReplaceDirs(dirs, browserLevels))) return;
-    await Vfs.persist();
+    if (dirs.length && !(await confirmReplaceDirs(dirs))) return;
+    await s.persist();
     progress("removing the previous " + label, null);
-    if (units[kind]) await Vfs.deleteUnit(kind);
-    for (const d of dirs) await Vfs.deleteUnit("levels/" + d);
-    const { files, bytes } = await unpackZip(file, KINDS[kind].map, "unpacking " + file.name);
+    if (u) await s.deleteUnit(kind);
+    for (const d of dirs) await s.deleteDir(d);
+    const { files, bytes } = await unpackZip(file, KINDS[kind].map, "unpacking " + file.name, s.put);
     const version = kind === "engine" ? (/(V?\d+\.\d+(\.\d+)?(-\w+)?)/i.exec(file.name) || [null, ""])[1] : "";
-    await Vfs.put("units", { id: kind, name: label, version, source: file.name, installedAt: Date.now(), files, bytes });
-    for (const d of dirs) await recordLevelDir(d, file.name);
-    await rebuildIndexes();
-    say("msg-nx", label + " installed: " + files + " files, " + fmtMB(bytes));
+    await s.recordUnit(kind, { version, source: file.name, installedAt: Date.now(), files, bytes });
+    for (const d of dirs) await s.record(d, file.name);
+    await s.changed();
+    say("msg-nx", label + " installed on the " + s.where + ": " + files + " files, " + fmtMB(bytes));
   }
 
   const levelDirsIn = (list) => Array.from(new Set(list.filter((n) => n.startsWith("levels/") && n.split("/").length > 2).map((n) => n.split("/")[1])));
 
-  async function confirmReplaceDirs(dirs, store = levels()) {
-    const have = new Set((await store.dirs()).map((d) => d.dir));
+  async function confirmReplaceDirs(dirs) {
+    const have = new Set((await store().dirs()).map((d) => d.dir));
     const clash = dirs.filter((d) => have.has(d));
     if (!clash.length) return true;
     return askConfirm("Replace " + (clash.length === 1 ? "the level directory " + clash[0] : clash.length + " level directories") + "?",
@@ -379,16 +417,16 @@
   }
 
   async function installLevelZip(file, names) {
-    const store = levels();
-    if (!levelsWritable()) return;
+    const s = store();
+    if (!writable("msg-levels")) return;
     const { dirs, map } = levelZipMap(names, file.name);
     if (!(await confirmReplaceDirs(dirs))) return;
-    await store.persist();
-    for (const d of dirs) await store.deleteDir(d);
-    const { files, bytes } = await unpackZip(file, map, "unpacking " + file.name, store.put);
-    for (const d of dirs) await store.record(d, file.name);
-    await store.changed();
-    say("msg-levels", dirs.join(", ") + " installed on the " + store.where + ": " + files + " files, " + fmtMB(bytes));
+    await s.persist();
+    for (const d of dirs) await s.deleteDir(d);
+    const { files, bytes } = await unpackZip(file, map, "unpacking " + file.name, s.put);
+    for (const d of dirs) await s.record(d, file.name);
+    await s.changed();
+    say("msg-levels", dirs.join(", ") + " installed on the " + s.where + ": " + files + " files, " + fmtMB(bytes));
   }
 
   /** A folder picked with the directory input: levels/<its name>/... */
@@ -397,26 +435,26 @@
     const files = Array.from(fileList).filter((f) => f.webkitRelativePath && !/(^|\/)\./.test(f.webkitRelativePath));
     const dirs = Array.from(new Set(files.map((f) => f.webkitRelativePath.split("/")[0])));
     if (!dirs.length) { say("msg-levels", "nothing to install in that folder", true); return; }
-    const store = levels();
-    if (!levelsWritable()) return;
+    const s = store();
+    if (!writable("msg-levels")) return;
     try {
       if (!(await confirmReplaceDirs(dirs))) return;
-      await store.persist();
-      for (const d of dirs) await store.deleteDir(d);
+      await s.persist();
+      for (const d of dirs) await s.deleteDir(d);
       progress("storing " + dirs.join(", "), 0);
       let done = 0, bytes = 0;
       for (let i = 0; i < files.length; i += BATCH) {
         const batch = files.slice(i, i + BATCH).map((f) => ({
           path: "levels/" + f.webkitRelativePath, unit: "levels/" + f.webkitRelativePath.split("/")[0], blob: f,
         }));
-        await store.put(batch);
+        await s.put(batch);
         done += batch.length;
         bytes += batch.reduce((n, e) => n + e.blob.size, 0);
         progress("storing " + dirs.join(", ") + " — " + done + " of " + files.length + " files", done / files.length);
       }
-      for (const d of dirs) await store.record(d, "folder upload");
-      await store.changed();
-      say("msg-levels", dirs.join(", ") + " installed on the " + store.where + ": " + done + " files, " + fmtMB(bytes));
+      for (const d of dirs) await s.record(d, "folder upload");
+      await s.changed();
+      say("msg-levels", dirs.join(", ") + " installed on the " + s.where + ": " + done + " files, " + fmtMB(bytes));
     } catch (e) {
       say("msg-levels", "install failed: " + (e && e.message ? e.message : e), true);
       console.error(e);
@@ -430,15 +468,15 @@
   async function installClassic() {
     if (busy) return;
     say("msg-levels", "");
-    const store = levels();
-    if (!levelsWritable()) return;
+    const s = store();
+    if (!writable("msg-levels")) return;
     try {
       if (!(await confirmReplaceDirs(GITHUB.dirs))) return;
       progress("listing " + GITHUB.repo, null);
       const paths = await classicFileList();
       if (!paths.length) throw new Error("no files listed for " + GITHUB.dirs.join(", "));
-      await store.persist();
-      for (const d of GITHUB.dirs) await store.deleteDir(d);
+      await s.persist();
+      for (const d of GITHUB.dirs) await s.deleteDir(d);
       let done = 0, bytes = 0;
       const entries = [];
       const queue = paths.slice();
@@ -456,11 +494,11 @@
         }
       };
       await Promise.all(Array.from({ length: GITHUB.parallel }, worker));
-      progress("storing " + GITHUB.dirs.join(", ") + " on the " + store.where, null);
-      await store.put(entries);
-      for (const d of GITHUB.dirs) await store.record(d, "github.com/" + GITHUB.repo);
-      await store.changed();
-      say("msg-levels", GITHUB.dirs.join(", ") + " installed on the " + store.where + ": " + done + " files, " + fmtMB(bytes));
+      progress("storing " + GITHUB.dirs.join(", ") + " on the " + s.where, null);
+      await s.put(entries);
+      for (const d of GITHUB.dirs) await s.record(d, "github.com/" + GITHUB.repo);
+      await s.changed();
+      say("msg-levels", GITHUB.dirs.join(", ") + " installed on the " + s.where + ": " + done + " files, " + fmtMB(bytes));
     } catch (e) {
       say("msg-levels", "download failed: " + (e && e.message ? e.message : e), true);
       console.error(e);
@@ -490,16 +528,16 @@
 
   async function deleteLevelDir(dir) {
     if (busy) return;
-    const store = levels();
-    if (!levelsWritable()) return;
+    const s = store();
+    if (!writable("msg-levels")) return;
     const ok = await askConfirm("Delete " + dir + "?", "delete",
-      "Its levels leave " + (store.where === "server" ? "the server's levels/ folder" : "this browser's storage") + "; your progress on them stays.");
+      "Its levels leave " + (s.where === "server" ? "the server's levels/ folder" : "this browser's storage") + "; your progress on them stays.");
     if (!ok) return;
     try {
       progress("deleting " + dir, null);
-      await store.deleteDir(dir);
-      await store.changed();
-      say("msg-levels", dir + " deleted from the " + store.where);
+      await s.deleteDir(dir);
+      await s.changed();
+      say("msg-levels", dir + " deleted from the " + s.where);
     } catch (e) {
       say("msg-levels", "delete failed: " + e.message, true);
     } finally {
@@ -557,21 +595,10 @@
 
   /**
    * What the game page needs before it can play: {engine, styles, levels}
-   * as booleans - from the store in static mode (`units` and the index the
-   * store holds), from the server otherwise (a panel bitmap of the engine,
-   * the styles index and the levels index, fetched past the worker with
-   * ?probe like Vfs' own probes).
+   * as booleans, from the store in force's units and index.
    */
-  async function playState(units, index) {
-    if (Vfs.mode === "static") {
-      return { engine: !!units.engine, styles: !!units.styles, levels: levelCount(index) > 0 };
-    }
-    const [engine, styles, levels] = await Promise.all([
-      fetchOk("neolemmix/gfx/panel/empty_slot.png"),
-      fetchJson("neolemmix/styles/index.json").then((i) => !!(i && i.count)),
-      fetchJson(Vfs.INDEX_PATH).then((i) => levelCount(i) > 0),
-    ]);
-    return { engine, styles, levels };
+  function playState(units, index) {
+    return { engine: !!units.engine, styles: !!units.styles, levels: levelCount(index) > 0 };
   }
 
   /** The Play link when everything is there, else what is missing. */
@@ -595,24 +622,32 @@
   }
 
   async function refresh() {
-    const units = await unitsById();
-    // NeoLemmix and the styles
+    const s = store();
+    // NeoLemmix and the styles, from the store in force
+    const units = await s.units();
+    $("nx-where").textContent = s.where === "server"
+      ? (s.writable
+        ? "In server mode this is the server's neolemmix/ folder: installs land there."
+        : "In server mode this is the server's neolemmix/ folder, as far as a plain web server shows it; it takes no installs (only the launcher does).")
+      : "In static mode this is this browser's storage: installs land here.";
     for (const kind of ["engine", "styles"]) {
       const u = units[kind];
+      $("where-" + kind).className = "where " + s.where;
+      $("where-" + kind).textContent = s.where;
       $("dot-" + kind).className = "dot " + (u ? "on" : "off");
       $("state-" + kind).textContent = u
-        ? "installed" + (u.version ? " (" + u.version + ")" : "") + ": " + u.files + " files, " + fmtMB(u.bytes) + ", " + fmtDate(u.installedAt)
+        ? "installed" + (u.version ? " (" + u.version + ")" : "") +
+          [u.files != null ? ": " + u.files + " files, " + fmtMB(u.bytes) : "", u.installedAt ? ", " + fmtDate(u.installedAt) : ""].join("")
         : "not installed";
       $("btn-zip-" + kind).textContent = u ? "re-install zip…" : "install zip…";
     }
     // the level directories of the store in force, named by its index when it knows them
-    const store = levels();
-    const dirs = await store.dirs();
-    const index = await store.index();
+    const dirs = await s.dirs();
+    const index = await s.index();
     const nodes = new Map();
     for (const n of (index && index.children) || []) nodes.set(n.path.split("/")[0], n);
-    $("levels-where").textContent = store.where === "server"
-      ? (store.writable
+    $("levels-where").textContent = s.where === "server"
+      ? (s.writable
         ? "In server mode this is the server's levels/ folder: installs land there and delete removes from it."
         : "In server mode this is the server's levels/ folder, as its index names it; this server takes no installs (only the launcher does).")
       : "In static mode this is this browser's storage: installs land here.";
@@ -626,13 +661,13 @@
       const engine = node ? node.engine : "";
       const about = [d.bytes != null ? fmtMB(d.bytes) : "", d.files != null ? d.files + " files" : "", d.source].filter(Boolean).join(" · ");
       row.innerHTML =
-        '<span class="where ' + store.where + '">' + store.where + "</span>" +
+        '<span class="where ' + s.where + '">' + s.where + "</span>" +
         '<span class="lib-row-name">' + escapeHtml(node ? node.name : d.dir) + (node && node.name !== d.dir ? ' <span class="dim">' + escapeHtml(d.dir) + "</span>" : "") + "</span>" +
         (engine ? '<span class="lib-badge ' + engine + '">' + engine + "</span>" : '<span class="lib-badge none">no levels found</span>') +
         '<span class="lib-count">' + (node ? node.count + " levels" : "") + "</span>" +
         '<span class="dim">' + escapeHtml(about) + "</span>" +
-        (store.writable ? '<button data-busy data-del="' + escapeHtml(d.dir) + '" title="delete this directory">delete</button>' : "");
-      if (store.writable) row.querySelector("button").addEventListener("click", () => deleteLevelDir(d.dir));
+        (s.writable ? '<button data-busy data-del="' + escapeHtml(d.dir) + '" title="delete this directory">delete</button>' : "");
+      if (s.writable) row.querySelector("button").addEventListener("click", () => deleteLevelDir(d.dir));
       list.appendChild(row);
     }
     // storage
@@ -640,7 +675,7 @@
     $("storage").textContent = "storage used by this site: " + fmtMB(est.usage) +
       (est.quota ? " of " + fmtMB(est.quota) + " available" : "") +
       (est.persisted === true ? " · persistent" : est.persisted === false ? " · not marked persistent (the browser may reclaim it)" : "");
-    renderPlay(await playState(units, index));
+    renderPlay(playState(units, index));
     setButtons();
   }
 

@@ -46,12 +46,15 @@ Besides the files it serves three things of its own:
   — the depth profile of a sprite gallery, written by the 3D page's piece
   editor and its galleries page. Only those names are writable; the reply
   is `{"ok":true}` once the file is on disk.
-- `GET /levels/dirs.json`, `PUT /levels/<dir>/<file>`, `DELETE /levels/<dir>`
-  — the setup page's Levels section in server mode: the level directories
-  on disk with their file count and size, a pack installed file by file
-  (the page unpacks the zip, or reads the folder or GitHub, and uploads
-  each file), a directory removed. Only names under `levels/` are reachable,
-  none starting with a dot.
+- `GET /levels/dirs.json`, `GET /neolemmix/state.json`, `POST /upload`,
+  `DELETE /levels/<dir>`, `DELETE /neolemmix/<folder>` — the setup page in
+  server mode: the level directories on disk with their file count and
+  size, NeoLemmix's own folders (`gfx data music sound styles`) likewise, a
+  batch of files written under `levels/<dir>/` or `neolemmix/<folder>/`
+  (the page unpacks the zip, or reads the folder or GitHub, and sends the
+  files a couple of hundred at a time: for each, a little-endian u32 path
+  length, the path, a u32 byte length, the bytes), a directory removed.
+  Nothing else is reachable, and no name starting with a dot.
 - `PUT /config/lemmings-3d-controls.json`, `…-preferences.json`,
   `…-progress.json` — the player's configuration in server mode: the game
   page writes them whenever a setting, a binding or the progress changes,

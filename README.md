@@ -63,9 +63,10 @@ remembered afterwards; without either it asks the server for
   `config/` at the repo root: the game writes them whenever a setting, a
   binding or the progress changes, reads them at start, and they take
   precedence over the browser's own copy (`config/README.md`; the folder
-  is in git, its files are not). The setup page's Levels section works on
-  the server's `levels/` folder in this mode - list, install, delete -
-  through the launcher; each row is marked *server* or *browser*.
+  is in git, its files are not). The setup page's NeoLemmix rows and
+  Levels section work on the server's `neolemmix/` and `levels/` folders
+  in this mode - state, install, delete - through the launcher; each row is
+  marked *server* or *browser*.
 
 Tracker music (`.it/.xm/.mod`) plays through libopenmpt via chiptune3,
 vendored under `lemmix/vendor/chiptune3/` (MIT, libopenmpt BSD); the setup

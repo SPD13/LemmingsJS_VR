@@ -42,37 +42,94 @@ const MIME = {
 // the configuration files the game keeps on the server (config/README.md)
 const CONFIG_FILE_RE = /^\/config\/lemmings-3d-(controls|preferences|progress)\.json$/;
 
-// the level directories the setup page writes in server mode: a name
-// without slashes or a leading dot, then any path below it; files up to
-// MAX_UPLOAD bytes each
-const LEVEL_DIR_RE = /^\/levels\/([^\/.][^\/]*)\/?$/;
-const LEVEL_FILE_RE = /^\/levels\/([^\/.][^\/]*\/.+[^\/])$/;
-const MAX_UPLOAD = 200e6;
+// what the setup page writes in server mode: a level directory (a name
+// without slashes or a leading dot) and NeoLemmix's own folders, any path
+// below them; a batch of files up to MAX_BATCH bytes in one request
+const NX_FOLDERS = ["gfx", "data", "music", "sound", "styles"];
+const LEVEL_DIR_RE = /^\/(levels\/[^\/.][^\/]*)\/?$/;
+const NX_DIR_RE = /^\/(neolemmix\/(?:gfx|data|music|sound|styles))\/?$/;
+const UPLOAD_RE = /^(levels\/[^\/.][^\/]*|neolemmix\/(?:gfx|data|music|sound|styles))\/[^\/].*[^\/]$/;
+const MAX_BATCH = 500e6;
 
-/** Every folder under `levelsRoot`: [{dir, files, bytes, mtime}], the files counted through the folder. */
+/** A folder's {files, bytes, mtime}, the files counted through its subfolders; null when it is not one. */
+function folderStat(dir) {
+  let stat;
+  try { stat = fs.statSync(dir); } catch (e) { return null; }
+  if (!stat.isDirectory()) return null;
+  let files = 0, bytes = 0;
+  const walk = (d) => {
+    for (const name of fs.readdirSync(d)) {
+      const p = path.join(d, name);
+      const st = fs.statSync(p);
+      if (st.isDirectory()) walk(p);
+      else { files++; bytes += st.size; }
+    }
+  };
+  try { walk(dir); } catch (e) { /* unreadable: counted so far */ }
+  return { files, bytes, mtime: stat.mtimeMs };
+}
+
+/** Every folder under `levelsRoot`: [{dir, files, bytes, mtime}]. */
 function levelDirs(levelsRoot) {
   const out = [];
   let names = [];
   try { names = fs.readdirSync(levelsRoot); } catch (e) { return out; }
   for (const dir of names.sort()) {
     if (dir.startsWith(".")) continue;
-    const full = path.join(levelsRoot, dir);
-    let stat;
-    try { stat = fs.statSync(full); } catch (e) { continue; }
-    if (!stat.isDirectory()) continue;
-    let files = 0, bytes = 0;
-    const walk = (d) => {
-      for (const name of fs.readdirSync(d)) {
-        const p = path.join(d, name);
-        const st = fs.statSync(p);
-        if (st.isDirectory()) walk(p);
-        else { files++; bytes += st.size; }
-      }
-    };
-    try { walk(full); } catch (e) { /* unreadable: counted so far */ }
-    out.push({ dir, files, bytes, mtime: stat.mtimeMs });
+    const st = folderStat(path.join(levelsRoot, dir));
+    if (st) out.push({ dir, ...st });
   }
   return out;
+}
+
+/**
+ * A batch of files to write, as the setup page sends it: for each file a
+ * little-endian u32 with the length of its repo path, the path in UTF-8,
+ * a u32 with the length of its bytes, the bytes. Every path must match
+ * UPLOAD_RE and stay under `absRoot`; the whole batch is checked before
+ * anything is written. Answers {"ok":true,"files":n}, or 400 with why.
+ */
+function readBatch(req, res, absRoot) {
+  const chunks = [];
+  let size = 0;
+  req.on("data", (chunk) => {
+    size += chunk.length;
+    if (size > MAX_BATCH) req.destroy();
+    else chunks.push(chunk);
+  });
+  req.on("end", () => {
+    try {
+      const buf = Buffer.concat(chunks);
+      const writes = [];
+      let p = 0;
+      while (p < buf.length) {
+        if (p + 4 > buf.length) throw new Error("truncated batch");
+        const nameLen = buf.readUInt32LE(p);
+        p += 4;
+        const name = buf.toString("utf8", p, p + nameLen);
+        p += nameLen;
+        if (p + 4 > buf.length) throw new Error("truncated batch");
+        const len = buf.readUInt32LE(p);
+        p += 4;
+        if (p + len > buf.length) throw new Error("truncated batch");
+        const full = path.normalize(path.join(absRoot, name));
+        if (!UPLOAD_RE.test(name) || /(^|\/)\.\.?(\/|$)/.test(name) || !full.startsWith(absRoot + path.sep)) {
+          throw new Error("path not allowed: " + name);
+        }
+        writes.push([full, buf.subarray(p, p + len)]);
+        p += len;
+      }
+      for (const [full, data] of writes) {
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, data);
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, files: writes.length }));
+    } catch (e) {
+      res.writeHead(400);
+      res.end(e.message);
+    }
+  });
 }
 
 /**
@@ -133,32 +190,28 @@ function createStaticServer(root, port, tls = null) {
           return;
         }
 
-        // the setup page installs a level pack on the server: one PUT per
-        // file under levels/<dir>/, and DELETE levels/<dir> removes a
-        // directory. Nothing above levels/ is reachable, and no dot names.
-        const levelFile = req.method === "PUT" && LEVEL_FILE_RE.exec(urlPath);
-        if (levelFile) {
-          const savePath = path.normalize(path.join(absRoot, "levels", levelFile[1]));
-          if (!savePath.startsWith(path.join(absRoot, "levels") + path.sep) || /(^|\/)\.\.?(\/|$)/.test(levelFile[1])) {
-            res.writeHead(403);
-            res.end("forbidden");
-            return;
-          }
-          fs.mkdirSync(path.dirname(savePath), { recursive: true });
-          let size = 0;
-          const out = fs.createWriteStream(savePath);
-          req.on("data", (chunk) => { size += chunk.length; if (size > MAX_UPLOAD) req.destroy(); });
-          req.pipe(out);
-          out.on("finish", () => {
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end('{"ok":true}');
-          });
-          out.on("error", () => { res.writeHead(500); res.end("not written"); });
+        // NeoLemmix on disk, for the setup page in server mode: each of
+        // its folders with file count, size and date (null when missing)
+        if (req.method === "GET" && /^\/neolemmix\/state\.json$/.test(urlPath)) {
+          const state = {};
+          for (const f of NX_FOLDERS) state[f] = folderStat(path.join(absRoot, "neolemmix", f));
+          const json = JSON.stringify(state);
+          res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
+          res.end(json);
           return;
         }
-        const levelDir = req.method === "DELETE" && LEVEL_DIR_RE.exec(urlPath);
-        if (levelDir) {
-          const dir = path.join(absRoot, "levels", levelDir[1]);
+
+        // the setup page installs on the server: a batch of files under
+        // levels/<dir>/ or neolemmix/<folder>/ in one POST (readBatch says
+        // the format), and DELETE levels/<dir> or neolemmix/<folder>
+        // removes a directory. Nothing else is reachable, and no dot names.
+        if (req.method === "POST" && urlPath === "/upload") {
+          readBatch(req, res, absRoot);
+          return;
+        }
+        const rmDir = req.method === "DELETE" && (LEVEL_DIR_RE.exec(urlPath) || NX_DIR_RE.exec(urlPath));
+        if (rmDir) {
+          const dir = path.join(absRoot, rmDir[1]);
           if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
             res.writeHead(404);
             res.end("no such directory");
