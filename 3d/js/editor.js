@@ -378,7 +378,7 @@ class PieceEditor {
     const urls = dirty.length ? dirty : this._urls;
     if (!urls.length) { this._msg("no profile file for this level", false); return; }
     for (const url of urls) {
-      console.log("depth profile — save as 3d/" + url + ":\n" + this.files.exportJson(url));
+      console.log("depth profile — save as " + url + ":\n" + this.files.exportJson(url));
       this.files.download(url);
     }
     this._msg("exported " + urls.map(ProfileStore.fileName).join(", ") + " — save into 3d/profiles/", true);

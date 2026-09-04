@@ -56,8 +56,8 @@ async function main() {
   // ================= keys, urls, galleries
   {
     console.log("keys and files");
-    check("a Lemmix key is filed under its style", ProfileStore.urlForKey("orig_marble:column_01", "profiles/lemmings-g0.json") === "profiles/nx-orig_marble.json");
-    check("a DOS id is filed under the level's tileset", ProfileStore.urlForKey(33, "profiles/lemmings-g0.json") === "profiles/lemmings-g0.json");
+    check("a Lemmix key is filed under its style", ProfileStore.urlForKey("orig_marble:column_01", "3d/profiles/lemmings-g0.json") === "3d/profiles/nx-orig_marble.json");
+    check("a DOS id is filed under the level's tileset", ProfileStore.urlForKey(33, "3d/profiles/lemmings-g0.json") === "3d/profiles/lemmings-g0.json");
     check("a DOS id with no tileset has no file", ProfileStore.urlForKey("33", null) === null);
     check("gallery of a Lemmix key", ProfileStore.galleryForKey("davidz_gold:bar_01", "lemmings-g0") === "nx:davidz_gold");
     check("gallery of a DOS key", ProfileStore.galleryForKey(7, "lemmings-g0") === "lemmings-g0");
@@ -70,10 +70,10 @@ async function main() {
       terraImages: { 0: { name: "orig_dirt:rock_01" }, 1: { name: "orig_marble:column_01" }, 2: { name: "orig_dirt:rock_02" } },
     };
     check("a Lemmix level needs one file per style, in first-seen order",
-      same(ProfileStore.urlsForGroundData(lemmix, null), ["profiles/nx-orig_dirt.json", "profiles/nx-orig_marble.json"]));
+      same(ProfileStore.urlsForGroundData(lemmix, null), ["3d/profiles/nx-orig_dirt.json", "3d/profiles/nx-orig_marble.json"]));
     const dos = { lr: { terrains: [{ id: 3 }] }, terraImages: { 3: { width: 8 } } };
-    check("a DOS level needs its tileset's file", same(ProfileStore.urlsForGroundData(dos, "profiles/lemmings-g1.json"), ["profiles/lemmings-g1.json"]));
-    check("a special level needs none", same(ProfileStore.urlsForGroundData(null, "profiles/lemmings-g1.json"), []));
+    check("a DOS level needs its tileset's file", same(ProfileStore.urlsForGroundData(dos, "3d/profiles/lemmings-g1.json"), ["3d/profiles/lemmings-g1.json"]));
+    check("a special level needs none", same(ProfileStore.urlsForGroundData(null, "3d/profiles/lemmings-g1.json"), []));
   }
 
   // ================= merging
@@ -125,35 +125,35 @@ async function main() {
   // ================= the file cache
   {
     console.log("files");
-    const table = { "profiles/nx-a.json": JSON.stringify({ terrain: { byId: { "a:p": "backdrop" } } }) };
+    const table = { "3d/profiles/nx-a.json": JSON.stringify({ terrain: { byId: { "a:p": "backdrop" } } }) };
     const ff = fakeFetch(table);
     const files = new ProfileFiles({ fetch: ff.fetch });
-    const merged = await files.loadAll(["profiles/nx-a.json", "profiles/nx-b.json"]);
-    check("a present file loads and exists", files.exists("profiles/nx-a.json") && merged.terrain.byId["a:p"] === "backdrop");
-    check("an absent file is an empty profile", !files.exists("profiles/nx-b.json") && same(files.get("profiles/nx-b.json"), ProfileStore.emptyProfile()));
-    files.setClass("b:q", "relief", "profiles/nx-b.json");
-    check("a change marks its file dirty only", same(files.dirtyUrls(), ["profiles/nx-b.json"]));
-    await files.loadAll(["profiles/nx-a.json", "profiles/nx-b.json"]);
-    check("a clean file is fetched again, a dirty one is not", ff.calls["profiles/nx-a.json"] === 2 && ff.calls["profiles/nx-b.json"] === 1);
-    check("the unsaved change survives the reload", files.merged(["profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
-    const r = await files.save("profiles/nx-b.json");
-    check("save writes the file and clears dirty", r.ok && !files.isDirty("profiles/nx-b.json") && files.exists("profiles/nx-b.json") &&
-      JSON.parse(table["profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
-    check("export is the file's JSON", JSON.parse(files.exportJson("profiles/nx-b.json")).terrain.byId["b:q"] === "relief");
-    files.resetAll("profiles/nx-b.json");
-    check("reset clears every tag of the file", same(files.get("profiles/nx-b.json").terrain.byId, {}) && files.isDirty("profiles/nx-b.json"));
+    const merged = await files.loadAll(["3d/profiles/nx-a.json", "3d/profiles/nx-b.json"]);
+    check("a present file loads and exists", files.exists("3d/profiles/nx-a.json") && merged.terrain.byId["a:p"] === "backdrop");
+    check("an absent file is an empty profile", !files.exists("3d/profiles/nx-b.json") && same(files.get("3d/profiles/nx-b.json"), ProfileStore.emptyProfile()));
+    files.setClass("b:q", "relief", "3d/profiles/nx-b.json");
+    check("a change marks its file dirty only", same(files.dirtyUrls(), ["3d/profiles/nx-b.json"]));
+    await files.loadAll(["3d/profiles/nx-a.json", "3d/profiles/nx-b.json"]);
+    check("a clean file is fetched again, a dirty one is not", ff.calls["3d/profiles/nx-a.json"] === 2 && ff.calls["3d/profiles/nx-b.json"] === 1);
+    check("the unsaved change survives the reload", files.merged(["3d/profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
+    const r = await files.save("3d/profiles/nx-b.json");
+    check("save writes the file and clears dirty", r.ok && !files.isDirty("3d/profiles/nx-b.json") && files.exists("3d/profiles/nx-b.json") &&
+      JSON.parse(table["3d/profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
+    check("export is the file's JSON", JSON.parse(files.exportJson("3d/profiles/nx-b.json")).terrain.byId["b:q"] === "relief");
+    files.resetAll("3d/profiles/nx-b.json");
+    check("reset clears every tag of the file", same(files.get("3d/profiles/nx-b.json").terrain.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
 
-    const st = new ProfileFiles({ fetch: fakeFetch({ "profiles/nx-c.json": "{}" }, { postAs: "static" }).fetch });
-    st.setClass("c:p", "relief", "profiles/nx-c.json");
-    const r2 = await st.save("profiles/nx-c.json");
-    check("a static server's echo is not a save", !r2.ok && r2.error === "no write receipt" && st.isDirty("profiles/nx-c.json"));
+    const st = new ProfileFiles({ fetch: fakeFetch({ "3d/profiles/nx-c.json": "{}" }, { postAs: "static" }).fetch });
+    st.setClass("c:p", "relief", "3d/profiles/nx-c.json");
+    const r2 = await st.save("3d/profiles/nx-c.json");
+    check("a static server's echo is not a save", !r2.ok && r2.error === "no write receipt" && st.isDirty("3d/profiles/nx-c.json"));
     const mg = new ProfileFiles({ fetch: fakeFetch({}, { mangle: () => JSON.stringify({ terrain: { byId: {} } }) }).fetch });
-    mg.setClass("c:p", "relief", "profiles/nx-c.json");
-    const r3 = await mg.save("profiles/nx-c.json");
+    mg.setClass("c:p", "relief", "3d/profiles/nx-c.json");
+    const r3 = await mg.save("3d/profiles/nx-c.json");
     check("a read-back that differs is not a save", !r3.ok && r3.error === "read-back mismatch");
     const two = new ProfileFiles({ fetch: fakeFetch({}).fetch });
-    two.setClass("a:p", "relief", "profiles/nx-a.json");
-    two.setEmboss(5, "invert", "profiles/lemmings-g0.json");
+    two.setClass("a:p", "relief", "3d/profiles/nx-a.json");
+    two.setEmboss(5, "invert", "3d/profiles/lemmings-g0.json");
     const rs = await two.saveDirty();
     check("saveDirty saves each changed file", rs.length === 2 && rs.every((x) => x.ok) && two.dirtyUrls().length === 0);
   }
@@ -204,9 +204,9 @@ async function main() {
       const idx = await fetch(base + "/neolemmix/styles/index.json");
       const body = await idx.json();
       check("the styles index is built live", idx.ok && body.count === 2 && body.styles[1].pieces.length === 3);
-      const files = new ProfileFiles({ fetch: (u, init) => fetch(base + "/3d/" + u, init) });
-      files.setClass("my_style:rock_2", "backdrop", "profiles/nx-my_style.json");
-      const saved = await files.save("profiles/nx-my_style.json");
+      const files = new ProfileFiles({ fetch: (u, init) => fetch(base + "/" + u, init) });
+      files.setClass("my_style:rock_2", "backdrop", "3d/profiles/nx-my_style.json");
+      const saved = await files.save("3d/profiles/nx-my_style.json");
       check("ProfileFiles saves through the route", saved.ok &&
         JSON.parse(fs.readFileSync(path.join(tmp, "3d", "profiles", "nx-my_style.json"), "utf8")).terrain.byId["my_style:rock_2"] === "backdrop");
     } finally {

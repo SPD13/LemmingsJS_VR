@@ -60,7 +60,7 @@ const LevelTree = {
   byId: new Map(),
   byPath: new Map(),
 
-  /** Fetch the index (relative to `root`, the repo root as seen from 3d/). */
+  /** Fetch the index (relative to `root`, the repo root as seen from the page). */
   async load(root, force) {
     if (this.root && !force) return this.root;
     const res = await fetch(root + INDEX_URL, { cache: force ? "reload" : "no-cache" });
@@ -218,7 +218,7 @@ const LevelProgress = {
 
 class WorldLibrary {
   /**
-   * `root` is the repo root as seen from the page ("../" from 3d/).
+   * `root` is the repo root as seen from the page ("", the pages sit at the root).
    * enterLevel(levelId) loads the level (with the editor on, in edit mode).
    * onVisibility(open) fires when the catalog is shown or hidden, so the
    * caller can hold the sim while the player is reading it.
@@ -547,7 +547,7 @@ class WorldLibrary {
       // older index) have one, each a link to its gallery
       const styles = Array.from(new Set(node.levels.flatMap(
         (l) => (l.styles && l.styles.length ? l.styles : [l.theme]).filter(Boolean))));
-      Promise.all(styles.map((t) => fetch("profiles/nx-" + t + ".json", { method: "HEAD", cache: "no-store" })
+      Promise.all(styles.map((t) => fetch(ProfileStore.PROFILE_DIR + "nx-" + t + ".json", { method: "HEAD", cache: "no-store" })
         .then((r) => [t, r.ok]).catch(() => [t, false]))).then((marks) => {
         if (!this.isOpen || this.currentNode() !== node) return;
         const status = this.dom.status;
@@ -615,7 +615,7 @@ class WorldLibrary {
     } else if (this.editMode && world) {
       const slug = (node.pack.dir || "game").split("/").pop()
         .replace(/[^a-z0-9]/gi, "").toLowerCase();
-      fetch("profiles/" + slug + "-g" + world.set + ".json", { method: "HEAD" })
+      fetch(ProfileStore.PROFILE_DIR + slug + "-g" + world.set + ".json", { method: "HEAD" })
         .then((res) => {
           mark.textContent = res.ok ? "✔ tagged" : "not tagged";
           if (res.ok) mark.classList.add("tagged");

@@ -6,7 +6,7 @@
  * request, in server mode - go to the network. Registered from the repo
  * root so it covers the folders the 3d/ and root pages share.
  */
-const VERSION = "1"; // bump to roll out a change (pages register with updateViaCache: "none")
+const VERSION = "1.0.0"; // the release version, stamped by builder/ (pages register with updateViaCache: "none")
 const DB_NAME = "lem3d-files";
 const DB_VERSION = 1;
 const PREFIXES = ["neolemmix/", "levels/"];

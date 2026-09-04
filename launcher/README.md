@@ -15,7 +15,7 @@ npm start
   this program is ever killed: anything else on the port is named in an error
   and left strictly alone (`port.js` decides, by what a process is *running*,
   not where it was started). When running, it
-  shows the internal URL (`http://localhost:<port>/3d/`) and the external URL
+  shows the internal URL (`http://localhost:<port>/`) and the external URL
   (this machine's LAN IPv4) — the address a headset or another device on the
   same network would use. Click a URL to open it in the browser.
 - **Setup tab** — configure the port (1024–65535, default 8123) and toggle
@@ -29,7 +29,7 @@ the external URL sees a certificate warning once — Advanced → proceed — af
 which the origin counts as secure and WebXR/VR works from that device.
 
 The server itself is `server.js`: a static file server for the repo root
-(the game at `/`, the 3D/VR app at `/3d/`), started in-process by the
+(the 3D/VR app at `/`, the classic 2D page at `/classic.html`), started in-process by the
 Electron main process — no `http-server` child process to manage. It listens
 on all interfaces so headsets and other machines on the LAN can reach it.
 `node launcher/server.js [port]` runs it from a terminal without Electron,

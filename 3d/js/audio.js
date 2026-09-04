@@ -234,7 +234,7 @@ class GameAudio {
 
   // ------------------------------------------------------- files (Lemmix)
 
-  /** Where the repo root is, relative to the page ("../" from 3d/): the
+  /** Where the repo root is, relative to the page ("" now that the pages sit at the repo root): the
    *  NeoLemmix sound/ and music/ folders are under its neolemmix/. */
   setFileRoot(root) { this.fileRoot = root; }
 

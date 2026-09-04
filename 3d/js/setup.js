@@ -13,7 +13,7 @@
  * through jsDelivr, which does send them.
  */
 (function () {
-  const ROOT = "../";
+  const ROOT = "";
   const BATCH = 200; // files per write, while unpacking
 
   const OFFICIAL = {
@@ -637,6 +637,13 @@
       await Vfs.setMode(next);
       renderMode();
       say("msg-mode", "the game page now plays in " + next + " mode");
+    });
+    $("version").textContent = "v" + (Vfs.pageVersion() || "?");
+    Vfs.checkVersion(ROOT).then((v) => {
+      if (!v.stale) return;
+      $("version-warning").hidden = false;
+      $("version-warning").textContent = "Version " + v.server + " is on the server and this page is " + v.page +
+        ": hard reload the page (⇧ reload, or Ctrl+F5) to load the update.";
     });
     if (!booted.sw.controlled) {
       $("sw-warning").hidden = false;

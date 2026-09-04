@@ -11,10 +11,15 @@ ray) differ.
 
 ## Run
 
+The three pages sit at the repo root - `index.html` (this app),
+`setup.html`, `galleries.html` - with their code under `3d/js/` and `3d/lib/`,
+so the site serves from its root URL; `3d/` itself only redirects old
+`/3d/` links there. The classic 2D page of LemmingsJS is `classic.html`.
+
 ```sh
 # from the repo root (one level up from this folder)
 npx http-server -p 8123 -c-1
-# then open http://127.0.0.1:8123/3d/
+# then open http://127.0.0.1:8123/
 # (the original 2D game stays at http://127.0.0.1:8123/)
 ```
 
@@ -72,7 +77,11 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   edit mode (yellow while editing), the gear opens `setup.html` (see
   "Setup" below); the
   footer at the bottom right says which asset mode is in force (`assets:
-  static` or `server`) with a link that reloads the page in the other one.
+  static` or `server`) and the page's release version with a yellow *beta*
+  marker, with a link that
+  reloads the page in the other mode. When `version.json` on the server
+  carries a newer version than the page's own marker, a yellow warning at
+  the top asks for a hard reload (see the root README, "Releases").
   The world library shows the same footer, and a "setup" button next to
   "rescan".
 - click a lemming = assign the selected skill; click the panel = exactly the
@@ -408,7 +417,7 @@ WebXR needs a secure context. Ways to run it:
   accept the one-time certificate warning
 - desktop, no headset: the Immersive Web Emulator extension in Chrome
 - Quest via USB: `adb reverse tcp:8123 tcp:8123`, then open
-  `http://localhost:8123/3d/` in the Quest browser (localhost is secure)
+  `http://localhost:8123/` in the Quest browser (localhost is secure)
 
 Exiting VR restores the desktop camera and scale exactly as they were.
 

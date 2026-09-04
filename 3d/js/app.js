@@ -17,7 +17,7 @@
 // Nothing runs before the asset store is settled: the service worker in
 // control, the asset mode known, and - static mode with nothing installed -
 // the setup page shown instead (see vfs.js).
-Vfs.boot("../", "setup.html").then(function (booted) {
+Vfs.boot("", "setup.html").then(function (booted) {
   // lemmings live embedded mid-slab (sprite centered at TERRAIN_DEPTH/2), so
   // they walk inside the carved space rather than floating in front of it;
   // normal objects (hatch/exit/traps) sit just behind them at the same depth
@@ -1943,19 +1943,29 @@ Vfs.boot("../", "setup.html").then(function (booted) {
     const url = new URL(location.href);
     url.searchParams.set(Vfs.PARAM, other);
     for (const el of document.querySelectorAll(".assets-name")) el.textContent = state.assets;
+    for (const el of document.querySelectorAll(".assets-version")) el.textContent = "v" + (Vfs.pageVersion() || "?");
     for (const link of document.querySelectorAll(".assets-switch")) {
       link.textContent = "switch to " + other;
       link.href = url.href;
     }
+    // the release on the server against this page's: a newer one means the
+    // browser's cache is holding this page back, and only a hard reload gets past it
+    Vfs.checkVersion("").then((v) => {
+      if (!v.stale) return;
+      const warn = document.getElementById("version-warning");
+      warn.innerHTML = "version <b>" + v.server + "</b> is on the server and this page is <b>" + v.page +
+        "</b>: hard reload the page (&#8679; reload, or Ctrl+F5) to load the update";
+      warn.hidden = false;
+    });
   }
 
-  const factory = new Lemmings.GameFactory("../");
+  const factory = new Lemmings.GameFactory("");
   const profileFiles = new ProfileFiles(); // the depth profiles, one file per sprite gallery
   const raycaster = new THREE.Raycaster();
 
   const audio = new GameAudio();
 
-  audio.setFileRoot("../");
+  audio.setFileRoot("");
   const audioResources = {}; // one GameResources per game type for ADLIB data
   const soundBtn = document.getElementById("btn-sound");
   const renderSoundBtn = () => hudIcons.sound({ on: !audio.enabled });
@@ -1987,9 +1997,9 @@ Vfs.boot("../", "setup.html").then(function (booted) {
    *  piece editor is reachable at all. */
   function renderMode() {
     hud.title.textContent = state.edit
-      ? "LEMMINGS 3D · VALIDATION MODE" : "LEMMINGS 3D";
+      ? "LEMMIX JS+VR · VALIDATION MODE" : "LEMMIX JS+VR";
     document.title = state.edit
-      ? "Lemmings 3D — validation mode" : "Lemmings 3D";
+      ? "Lemmix JS+VR — validation mode" : "Lemmix JS+VR";
     hudIcons.mode({ on: state.edit });
     hud.modeBtn.title = "mode: " + (state.edit ? "edit (the tagging workbench)" : "play");
     library.setEditMode(state.edit);
@@ -2263,7 +2273,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   // NeoLemmix's cursor (cross, square over a lemming), once its pictures are
   // in; until then, and without them, the page's own pointer and ring
   let gameCursor = null;
-  GameCursor.load("../").then((c) => { gameCursor = c; });
+  GameCursor.load("").then((c) => { gameCursor = c; });
   const cursorReady = () => !!(gameCursor && gameCursor.ok);
   const selectDxNow = () => (session && session.game.sim ? session.game.sim.effectiveSelectDx : 0);
   let endTimeout = null; // the level's end moving on to the next, unless the game is rewound
@@ -2369,7 +2379,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
       const slug = (config.path || "game").split("/").pop()
         .replace(/[^a-z0-9]/gi, "").toLowerCase();
       const setId = groundData.lr.graphicSet1 != null ? groundData.lr.graphicSet1 : 0;
-      profileUrl = "profiles/" + slug + "-g" + setId + ".json";
+      profileUrl = ProfileStore.PROFILE_DIR + slug + "-g" + setId + ".json";
     }
     const profileUrls = ProfileStore.urlsForGroundData(groundData, profileUrl);
     const profile = await profileFiles.loadAll(profileUrls);
@@ -4932,7 +4942,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   }
 
   // world library: the level packs, browsed like the levels/ directory
-  const library = new WorldLibrary(factory, "../", async (levelId) => {
+  const library = new WorldLibrary(factory, "", async (levelId) => {
     state.levelId = levelId;
     await loadLevel();
     // the catalog is a way into a level in either mode; only the tagging
@@ -4944,7 +4954,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
   });
   // NeoLemmix levels: parsed and built from the styles on disk. Until the
   // Lemmix engine plays them, this is how their miniatures are drawn.
-  Lemmix.io = Lemmix.StyleManager.browserIO("../");
+  Lemmix.io = Lemmix.StyleManager.browserIO("");
   const lemmixStyles = new Lemmix.StyleManager(Lemmix.io);
   // the Lemmix engine: a level built from the styles, the sprite set its
   // theme names, the physics masks, and a Game the page drives like the DOS one
@@ -5014,7 +5024,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
       for (const name of names) {
         for (const dir of dirs) {
           for (const ext of ["ogg", "wav", "mp3", "it", "mod", "xm", "s3m"]) {
-            urls.push("../" + (dir + "/" + name + "." + ext).split("/").map(encodeURIComponent).join("/"));
+            urls.push((dir + "/" + name + "." + ext).split("/").map(encodeURIComponent).join("/"));
           }
         }
       }
@@ -5039,7 +5049,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
     },
   };
   library.registerLoader("lemmix", async (level) => {
-    const res = await fetch("../" + level.url.split("/").map(encodeURIComponent).join("/"));
+    const res = await fetch(level.url.split("/").map(encodeURIComponent).join("/"));
     if (!res.ok) throw new Error("level file: HTTP " + res.status);
     const data = Lemmix.LevelBuilder.parseLevel(await res.text());
     return Lemmix.LevelBuilder.build(data, lemmixStyles, { seed: level.id });
@@ -5143,7 +5153,7 @@ Vfs.boot("../", "setup.html").then(function (booted) {
     hud.name.textContent = "no level loaded";
     hud.state.textContent = "choose a level in the world library";
     if (state.assets === "static") {
-      Vfs.playable("../").then((ok) => {
+      Vfs.playable("").then((ok) => {
         if (!ok) hud.state.textContent = "nothing installed — open Setup (right edge) to add NeoLemmix and levels";
       });
     }
