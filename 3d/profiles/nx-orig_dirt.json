@@ -15,14 +15,20 @@
   "blend": {
     "byId": {
       "orig_dirt:grass_03": true,
-      "orig_dirt:grass_04": true
+      "orig_dirt:grass_04": true,
+      "orig_dirt:clump_05": true,
+      "orig_dirt:clump_07": true,
+      "orig_dirt:clump_04": true,
+      "orig_dirt:clump_03": true
     }
   },
   "colorBlend": {
     "byId": {
       "orig_dirt:clump_04": true,
       "orig_dirt:grass_04": true,
-      "orig_dirt:grass_03": true
+      "orig_dirt:grass_03": true,
+      "orig_dirt:clump_07": true,
+      "orig_dirt:clump_05": true
     }
   }
 }
