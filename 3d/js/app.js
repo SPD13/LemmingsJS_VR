@@ -74,6 +74,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // one is remembered the moment its button is pressed.
     emboss: setting("emboss", "lem3d-emboss", true), // colour-keyed relief
     smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
+    // the outline's own corners rounded off, terrain and the animated
+    // surfaces alike, so nothing reads as the pixels it was drawn with
+    smoothTerrain: setting("smoothterrain", "lem3d-smooth-terrain", true),
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
     // The 2D view: the original's flat picture under an orthographic camera,
@@ -667,6 +670,16 @@ Vfs.boot("", "setup.html").then(function (booted) {
     c.moveTo(10, 44); c.bezierCurveTo(24, 44, 26, 20, 40, 20); c.lineTo(54, 20);
     c.stroke();
   });
+  // a pixel staircase with the line that rounds it off drawn over it
+  const smoothTerrainIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    c.beginPath();
+    c.moveTo(10, 46); c.lineTo(22, 46); c.lineTo(22, 37); c.lineTo(34, 37);
+    c.lineTo(34, 28); c.lineTo(46, 28); c.lineTo(46, 19); c.lineTo(54, 19);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(10, 52); c.bezierCurveTo(32, 52, 32, 25, 54, 25);
+    c.stroke();
+  });
   const skillBarIcon = (cx, st) => switchIcon(cx, st, (c) => {
     c.beginPath();
     c.rect(10, 24, 44, 16);
@@ -693,7 +706,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
     setup: iconizeHudButton(document.getElementById("btn-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
     emboss: iconizeHudButton(document.getElementById("btn-emboss"), embossIcon, "3D terrain"),
     doors: iconizeHudButton(document.getElementById("btn-doors"), doorsIcon, "3D doors"),
-    smooth: iconizeHudButton(document.getElementById("btn-smooth"), smoothIcon, "smooth"),
+    smooth: iconizeHudButton(document.getElementById("btn-smooth"), smoothIcon, "smooth relief"),
+    smoothTerrain: iconizeHudButton(document.getElementById("btn-smooth-terrain"), smoothTerrainIcon, "smooth terrain"),
     skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
   };
   // the sound column keeps its own place, so it is not in the row above, but
@@ -1519,14 +1533,15 @@ Vfs.boot("", "setup.html").then(function (booted) {
    * calls exactly what the buttons call, so the two stay in step, and it
    * carries the recentre that is otherwise only on the A/X button.
    */
-  const VR_SET_W = 640, VR_SET_H = 468;   // canvas pixels
+  const VR_SET_W = 640, VR_SET_H = 536;   // canvas pixels (a row each, plus the title)
   const VR_SET_TOP = 96;                  // first row
   const VR_SET_ROW = 68;
 
   const vrSettingRows = [
     { label: "3D terrain", get: () => state.emboss, act: () => toggleEmboss() },
     { label: "3D doors", get: () => state.doors, act: () => toggleDoors() },
-    { label: "smooth", get: () => state.smooth, act: () => toggleSmooth() },
+    { label: "smooth relief", get: () => state.smooth, act: () => toggleSmooth() },
+    { label: "smooth terrain", get: () => state.smoothTerrain, act: () => toggleSmoothTerrain() },
     { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
     { label: "recentre the board", act: () => vr.recenterNow() },
   ];
@@ -2057,7 +2072,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
   const smoothBtn = document.getElementById("btn-smooth");
   const renderSmoothBtn = () => {
     hudIcons.smooth({ on: state.smooth });
-    smoothBtn.title = "smooth (slopes between the relief's heights): " + (state.smooth ? "on" : "off");
+    smoothBtn.title = "smooth relief (slopes between the relief's heights): " + (state.smooth ? "on" : "off");
   };
   function toggleSmooth() {
     state.smooth = !state.smooth;
@@ -2068,6 +2083,29 @@ Vfs.boot("", "setup.html").then(function (booted) {
   }
   smoothBtn.addEventListener("click", toggleSmooth);
   renderSmoothBtn();
+
+  // round the outline's own corners off, so neither the terrain nor the
+  // water and lava read as the pixels they were drawn with
+  const smoothTerrainBtn = document.getElementById("btn-smooth-terrain");
+  const renderSmoothTerrainBtn = () => {
+    hudIcons.smoothTerrain({ on: state.smoothTerrain });
+    smoothTerrainBtn.title = "smooth terrain (rounds the pixel corners off the terrain and the water): "
+      + (state.smoothTerrain ? "on" : "off");
+  };
+  function toggleSmoothTerrain() {
+    state.smoothTerrain = !state.smoothTerrain;
+    try { localStorage.setItem("lem3d-smooth-terrain", state.smoothTerrain ? "on" : "off"); } catch (e) {}
+    renderSmoothTerrainBtn();
+    if (session) {
+      session.terrain.setSmoothTerrain(state.smoothTerrain);
+      // the wave slices wear their geometry per tick: draw them again now,
+      // whether the clock is running or not
+      session.syncScene(true);
+    }
+    paintVrSettings();
+  }
+  smoothTerrainBtn.addEventListener("click", toggleSmoothTerrain);
+  renderSmoothTerrainBtn();
 
   // the skill bar's own relief: its artwork and counters extruded off the
   // panel. Off, the bar is the flat original.
@@ -2433,6 +2471,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
 
     const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources);
     if (state.smooth) terrain.setSmooth(true);
+    if (state.smoothTerrain) terrain.setSmoothTerrain(true);
 
     // dark backdrop behind the terrain so holes read as depth, not void
     const backdrop = new THREE.Mesh(
@@ -2526,13 +2565,17 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // instead of sliding along as one extruded block
     const stacks = state.doors ? stackedObjectsFrom(level, profile) : [];
     const stackIndices = new Set(stacks.map((s) => s.index));
+    // with the corners rounded off (the "smooth terrain" switch) a slice
+    // wears the smoothed cut of the same frame; the texture is shared
+    const waveEntryFor = (frame) => (state.smoothTerrain
+      ? materialCache.forFrameSmooth(frame) : materialCache.forFrame(frame));
     for (const stack of stacks) {
       stack.meshes = [];
       // built wearing the first frame rather than bare: an empty mesh carries
       // a default geometry and material that nothing owns, and would sit at
       // the origin until the first tick redressed it
       const first = stack.mapObject.animation.frames[0];
-      const entry = materialCache.forFrame(first);
+      const entry = waveEntryFor(first);
       for (let k = 0; k < stack.phases.length; k++) {
         const mesh = new THREE.Mesh(entry.geometry, entry.material);
         mesh.scale.y = stack.flipY ? -1 : 1;
@@ -2682,7 +2725,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
           for (let k = 0; k < stack.meshes.length; k++) {
             const frame = frameAtPhase(object, waveTick, stack.phases[k]);
             if (!frame) continue;
-            const entry = materialCache.forFrame(frame);
+            const entry = waveEntryFor(frame);
             const mesh = stack.meshes[k];
             mesh.geometry = entry.geometry;
             mesh.material = game.clearPhysics

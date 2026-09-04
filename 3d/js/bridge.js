@@ -24,6 +24,17 @@ const SPRITE_SHADE_RIGHT = 0.66;
 const SPRITE_SHADE_TOP = 0.85;
 const SPRITE_SHADE_BOTTOM = 0.5;
 
+/**
+ * Smoothing, for the surfaces drawn as a stack of slices (the "smooth
+ * terrain" switch). Extruding pixels leaves a heap of cubes: a staircase
+ * around the silhouette and a square cut all the way round the rim. Both are
+ * rounded off - the corners of the outline slide along their diagonals, and
+ * the rim is thinned to a bevel - so the shape reads as a surface rather than
+ * as the pixels it was drawn with.
+ */
+const SPRITE_SMOOTH_PULL = 0.35;   // how far a corner slides, in pixels
+const SPRITE_SMOOTH_BEVEL = 0.4;   // how much of its depth the rim gives up
+
 /** An explosion particle, in game pixels (see ParticleCloud.updateScale). */
 const PARTICLE_SIZE = 2.2;
 
@@ -161,11 +172,119 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
   return geom;
 }
 
+/**
+ * The same relief, with the pixels rounded off in all three directions.
+ *
+ * Two things give a stack of extruded pixels away. Across the sprite, the
+ * outline is a staircase; through it, every block is cut square at the front
+ * and the back. So each corner of the outline slides along its own diagonal -
+ * toward the lone pixel that owns a convex corner, and into the lone gap of a
+ * concave one - which turns a staircase into a bevel and leaves straight runs
+ * exactly where they were. A corner with four pixels round it, or two side by
+ * side, is not a corner of anything and does not move; that is what keeps a
+ * flat edge flat instead of eroding the whole silhouette inward.
+ *
+ * Through the sprite, a pixel on the rim is made thinner than the ones behind
+ * it and the thickness is averaged at the corners, so the edge rolls off
+ * instead of ending in a square wall. Corner positions are shared between
+ * neighbouring pixels, so the surface stays closed however far it is pulled.
+ */
+function buildSmoothSpriteGeometry(isSolidRaw, w, h, depth) {
+  const isSolid = (x, y) => x >= 0 && x < w && y >= 0 && y < h && isSolidRaw(x, y);
+  const half = depth / 2;
+  // a pixel with a gap beside it is on the rim, and gives up some of its depth
+  const halfThickAt = (x, y) => {
+    if (!isSolid(x, y)) return null;
+    const rim = !isSolid(x - 1, y) || !isSolid(x + 1, y) ||
+      !isSolid(x, y - 1) || !isSolid(x, y + 1);
+    return rim ? half * (1 - SPRITE_SMOOTH_BEVEL) : half;
+  };
+
+  // every corner of the pixel grid, worked out once and shared by the (up to
+  // four) pixels that meet there - which is what keeps the surface closed
+  const corners = new Array((w + 1) * (h + 1));
+  for (let y = 0; y <= h; y++) {
+    for (let x = 0; x <= w; x++) {
+      const a = isSolid(x - 1, y - 1), b = isSolid(x, y - 1);
+      const c = isSolid(x - 1, y), d = isSolid(x, y);
+      const n = (a ? 1 : 0) + (b ? 1 : 0) + (c ? 1 : 0) + (d ? 1 : 0);
+      let dx = 0, dy = 0;
+      if (n === 1 || n === 3) {
+        // toward the odd one out: the single pixel, or the single gap
+        const odd = n === 1 ? [a, b, c, d] : [!a, !b, !c, !d];
+        if (odd[0]) { dx = -1; dy = -1; }
+        else if (odd[1]) { dx = 1; dy = -1; }
+        else if (odd[2]) { dx = -1; dy = 1; }
+        else { dx = 1; dy = 1; }
+      }
+      let sum = 0, count = 0;
+      for (const [px, py] of [[x - 1, y - 1], [x, y - 1], [x - 1, y], [x, y]]) {
+        const t = halfThickAt(px, py);
+        if (t !== null) { sum += t; count++; }
+      }
+      const t = count ? sum / count : half;
+      corners[y * (w + 1) + x] = {
+        x: x + dx * SPRITE_SMOOTH_PULL, y: y + dy * SPRITE_SMOOTH_PULL,
+        front: half + t, back: half - t,
+      };
+    }
+  }
+  const cornerAt = (x, y) => corners[y * (w + 1) + x];
+
+  // back -> walls -> fronts, the order the stepped builder emits in
+  const backQuads = [], wallQuads = [], frontQuads = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!isSolid(x, y)) continue;
+      const c00 = cornerAt(x, y), c10 = cornerAt(x + 1, y);
+      const c11 = cornerAt(x + 1, y + 1), c01 = cornerAt(x, y + 1);
+      const u0 = x / w, u1 = (x + 1) / w, v0 = y / h, v1 = (y + 1) / h;
+      const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+      const face = (key) => [[c00.x, c00.y, c00[key]], [c10.x, c10.y, c10[key]],
+                             [c11.x, c11.y, c11[key]], [c01.x, c01.y, c01[key]]];
+      frontQuads.push({ p: face("front"), uv, shade: SPRITE_SHADE_FRONT });
+      backQuads.push({ p: face("back"), uv, shade: SPRITE_SHADE_BACK });
+
+      // the rim, wherever the sprite stops. It samples the pixel's own centre:
+      // a texel-boundary UV would pick up the gap next to it, which is blank
+      const uMid = (x + 0.5) / w, vMid = (y + 0.5) / h;
+      const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
+      const wall = (a, b, shade) => wallQuads.push({
+        p: [[a.x, a.y, a.back], [a.x, a.y, a.front], [b.x, b.y, b.front], [b.x, b.y, b.back]],
+        uv: wallUv, shade,
+      });
+      if (!isSolid(x - 1, y)) wall(c00, c01, SPRITE_SHADE_LEFT);
+      if (!isSolid(x + 1, y)) wall(c11, c10, SPRITE_SHADE_RIGHT);
+      if (!isSolid(x, y - 1)) wall(c10, c00, SPRITE_SHADE_TOP);
+      if (!isSolid(x, y + 1)) wall(c01, c11, SPRITE_SHADE_BOTTOM);
+    }
+  }
+
+  const positions = [], colors = [], uvs = [], indices = [];
+  for (const q of backQuads.concat(wallQuads, frontQuads)) {
+    const base = positions.length / 3;
+    for (let i = 0; i < 4; i++) {
+      positions.push(q.p[i][0], q.p[i][1], q.p[i][2]);
+      colors.push(q.shade, q.shade, q.shade);
+      uvs.push(q.uv[i][0], q.uv[i][1]);
+    }
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  if (indices.length === 0) return null;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geom.setIndex(indices);
+  return geom;
+}
+
 /** Builds (and caches) voxel geometry + material for a game Frame or Mask. */
 class SpriteGeometryCache {
   constructor(resources) {
     this.resources = resources;
     this.byFrame = new Map();
+    this.smoothByFrame = new Map();  // the same frames, pixels rounded off
     this.byMask = new Map();
     this.flatByFrame = new Map();   // the silhouettes of clear physics mode
     this.flatColor = new THREE.Color(0xffffff);
@@ -237,6 +356,26 @@ class SpriteGeometryCache {
     for (let i = 0; i < w * h; i++) rgba[i * 4 + 3] = mask[i] ? 255 : 0;
     entry = this._makeEntry(rgba, (x, y) => mask[y * w + x] !== 0, w, h);
     this.byFrame.set(frame, entry);
+    return entry;
+  }
+
+  /**
+   * The same frame with its pixels rounded off, for the surfaces drawn as a
+   * stack of slices. Only the geometry differs, so the texture and material
+   * are the ones the square-edged entry already owns.
+   */
+  forFrameSmooth(frame) {
+    let entry = this.smoothByFrame.get(frame);
+    if (entry) return entry;
+    const flat = this.forFrame(frame);
+    const w = frame.width, h = frame.height;
+    const mask = frame.getMask();
+    let geometry = buildSmoothSpriteGeometry(
+      (x, y) => mask[y * w + x] !== 0, w, h, SPRITE_DEPTH);
+    if (geometry) this.resources.track(geometry);
+    else geometry = this._emptyGeom;
+    entry = { material: flat.material, geometry, w: flat.w, h: flat.h };
+    this.smoothByFrame.set(frame, entry);
     return entry;
   }
 

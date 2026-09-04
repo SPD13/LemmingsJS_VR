@@ -136,9 +136,20 @@ Two optional treatments sit on top:
   texture. It multiplies triangle count, so it is switchable; individual
   pieces can opt out, or invert the mapping when they are drawn with dark
   highlights.
-- **smooth**: slopes the relief between neighbouring heights by averaging the
-  pixel heights meeting at each quad corner, staying crisp at depth-class
-  boundaries and silhouettes.
+- **smooth relief**: slopes the relief between neighbouring heights by
+  averaging the pixel heights meeting at each quad corner, staying crisp at
+  depth-class boundaries and silhouettes. This is smoothing through the slab.
+- **smooth terrain**: smoothing across it. Extruded pixels leave the outline a
+  staircase, so each of its corners slides along its own diagonal — toward the
+  lone pixel that owns a convex corner, into the lone gap of a concave one.
+  The rule is deliberately narrow: a corner with four pixels around it, or two
+  side by side, is not the corner of anything and does not move. Pulling those
+  as well would erode every straight edge inward by the same amount, which
+  shrinks the level instead of smoothing it. Corners are read from the depth
+  buffer rather than the chunk, so one comes out the same from either side of
+  a chunk boundary and the seams stay closed. Both smoothings need a quad per
+  pixel to have corners to move; with the relief flat and the outline left
+  alone, the cheaper greedy stepped path still runs.
 
 ### 2.4 Objects that are not sprites (`portals.js`)
 
@@ -203,6 +214,14 @@ object's own index, never letting two neighbouring slices share one, so a
 reload and a replay churn the same way. A DOS animation is a function of the
 tick, so the offset is added to it; a Lemmix gadget carries its own counter,
 so it is wound on, the composite taken and the counter put back.
+
+With **smooth terrain** on, the slices wear a rounded cut of the same frames:
+the outline's corners slide as the terrain's do, and each slice's rim is made
+thinner than its middle, so the edge rolls off rather than ending in a square
+wall. The thinning is symmetric about the slice's midplane, so slices still
+abut and no gap opens between them. Only geometry is rebuilt — the rounded
+entry shares the square-edged one's texture — and only these surfaces use it:
+lemmings and ordinary objects stay square-edged.
 
 Which objects are openings comes from the profile
 (`objects.byId[<id>] = {shape, depth}`), defaulting to entrances (object id 1)
@@ -600,7 +619,7 @@ paused stays paused and two overlapping dialogs do not resume it between them.
 | where | what |
 |---|---|
 | URL | `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?doors= ?edit=` |
-| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
+| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-smooth-terrain` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
 
 The URL overrides both for one load. This matters more than it sounds: the
 switches are DOM buttons, invisible inside a session, and the headset is
