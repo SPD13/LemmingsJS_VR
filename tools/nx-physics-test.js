@@ -535,6 +535,14 @@ async function main() {
     check("imported whole: the same table, nothing else left", r.skipped === 0 && r.loaded === hk.table.size && other.get("KeyQ").mod === "bomber" && other.get("VrPointB").mod === -17 && other.get("KeyR").action === "restart");
     const r2 = other.importJSON(JSON.stringify({ format: Hotkeys.EXPORT_FORMAT, keys: { KeyP: { action: "pause" }, KeyZ: { action: "no_such" }, Nope: { action: "pause" }, VrFreeStick: { action: "pause" } } }));
     check("unknown keys, functions and misplaced functions are skipped", r2.loaded === 1 && r2.skipped === 3 && other.get("KeyP").action === "pause" && other.get("KeyR") === null);
+    // --- a half a file does not cover at all: what ships fills it (a new browser, an older file)
+    const fresh = new Hotkeys.HotkeyManager();
+    const kbOnly = fresh.importJSON(JSON.stringify({ format: Hotkeys.EXPORT_FORMAT, keys: { KeyP: { action: "pause" }, KeyR: { action: "restart" } } }));
+    check("a file with no controllers in it keeps the default controller setup", kbOnly.filled.join() === "VR" &&
+      fresh.get("VrPointA").action === "recenter_vr" && fresh.get("VrFreeStick").action === "vr_tilt" && fresh.get("KeyP").action === "pause");
+    const vrOnly = fresh.importJSON(JSON.stringify({ format: Hotkeys.EXPORT_FORMAT, keys: { VrPointA: { action: "pause" } } }));
+    check("a file with no keyboard keys in it keeps the traditional layout", vrOnly.filled.join() === "keyboard" &&
+      fresh.get("KeyR").action === "restart" && fresh.get("F3").mod === "climber" && fresh.get("VrPointA").action === "pause");
     let bad = null; try { other.importJSON("{\"hello\": 1}"); } catch (e) { bad = e.message; }
     let bad2 = null; try { other.importJSON("not json"); } catch (e) { bad2 = e.message; }
     check("a file that is not a controls file is refused", /not a controls file/.test(bad) && /not a JSON/.test(bad2) && other.get("KeyP").action === "pause");

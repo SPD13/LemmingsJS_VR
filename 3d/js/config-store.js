@@ -85,7 +85,10 @@
     try {
       if (kind === "controls") {
         if (!data.keys || typeof data.keys !== "object") throw new Error("not a controls file");
-        localStorage.setItem(HOTKEYS_KEY, JSON.stringify({ version: data.version, vr: true, keys: data.keys }));
+        // `vr` says the file carried the controllers; without it hotkeys.js
+        // puts the default controller setup back rather than leaving them dead
+        const vr = Object.keys(data.keys).some((code) => code.startsWith("Vr"));
+        localStorage.setItem(HOTKEYS_KEY, JSON.stringify({ version: data.version, vr, keys: data.keys }));
       } else if (kind === "prefs") {
         if (!data.values || typeof data.values !== "object") throw new Error("not a preferences file");
         for (const k of PREFS_KEYS) if (typeof data.values[k] === "string") localStorage.setItem(k, data.values[k]);
