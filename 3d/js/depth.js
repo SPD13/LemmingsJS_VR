@@ -138,6 +138,169 @@ function embossInvertedFor(pieceId, profile) {
   return embossModeFor(pieceId, profile) === "invert";
 }
 
+/** How many colours one blended wall may draw from. */
+const BLEND_PALETTE_MAX = 6;
+/**
+ * Channel-delta sum (|dR|+|dG|+|dB|) below which two colours count as one.
+ * It does two jobs: it keeps a palette from filling up with six shades of the
+ * same green, and - the reason it exists - it lets a zone grow through the
+ * one-pixel anti-aliased fringe some styles draw, so the fringe cannot wall a
+ * colour region off from the colour it actually borders. On a flat-palette
+ * sprite (the orig_* styles, every DOS tileset) it changes nothing.
+ */
+const BLEND_MERGE = 24;
+
+/**
+ * Surface blend for a piece: may its extruded side walls draw the sprite's
+ * other colours down the depth instead of repeating the surface pixel's one.
+ *
+ * Pieces opt IN - the opposite of the emboss tag above, which they opt out of.
+ * The effect changes how a sprite looks rather than fixing something that is
+ * wrong by default, so nothing gets it until it is asked for.
+ */
+function surfaceBlendFor(pieceId, profile) {
+  const cfg = (profile && profile.blend) || {};
+  const byId = cfg.byId || {};
+  const value = Object.prototype.hasOwnProperty.call(byId, pieceId)
+    ? byId[pieceId] : cfg.default;
+  return value === true;
+}
+
+/** Perceived brightness of a packed 0xRRGGBB colour. */
+function blendLuma(rgb) {
+  return (((rgb >> 16) & 255) * 299 + ((rgb >> 8) & 255) * 587 + (rgb & 255) * 114) / 1000;
+}
+
+/** Are two packed colours the same to within BLEND_MERGE. */
+function blendNear(a, b) {
+  return Math.abs(((a >> 16) & 255) - ((b >> 16) & 255)) +
+         Math.abs(((a >> 8) & 255) - ((b >> 8) & 255)) +
+         Math.abs((a & 255) - (b & 255)) <= BLEND_MERGE;
+}
+
+/**
+ * Which colours each pixel of a blend-tagged piece may use down its extrusion,
+ * and where in the level texture each of those colours can be sampled from.
+ *
+ * The rule is adjacency, not "any colour of the sprite": the level is cut into
+ * zones of one colour (a flood fill that grows through colours within
+ * BLEND_MERGE of the zone's seed, and stops at anything else), and a zone's
+ * palette is its own colour plus the colours that touch it. A dark green
+ * touched five pixels away by a light green may use that light green; a brown
+ * at the far end of the sprite, touching nothing of the zone, may not.
+ * Adjacency stays inside one piece id, so a sprite looks the same wherever it
+ * is placed instead of borrowing from whatever was drawn next to it.
+ *
+ * Each kept colour is remembered as a *donor*: one solid pixel of the level
+ * carrying it. The mesh points a wall band's uv at that pixel's texel, so the
+ * colour comes out of the texture already there - see terrain.js, which also
+ * explains why those few texels have to be pinned against being dug away.
+ *
+ * Returns { slot, donors }: `slot` is slot+1 per pixel (0 = do not blend),
+ * `donors` one array of {index, r, g, b} per slot. Zones that end up with a
+ * single colour are dropped - blending them would be a no-op.
+ */
+function buildBlendMap(level, pieceMap, profile, groundData) {
+  const W = level.width, H = level.height, N = W * H;
+  const slot = new Uint16Array(N);
+  const nothing = { slot, donors: [] };
+  if (!pieceMap || !groundData) return nothing;
+
+  // which piece ids are tagged (a Lemmix piece is tagged by name, so the id is
+  // looked up through its image, as buildReliefMap does)
+  const images = groundData.terraImages || {};
+  let maxId = 254;
+  for (const id of Object.keys(images)) maxId = Math.max(maxId, +id);
+  const blendById = new Uint8Array(maxId + 2);
+  let anyTagged = false;
+  for (let id = 0; id <= maxId; id++) {
+    const key = images[id] && images[id].name != null ? images[id].name : id;
+    if (surfaceBlendFor(key, profile)) { blendById[id + 1] = 1; anyTagged = true; }
+  }
+  if (!anyTagged) return nothing;
+
+  const img = level.groundImage;
+  const mask = level.getGroundMaskLayer().groundMask;
+  const rgbAt = (i) => {
+    const o = i * 4;
+    return ((img[o] << 16) | (img[o + 1] << 8) | img[o + 2]) >>> 0;
+  };
+  // only a solid pixel of a tagged piece takes part - so a donor is never one
+  // of the pixels the engine blanks to black when it is dug away
+  const eligible = (i) => mask[i] !== 0 && blendById[pieceMap[i]] !== 0;
+
+  // --- zones: a colour-tolerant flood fill, compared against the seed so a
+  // gradient cannot drift one zone across the whole sprite
+  const zoneOf = new Int32Array(N).fill(-1);
+  const zones = [];
+  const stack = [];
+  for (let s = 0; s < N; s++) {
+    if (zoneOf[s] >= 0 || !eligible(s)) continue;
+    const id = zones.length;
+    const pid = pieceMap[s];
+    const seed = rgbAt(s);
+    const zone = { colour: seed, sample: s, border: new Map(), borderAt: new Map() };
+    zones.push(zone);
+    zoneOf[s] = id;
+    stack.length = 0;
+    stack.push(s);
+    while (stack.length) {
+      const i = stack.pop();
+      const x = i % W, y = (i / W) | 0;
+      for (let d = 0; d < 4; d++) {
+        const nx = x + (d === 0 ? -1 : d === 1 ? 1 : 0);
+        const ny = y + (d === 2 ? -1 : d === 3 ? 1 : 0);
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+        const j = ny * W + nx;
+        if (pieceMap[j] !== pid || !eligible(j)) continue;
+        const c = rgbAt(j);
+        if (blendNear(c, seed)) {
+          if (zoneOf[j] < 0) { zoneOf[j] = id; stack.push(j); }
+          continue;
+        }
+        zone.border.set(c, (zone.border.get(c) || 0) + 1); // a colour that touches it
+        if (!zone.borderAt.has(c)) zone.borderAt.set(c, j);
+      }
+    }
+  }
+
+  // --- one palette per zone, deduped into slots: many zones of a tileset end
+  // up with the same colours, and they can share a slot
+  const donors = [];
+  const bySignature = new Map();
+  const slotOfZone = new Int32Array(zones.length);
+  for (let zi = 0; zi < zones.length; zi++) {
+    const zone = zones[zi];
+    const kept = [{ rgb: zone.colour, index: zone.sample }];
+    const touching = Array.from(zone.border.entries()).sort((a, b) => b[1] - a[1]);
+    for (const [c] of touching) {
+      if (kept.length >= BLEND_PALETTE_MAX) break;
+      if (kept.some((k) => blendNear(k.rgb, c))) continue;
+      kept.push({ rgb: c, index: zone.borderAt.get(c) });
+    }
+    if (kept.length < 2) continue; // nothing to blend with
+    kept.sort((a, b) => blendLuma(b.rgb) - blendLuma(a.rgb)); // lightest first
+    const signature = kept.map((k) => k.rgb).join(",");
+    let s = bySignature.get(signature);
+    if (s === undefined) {
+      donors.push(kept.map((k) => ({
+        index: k.index,
+        r: (k.rgb >> 16) & 255, g: (k.rgb >> 8) & 255, b: k.rgb & 255,
+      })));
+      s = donors.length; // stored as slot+1
+      bySignature.set(signature, s);
+    }
+    slotOfZone[zi] = s;
+  }
+  if (!donors.length) return nothing;
+
+  for (let i = 0; i < N; i++) {
+    const z = zoneOf[i];
+    if (z >= 0) slot[i] = slotOfZone[z];
+  }
+  return { slot, donors };
+}
+
 /**
  * Per-pixel relief height (0..RELIEF_MAX) keyed off pixel brightness: the
  * tilesets shade a single hue, so lighter pixels read as raised. The
@@ -244,6 +407,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DepthClass, DepthClassByName, DEPTH_BANDS, DepthProfiles, pieceKey, depthClassForPiece,
     RELIEF_MAX, buildPieceMap, embossModeFor, embossEnabledFor, embossInvertedFor,
+    BLEND_PALETTE_MAX, BLEND_MERGE, surfaceBlendFor, buildBlendMap,
     buildReliefMap, buildDepthMap,
   };
 }

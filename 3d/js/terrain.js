@@ -15,6 +15,14 @@
  * re-mesh dirty chunks with a per-tick budget. Geometry lives in game pixel
  * space (y down); the parent group flips it into world space.
  *
+ * A piece tagged for *surface blend* has its side walls cut into bands down
+ * the depth, each band drawing one of the colours that touch the pixel's own
+ * colour region instead of repeating the surface pixel's (depth.js
+ * buildBlendMap). The colours are sampled from ordinary level pixels carrying
+ * them - "donors" - which is why _installBlend pins those few texels: the
+ * engines blank a dug pixel's RGB to black, and a dug donor would blacken every
+ * band aiming at it. Pin RGB only, never alpha.
+ *
  * The 2D view (setFlat) hides the chunks behind one quad carrying the same
  * texture: the original's terrain, exactly, since the texture is the level's
  * picture with the collision mask for its alpha. The chunks are left alone
@@ -36,8 +44,28 @@ const SHADE_BOTTOM = 0.5;
 // is smoothed across the board (the "smooth terrain" switch), in pixels.
 const TERRAIN_SMOOTH_PULL = 0.35;
 
+// Surface blend (depth.js buildBlendMap): a tagged pixel's side wall is cut
+// into bands down the extrusion, each band a colour the pixel's own colour
+// region touches, instead of one colour smeared the whole depth.
+const BLEND_BAND_PX = 4;   // how deep one band is, in game pixels
+const BLEND_BANDS_MAX = 4; // and how many a wall is ever cut into
+const BLEND_RUN = 4;       // a blended wall run stops at every multiple of this
+
+/**
+ * Which colour a band takes, jittered per pixel so a wall reads as grain
+ * rather than stripes. Stateless on purpose: a chunk re-meshed after a dig has
+ * to come out identical to what it was, so portals.js's waveRandom - a
+ * generator carrying state from call to call - is the wrong shape here.
+ */
+function blendHash(x, y, face, band) {
+  let h = Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1) ^
+          Math.imul(face + 1, 0x9e3779b1) ^ Math.imul(band + 1, 0x85ebca6b);
+  h ^= h >>> 15; h = Math.imul(h, 0x2545f491); h ^= h >>> 13;
+  return h >>> 0;
+}
+
 class TerrainMesh {
-  constructor(parent, level, depthMap, reliefMap, resources) {
+  constructor(parent, level, depthMap, reliefMap, resources, blendMap) {
     this.level = level;
     this.depth = depthMap;
     this.relief = reliefMap || new Uint8Array(level.width * level.height);
@@ -66,6 +94,7 @@ class TerrainMesh {
 
     // one texture for the whole level; alpha mirrors the solidity mask
     this.texData = new Uint8Array(this.w * this.h * 4);
+    this._installBlend(blendMap); // before the refill: it is what stamps the pins
     this._refillTexRect(0, 0, this.w, this.h);
     this.texture = resources.track(
       new THREE.DataTexture(this.texData, this.w, this.h, THREE.RGBAFormat)
@@ -112,6 +141,108 @@ class TerrainMesh {
     return DEPTH_BANDS[c].front + this._reliefAt(x, y);
   }
 
+  /**
+   * Take a blend map (depth.js buildBlendMap) and work out what the mesh needs
+   * from it: the donor uvs, and the *pins*.
+   *
+   * A donor is an ordinary pixel of the level that happens to carry the colour
+   * a band wants, and a band is just a quad pointing at that pixel's texel - so
+   * blending costs no texture space, and clear-physics mode repaints the donors
+   * grey along with everything else. The catch is that both engines blank a dug
+   * pixel's RGB to black in groundImage (not only its mask), so a dug donor
+   * would turn every band aiming at it black. Hence the pins: the donors' own
+   * colours, re-stamped into the texture after any repaint.
+   *
+   * Pinning RGB is safe because nothing samples a cleared pixel's texel - it
+   * emits no front or back quad, walls sample their own pixel, and the 2D quad
+   * alpha-tests it away. Never pin alpha: resync() reads it as the record of
+   * what is currently drawn.
+   */
+  _installBlend(blendMap) {
+    const on = !!(blendMap && blendMap.donors && blendMap.donors.length);
+    this.blend = on ? blendMap : null;
+    // as built, for resync: a dug pixel loses its slot and gets it back
+    this.blendSlot0 = on ? blendMap.slot.slice() : null;
+    this.blendUv = [];
+    this.blendPins = [];
+    this.blendPinned = new Set();
+    if (!on) return;
+    const src = this.level.groundImage;
+    for (const palette of blendMap.donors) {
+      const uv = new Float32Array(palette.length * 2);
+      for (let k = 0; k < palette.length; k++) {
+        const d = palette[k];
+        uv[k * 2] = ((d.index % this.w) + 0.5) / this.w;
+        uv[k * 2 + 1] = (((d.index / this.w) | 0) + 0.5) / this.h;
+        if (this.blendPinned.has(d.index)) continue;
+        this.blendPinned.add(d.index);
+        const o = d.index * 4;
+        this.blendPins.push({
+          index: d.index,
+          r: d.r != null ? d.r : src[o],
+          g: d.g != null ? d.g : src[o + 1],
+          b: d.b != null ? d.b : src[o + 2],
+        });
+      }
+      this.blendUv.push(uv);
+    }
+  }
+
+  /** The donors' colours put back into the texture (see _installBlend). */
+  _paintPins() {
+    // in clear-physics mode the level is painted flat greys, and the donors go
+    // grey with it - that is the whole point of sampling real pixels
+    if (!this.blend || this.physicsPaint) return;
+    for (const pin of this.blendPins) {
+      const o = pin.index * 4;
+      this.texData[o] = pin.r; this.texData[o + 1] = pin.g; this.texData[o + 2] = pin.b;
+    }
+  }
+
+  /** Blend slot of a pixel (slot+1), 0 where the effect is off. */
+  _blendAt(x, y) {
+    if (!this.blend || x < 0 || x >= this.w || y < 0 || y >= this.h) return 0;
+    return this.blend.slot[x + y * this.w];
+  }
+
+  /** How many bands a wall of this depth is cut into (1 = leave it whole). */
+  _blendBands(span) {
+    return Math.max(1, Math.min(BLEND_BANDS_MAX, Math.round(span / BLEND_BAND_PX)));
+  }
+
+  /**
+   * The uv of the donor a band draws from, as one pair repeated for all four
+   * corners: the palette is sorted lightest first, so the pick walks it as the
+   * band goes deeper - darker with depth - jittered a step either way.
+   */
+  _blendUvFor(slot, qx, qy, face, band, bands) {
+    const uv = this.blendUv[slot - 1];
+    const n = uv.length / 2;
+    const t = bands > 1 ? band / (bands - 1) : 0;
+    let i = Math.round(t * (n - 1)) + (blendHash(qx, qy, face, band) % 3) - 1;
+    i = Math.max(0, Math.min(n - 1, i));
+    const u = uv[i * 2], v = uv[i * 2 + 1];
+    return [[u, v], [u, v], [u, v], [u, v]];
+  }
+
+  /**
+   * A wall, as one quad or as a stack of colour bands down its depth. `emit`
+   * draws one band between two heights; `zA`/`zB` are the wall's top at its two
+   * ends (they differ only on the smooth path, where the top is sloped), and
+   * the frontmost band keeps the face's own uv so the wall still meets the
+   * front face exactly.
+   */
+  _wallBands(base, zA, zB, uv0, slot, face, qx, qy, emit) {
+    const bands = slot ? this._blendBands(Math.max(zA, zB) - base) : 1;
+    if (bands < 2) { emit(base, zA, zB, base, uv0); return; }
+    for (let k = 0; k < bands; k++) {
+      const hi = 1 - k / bands, lo = 1 - (k + 1) / bands;
+      emit(base + (zA - base) * lo, base + (zA - base) * hi,
+           base + (zB - base) * hi, base + (zB - base) * lo,
+           k === 0 ? uv0 : this._blendUvFor(slot, qx, qy, face, k, bands));
+    }
+  }
+
   /** Greedy-meshing key: pixels merge only with the same class and height. */
   _keyAt(x, y) {
     const c = this._classAt(x, y);
@@ -124,6 +255,14 @@ class TerrainMesh {
     this.relief = reliefMap || new Uint8Array(this.w * this.h);
     this.relief0 = this.relief.slice();
     this.hasRelief = this.relief.some((v) => v > 0);
+    this._rebuildAll();
+  }
+
+  /** Swap in a new blend map (a surface-blend tag changed) and re-mesh. */
+  setBlend(blendMap) {
+    this._installBlend(blendMap);
+    this._paintPins();
+    this.texture.needsUpdate = true;
     this._rebuildAll();
   }
 
@@ -225,6 +364,7 @@ class TerrainMesh {
     for (let y = y0; y < y0 + h; y++) {
       for (let x = x0; x < x0 + w; x++) this._paintPixel(x, y);
     }
+    this._paintPins();
   }
 
   /**
@@ -279,9 +419,12 @@ class TerrainMesh {
 
   _applyMutation(x, y, depthClass) {
     if (x < 0 || x >= this.w || y < 0 || y >= this.h) return;
-    this.depth[x + y * this.w] = depthClass;
-    this.relief[x + y * this.w] = 0; // dug holes and built bricks are flat
+    const i = x + y * this.w;
+    this.depth[i] = depthClass;
+    this.relief[i] = 0; // dug holes and built bricks are flat
+    if (this.blend) this.blend.slot[i] = 0; // nor are they the tagged piece any more
     this._paintPixel(x, y);
+    if (this.blendPinned && this.blendPinned.has(i)) this._paintPins();
     this.texture.needsUpdate = true;
 
     const cx = Math.floor(x / TERRAIN_CHUNK);
@@ -320,10 +463,12 @@ class TerrainMesh {
         if (solid && depth[i] === DepthClass.EMPTY) {
           depth[i] = depth0[i] !== DepthClass.EMPTY ? depth0[i] : DepthClass.TERRAIN;
           relief[i] = relief0[i];
+          if (this.blend) this.blend.slot[i] = this.blendSlot0[i];
           changed = true;
         } else if (!solid && depth[i] !== DepthClass.EMPTY) {
           depth[i] = DepthClass.EMPTY;
           relief[i] = 0;
+          if (this.blend) this.blend.slot[i] = 0;
           changed = true;
         }
         if (!changed) continue;
@@ -460,29 +605,36 @@ class TerrainMesh {
         // up the neighbour, which at a silhouette is empty (black)
         const uMid = (px + 0.5) / W, vMid = (py + 0.5) / H;
         const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
+        // the tops are sloped here, so each end of a band is interpolated on
+        // its own corner; the bands are cut per pixel, there is no run to break
+        const slot = this._blendAt(px, py);
         let base = wallBase(px - 1, py);
         if (base !== null) {
-          pushQuad([[p00[0], p00[1], base], [p00[0], p00[1], z00],
-                    [p01[0], p01[1], z01], [p01[0], p01[1], base]],
-            wallUv, SHADE_LEFT);
+          this._wallBands(base, z00, z01, wallUv, slot, 2, px, py,
+            (loA, hiA, hiB, loB, uv) => pushQuad(
+              [[p00[0], p00[1], loA], [p00[0], p00[1], hiA],
+               [p01[0], p01[1], hiB], [p01[0], p01[1], loB]], uv, SHADE_LEFT));
         }
         base = wallBase(px + 1, py);
         if (base !== null) {
-          pushQuad([[p10[0], p10[1], base], [p10[0], p10[1], z10],
-                    [p11[0], p11[1], z11], [p11[0], p11[1], base]],
-            wallUv, SHADE_RIGHT);
+          this._wallBands(base, z10, z11, wallUv, slot, 3, px, py,
+            (loA, hiA, hiB, loB, uv) => pushQuad(
+              [[p10[0], p10[1], loA], [p10[0], p10[1], hiA],
+               [p11[0], p11[1], hiB], [p11[0], p11[1], loB]], uv, SHADE_RIGHT));
         }
         base = wallBase(px, py - 1);
         if (base !== null) {
-          pushQuad([[p00[0], p00[1], base], [p10[0], p10[1], base],
-                    [p10[0], p10[1], z10], [p00[0], p00[1], z00]],
-            wallUv, SHADE_TOP);
+          this._wallBands(base, z10, z00, wallUv, slot, 4, px, py,
+            (loA, hiA, hiB, loB, uv) => pushQuad(
+              [[p00[0], p00[1], loB], [p10[0], p10[1], loA],
+               [p10[0], p10[1], hiA], [p00[0], p00[1], hiB]], uv, SHADE_TOP));
         }
         base = wallBase(px, py + 1);
         if (base !== null) {
-          pushQuad([[p01[0], p01[1], base], [p11[0], p11[1], base],
-                    [p11[0], p11[1], z11], [p01[0], p01[1], z01]],
-            wallUv, SHADE_BOTTOM);
+          this._wallBands(base, z11, z01, wallUv, slot, 5, px, py,
+            (loA, hiA, hiB, loB, uv) => pushQuad(
+              [[p01[0], p01[1], loB], [p11[0], p11[1], loA],
+               [p11[0], p11[1], hiA], [p01[0], p01[1], hiB]], uv, SHADE_BOTTOM));
         }
       }
     }
@@ -583,21 +735,30 @@ class TerrainMesh {
           const c = this._classAt(px, y0 + ly);
           const span = this._wallSpanAt(px, y0 + ly, px + dir, y0 + ly);
           if (!span) { ly++; continue; }
+          const slot = this._blendAt(px, y0 + ly);
           let run = 1;
           while (ly + run < ch) {
-            const c2 = this._classAt(px, y0 + ly + run);
-            const s2 = this._wallSpanAt(px, y0 + ly + run, px + dir, y0 + ly + run);
+            const y = y0 + ly + run;
+            // a blended run stops on the BLEND_RUN grid rather than merely
+            // being capped: the band colours are hashed off the segment's
+            // grid cell, so digging one pixel cannot recolour the rest
+            if (slot && y % BLEND_RUN === 0) break;
+            const c2 = this._classAt(px, y);
+            const s2 = this._wallSpanAt(px, y, px + dir, y);
             if (c2 !== c || spanKey(s2) !== spanKey(span)) break;
+            if (this._blendAt(px, y) !== slot) break;
             run++;
           }
           const wx = dir === -1 ? px : px + 1;
           const u = (px + 0.5) / W, va = (y0 + ly) / H, vb = (y0 + ly + run) / H;
-          pushQuad(
-            [[wx, y0 + ly, span[0]], [wx, y0 + ly, span[1]],
-             [wx, y0 + ly + run, span[1]], [wx, y0 + ly + run, span[0]]],
-            [[u, va], [u, va], [u, vb], [u, vb]],
-            dir === -1 ? SHADE_LEFT : SHADE_RIGHT
-          );
+          const uv0 = [[u, va], [u, va], [u, vb], [u, vb]];
+          const shade = dir === -1 ? SHADE_LEFT : SHADE_RIGHT;
+          const ya = y0 + ly, yb = y0 + ly + run;
+          this._wallBands(span[0], span[1], span[1], uv0, slot,
+            dir === -1 ? 2 : 3, px, (ya / BLEND_RUN) | 0,
+            (loA, hiA, hiB, loB, uv) => pushQuad(
+              [[wx, ya, loA], [wx, ya, hiA], [wx, yb, hiB], [wx, yb, loB]],
+              uv, shade));
           ly += run;
         }
       }
@@ -610,21 +771,27 @@ class TerrainMesh {
           const c = this._classAt(x0 + lx, py);
           const span = this._wallSpanAt(x0 + lx, py, x0 + lx, py + dir);
           if (!span) { lx++; continue; }
+          const slot = this._blendAt(x0 + lx, py);
           let run = 1;
           while (lx + run < cw) {
-            const c2 = this._classAt(x0 + lx + run, py);
-            const s2 = this._wallSpanAt(x0 + lx + run, py, x0 + lx + run, py + dir);
+            const x = x0 + lx + run;
+            if (slot && x % BLEND_RUN === 0) break; // as above: on the grid
+            const c2 = this._classAt(x, py);
+            const s2 = this._wallSpanAt(x, py, x, py + dir);
             if (c2 !== c || spanKey(s2) !== spanKey(span)) break;
+            if (this._blendAt(x, py) !== slot) break;
             run++;
           }
           const wy = dir === -1 ? py : py + 1;
           const v = (py + 0.5) / H, ua = (x0 + lx) / W, ub = (x0 + lx + run) / W;
-          pushQuad(
-            [[x0 + lx, wy, span[0]], [x0 + lx + run, wy, span[0]],
-             [x0 + lx + run, wy, span[1]], [x0 + lx, wy, span[1]]],
-            [[ua, v], [ub, v], [ub, v], [ua, v]],
-            dir === -1 ? SHADE_TOP : SHADE_BOTTOM
-          );
+          const uv0 = [[ua, v], [ub, v], [ub, v], [ua, v]];
+          const shade = dir === -1 ? SHADE_TOP : SHADE_BOTTOM;
+          const xa = x0 + lx, xb = x0 + lx + run;
+          this._wallBands(span[0], span[1], span[1], uv0, slot,
+            dir === -1 ? 4 : 5, (xa / BLEND_RUN) | 0, py,
+            (loA, hiA, hiB, loB, uv) => pushQuad(
+              [[xa, wy, loA], [xb, wy, loB], [xb, wy, hiB], [xa, wy, hiA]],
+              uv, shade));
           lx += run;
         }
       }

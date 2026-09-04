@@ -420,9 +420,13 @@ Vfs.boot("").then(function (booted) {
     invertBtn.textContent = "invert";
     invertBtn.addEventListener("click", () => tag(g, sp, () =>
       files.setEmboss(sp.key, ProfileStore.nextEmbossInvert(sp.key, files.get(g.url)), g.url)));
-    row2.append(embossBtn, invertBtn);
+    const blendBtn = document.createElement("button");
+    blendBtn.textContent = "surface blend";
+    blendBtn.addEventListener("click", () => tag(g, sp, () =>
+      files.setBlend(sp.key, ProfileStore.nextBlendToggle(sp.key, files.get(g.url)), g.url)));
+    row2.append(embossBtn, invertBtn, blendBtn);
     el.append(pic, name, size, row1, row2);
-    const card = { el, sprite: sp, canvas, size, dom: { classBtns, autoBtn, embossBtn, invertBtn } };
+    const card = { el, sprite: sp, canvas, size, dom: { classBtns, autoBtn, embossBtn, invertBtn, blendBtn } };
     cards.set(String(sp.key), card);
     return card;
   }
@@ -473,15 +477,17 @@ Vfs.boot("").then(function (booted) {
     const profile = files.get(g.url);
     const tagged = Object.keys(profile.terrain.byId).length;
     const shaded = Object.keys(profile.emboss.byId).length;
+    const blended = Object.keys(profile.blend.byId).length;
     dom.status.textContent = "";
     const b = document.createElement("b");
     b.textContent = ProfileStore.fileName(g.url);
     dom.status.append("profile: ", b, " · " + (files.exists(g.url) ? "on disk" : "no file yet") +
       " · " + tagged + " class tag" + (tagged === 1 ? "" : "s") +
       (shaded ? ", " + shaded + " shade setting" + (shaded === 1 ? "" : "s") : "") +
+      (blended ? ", " + blended + " surface blend" : "") +
       (files.isDirty(g.url) ? " · unsaved changes" : ""));
     dom.save.disabled = !files.isDirty(g.url);
-    dom.reset.disabled = !tagged && !shaded;
+    dom.reset.disabled = !tagged && !shaded && !blended;
   }
 
   async function save() {

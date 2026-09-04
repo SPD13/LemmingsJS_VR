@@ -106,7 +106,8 @@ own Z band:
 Everything drawn defaults to TERRAIN — in Lemmings almost every drawn pixel is
 standable ground — and the other classes come only from JSON profiles in
 `3d/profiles/`, one per sprite gallery, tagged per sprite in the editor or the
-galleries page. A tag belongs to the sprite, so it is kept with the gallery
+galleries page — as do the `emboss` (3D shade) and `blend` (surface blend)
+sections of the same files. A tag belongs to the sprite, so it is kept with the gallery
 the sprite comes from — a DOS tileset (`<pack>-g<set>.json`, pieces keyed by
 their index in the ground set) or a NeoLemmix style folder (`nx-<style>.json`,
 pieces keyed `<style>:<piece>`) — and a level reads the files of every gallery
@@ -136,6 +137,15 @@ Two optional treatments sit on top:
   texture. It multiplies triangle count, so it is switchable; individual
   pieces can opt out, or invert the mapping when they are drawn with dark
   highlights.
+- **surface blend**: an extruded side wall repeats its surface pixel's one
+  colour down the whole depth, which turns a shaded sprite into a monolithic
+  cliff wherever an edge is exposed. Tagged pieces instead cut the wall into
+  four bands and draw the colours the pixel's own colour region *touches* —
+  adjacency, not the sprite's whole palette, so a dark green may take the light
+  green five pixels away that borders it but not a brown at the far end that
+  borders nothing of it. The frontmost band keeps the surface pixel, so the lip
+  still matches the front face. Colours come from ordinary level pixels carrying
+  them, so clear-physics mode greys the bands along with everything else.
 - **smooth relief**: slopes the relief between neighbouring heights by
   averaging the pixel heights meeting at each quad corner, staying crisp at
   depth-class boundaries and silhouettes. This is smoothing through the slab.

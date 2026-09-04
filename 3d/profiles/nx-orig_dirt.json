@@ -11,5 +11,11 @@
   },
   "emboss": {
     "byId": {}
+  },
+  "blend": {
+    "byId": {
+      "orig_dirt:grass_03": true,
+      "orig_dirt:grass_04": true
+    }
   }
 }
