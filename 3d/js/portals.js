@@ -787,8 +787,18 @@ function spriteSkyMask(frame, triggerX, triggerY) {
  * are averaged from the four pixels meeting there, which rounds those steps
  * off, and the walls run from the face down to those same corner heights, so
  * the two meet exactly with no crack to see through at the mouth.
+ *
+ * `smooth` (the edge-smoothing switch) does for the door's outline in x and y
+ * what the averaging does for its funnel in z: each corner of the outline
+ * slides along its own diagonal, toward the lone pixel that owns a convex
+ * corner and into the lone gap of a concave one, so the staircase round the
+ * door reads as a cut edge. It is the terrain's rule and the sprites', run
+ * over the door's own silhouette, so a door set into the ground is cut the
+ * same way the ground around it is. Corners are shared by the pixels meeting
+ * at them - the face, the floor and the walls all ask for the same one - so
+ * the slab stays closed however far they move.
  */
-function buildPortalGeometry(frame, depth, sky) {
+function buildPortalGeometry(frame, depth, sky, smooth) {
   const w = frame.width, h = frame.height;
   const mask = frame.getMask();
   if (!sky) sky = new Uint8Array(w * h); // all frame: a slab with no opening
@@ -903,6 +913,31 @@ function buildPortalGeometry(frame, depth, sky) {
     return -sum / 4;
   };
 
+  // where a corner of the outline sits: on the grid, or slid along its
+  // diagonal when the edges are being smoothed (worked out once and shared,
+  // which is what keeps the slab closed)
+  const corners = new Array((w + 1) * (h + 1));
+  const solidAt = (x, y) => x >= 0 && x < w && y >= 0 && y < h && solid[y * w + x] !== 0;
+  const cornerAt = (x, y) => {
+    const slot = y * (w + 1) + x;
+    let c = corners[slot];
+    if (c) return c;
+    c = [x, y];
+    if (smooth) {
+      const a = solidAt(x - 1, y - 1), b = solidAt(x, y - 1);
+      const cc = solidAt(x - 1, y), d = solidAt(x, y);
+      const n = (a ? 1 : 0) + (b ? 1 : 0) + (cc ? 1 : 0) + (d ? 1 : 0);
+      if (n === 1 || n === 3) {
+        // toward the odd one out: the single pixel, or the single gap
+        const odd = n === 1 ? [a, b, cc, d] : [!a, !b, !cc, !d];
+        c = [x + ((odd[0] || odd[2]) ? -1 : 1) * SPRITE_SMOOTH_PULL,
+             y + ((odd[0] || odd[1]) ? -1 : 1) * SPRITE_SMOOTH_PULL];
+      }
+    }
+    corners[slot] = c;
+    return c;
+  };
+
   const positions = [], colors = [], uvs = [], indices = [];
   const quad = (verts, shade) => {
     const base = positions.length / 3;
@@ -918,6 +953,8 @@ function buildPortalGeometry(frame, depth, sky) {
     for (let x = 0; x < w; x++) {
       const here = y * w + x;
       if (!solid[here]) continue;
+      const c00 = cornerAt(x, y), c10 = cornerAt(x + 1, y);
+      const c11 = cornerAt(x + 1, y + 1), c01 = cornerAt(x, y + 1);
       // a filled gap has no paint of its own, so it wears its nearest
       // neighbour's, flat across the pixel
       const src = source[here] < 0 ? here : source[here];
@@ -928,8 +965,8 @@ function buildPortalGeometry(frame, depth, sky) {
       const v0 = drawn ? y / h : vc, v1 = drawn ? (y + 1) / h : vc;
 
       // the back of the slab, which under the opening is the tunnel's floor
-      quad([[x, y, -thick, u0, v0], [x + 1, y, -thick, u1, v0],
-            [x + 1, y + 1, -thick, u1, v1], [x, y + 1, -thick, u0, v1]],
+      quad([[c00[0], c00[1], -thick, u0, v0], [c10[0], c10[1], -thick, u1, v0],
+            [c11[0], c11[1], -thick, u1, v1], [c01[0], c01[1], -thick, u0, v1]],
            1 - PORTAL_TUNNEL_SHADE);
 
       if (sky[y * w + x]) continue; // the opening: nothing in front of the floor
@@ -938,16 +975,16 @@ function buildPortalGeometry(frame, depth, sky) {
       // the face, darkening as it steps down toward the opening
       const sunk = thick <= 0 ? 0 :
         Math.min(1, (-(z00 + z10 + z11 + z01) / 4) / thick);
-      quad([[x, y, z00, u0, v0], [x + 1, y, z10, u1, v0],
-            [x + 1, y + 1, z11, u1, v1], [x, y + 1, z01, u0, v1]],
+      quad([[c00[0], c00[1], z00, u0, v0], [c10[0], c10[1], z10, u1, v0],
+            [c11[0], c11[1], z11, u1, v1], [c01[0], c01[1], z01, u0, v1]],
            SPRITE_SHADE_FRONT - PORTAL_TUNNEL_SHADE * sunk);
       // a wall down to the floor wherever the face meets the opening or the
       // outside world
       const edges = [
-        [-1, 0, [x, y, z00], [x, y + 1, z01], SPRITE_SHADE_LEFT],
-        [1, 0, [x + 1, y + 1, z11], [x + 1, y, z10], SPRITE_SHADE_RIGHT],
-        [0, -1, [x + 1, y, z10], [x, y, z00], SPRITE_SHADE_TOP],
-        [0, 1, [x, y + 1, z01], [x + 1, y + 1, z11], SPRITE_SHADE_BOTTOM],
+        [-1, 0, [c00[0], c00[1], z00], [c01[0], c01[1], z01], SPRITE_SHADE_LEFT],
+        [1, 0, [c11[0], c11[1], z11], [c10[0], c10[1], z10], SPRITE_SHADE_RIGHT],
+        [0, -1, [c10[0], c10[1], z10], [c00[0], c00[1], z00], SPRITE_SHADE_TOP],
+        [0, 1, [c01[0], c01[1], z01], [c11[0], c11[1], z11], SPRITE_SHADE_BOTTOM],
       ];
       for (const [dx, dy, a, b, shade] of edges) {
         if (isFrame(x + dx, y + dy)) continue;
@@ -1005,7 +1042,7 @@ function portalObjectRect(mapObject) {
  * Every object that should be rendered as an opening, with its geometry.
  * `objectZ` is the plane objects sit on, which is where a door's face goes.
  */
-function buildPortals(level, profile, depthMap, objectZ) {
+function buildPortals(level, profile, depthMap, objectZ, smooth) {
   const data = window.__lem3dObjectData;
   const portals = [];
   if (!data || !Array.isArray(data.objects)) return portals;
@@ -1067,7 +1104,9 @@ function buildPortals(level, profile, depthMap, objectZ) {
     const mapObject = level.objects[i];
     const frame = mapObject.animation.frames[0];
     if (!frame) continue;
-    let geometry = null, hatch = null, openness = null;
+    // `rebuild` is what a change of the edge-smoothing switch needs to cut
+    // the geometry again; a ceiling square has straight edges and none
+    let geometry = null, hatch = null, openness = null, rebuild = null;
     if (config.shape === "ceiling") {
       const built = buildCeilingGeometry(frame, mapObject.animation.frames[1]);
       if (!built) continue;
@@ -1076,15 +1115,16 @@ function buildPortals(level, profile, depthMap, objectZ) {
       openness = hatchOpenness(mapObject.animation.frames, built.openingMask,
         frame.width);
     } else if (config.shape === "slab") {
-      geometry = buildPortalGeometry(frame, config.depth, null);
+      rebuild = { frame, depth: config.depth, sky: null };
+      geometry = buildPortalGeometry(frame, config.depth, null, smooth);
     } else {
       // the trigger box is in object space; the frame may be inset from it
       const tx = (info ? info.trigger_left + info.trigger_width / 2 : frame.width / 2)
         - frame.offsetX;
       const ty = (info ? info.trigger_top + info.trigger_height / 2 : frame.height / 2)
         - frame.offsetY;
-      geometry = buildPortalGeometry(frame, config.depth,
-        spriteSkyMask(frame, tx, ty));
+      rebuild = { frame, depth: config.depth, sky: spriteSkyMask(frame, tx, ty) };
+      geometry = buildPortalGeometry(frame, config.depth, rebuild.sky, smooth);
     }
     if (!geometry) continue;
 
@@ -1097,7 +1137,7 @@ function buildPortals(level, profile, depthMap, objectZ) {
       originX += spawnLocalX - (hatch.leftX + hatch.halfWidth);
     }
     portals.push({
-      index: i, objectId, geometry, originX, originY, shape: config.shape,
+      index: i, objectId, geometry, rebuild, originX, originY, shape: config.shape,
       // where it sounds from: the middle of the sprite, in sim coordinates
       sfxX: originX + frame.width / 2, sfxY: originY + frame.height / 2,
       hatch, openness, closedFrame: mapObject.animation.frames[1] || frame,

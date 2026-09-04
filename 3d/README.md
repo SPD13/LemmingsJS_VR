@@ -217,7 +217,7 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   of lava or acid are drawn through that depth as well, as a stack of slices
   of the wave sprite, each running the animation one frame on from the slice
   in front of it, so the surface churns instead of sliding along as one
-  block. With "smooth terrain" on the slices are blended into one another and
+  block. With "edge smoothing" on the slices are blended into one another and
   the stack reads as one rippling body rather than as layers. Off, they all
   stay
   the sprites the original draws and the
@@ -228,16 +228,21 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   stepping them, by averaging the pixel heights that meet at each quad corner
   (crisp at depth-class boundaries and silhouettes); it only changes anything
   while "3D terrain" is on. It works through the depth of the slab.
-- "smooth terrain" works across it instead, taking the staircase off the
+- "edge smoothing" works across it instead, taking the staircase off the
   outline: each corner of it slides along its own diagonal, toward the lone
   pixel that owns a convex corner and into the lone gap of a concave one. A
   corner with four pixels round it, or two side by side, is not the corner of
   anything and stays put, so a straight edge stays straight rather than the
-  whole silhouette eroding inward. Water and lava get it in the third
-  direction too: a slice's rim is thinner than its middle, so the edge rolls
-  off instead of ending in a square wall, and the pool reads as a surface
-  rather than as a heap of cubes. Lemmings and ordinary objects are left
-  square-edged - the switch is about the scenery.
+  whole silhouette eroding inward. The terrain, the water and lava, and the
+  openings all get it: an exit's outline is a staircase like the ground's, so
+  a door set into the terrain is cut the way the terrain is (the entrance
+  hatch has nothing to round - its square and its two doors are flat panels
+  with straight edges already). Water and lava get it in the third direction
+  too: a slice's rim is thinner than its middle, so the edge rolls off instead
+  of ending in a square wall, and the pool reads as a surface rather than as a
+  heap of cubes. Lemmings and ordinary objects are left square-edged - the
+  switch is about the scenery. It is still `?smoothterrain=` in the URL and
+  `lem3d-smooth-terrain` in storage, so older links and saved settings hold.
 - "colour blend" stops neighbouring pixels meeting at a hard edge: every face
   corner takes the mean of the pixels meeting there, and the extruded sides
   run the same way. It is a strength rather than a switch — press for *soft*
