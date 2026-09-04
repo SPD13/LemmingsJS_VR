@@ -2,7 +2,8 @@
 /**
  * Piece-tagging editor (plan §6): the authoring tool for depth profiles.
  *
- * Toggle with 'e' (pauses the sim). Click a terrain piece in the 3D view: the
+ * Opened by the mode icon, the piece-editor key (J by default) or ?edit=1, and
+ * it pauses the sim. Click a terrain piece in the 3D view: the
  * ray is marched through the extrusion (surfacePick) and the first column it
  * enters names the piece, read off the composite's own piece map — so what is
  * tagged is the pixel being looked at, whichever face of the diorama it sits
@@ -27,6 +28,12 @@ const TAG_HILITE_COLOR = 0xffd866;
 // whole one, so the highlight is a lip toward the eye rather than a skin
 // fighting the surface for its pixels, and reads from any angle.
 const TAG_HILITE_LIFT = 1;
+// The tagging guide, opened in a new tab by the panel's "help" button. It is
+// the repository's own copy rather than the file beside the page, so it reads
+// as a rendered document and is there whether or not this site was deployed
+// with the documentation.
+const TAG_HELP_URL = "https://github.com/SPD13/LemmingsJS_VR/blob/master/tagging.md";
+
 // Picking through the extrusion: how far the ray steps between samples - under
 // a pixel, so a one-pixel column cannot be stepped over.
 const TAG_PICK_STEP = 0.4;
@@ -94,6 +101,7 @@ class PieceEditor {
       saveBtn: document.getElementById("ed-save"),
       exportBtn: document.getElementById("ed-export"),
       galleriesBtn: document.getElementById("ed-galleries"),
+      helpBtn: document.getElementById("ed-help"),
       msg: document.getElementById("ed-msg"),
     };
     this._onClassBtn = (e) => this.setClass(e.target.dataset.class);
@@ -106,6 +114,8 @@ class PieceEditor {
     this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
     this._onGalleriesBtn = () => this.leaveTo(this.galleriesUrl());
+    // a new tab, so nothing here is left and unsaved tags are never at risk
+    this._onHelpBtn = () => window.open(TAG_HELP_URL, "_blank", "noopener");
     this.dom.classBtns.forEach((b) => b.addEventListener("click", this._onClassBtn));
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
@@ -116,6 +126,10 @@ class PieceEditor {
     this.dom.saveBtn.addEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.addEventListener("click", this._onExportBtn);
     if (this.dom.galleriesBtn) this.dom.galleriesBtn.addEventListener("click", this._onGalleriesBtn);
+    if (this.dom.helpBtn) {
+      this.dom.helpBtn.title = "the tagging guide, on GitHub (opens in a new tab)";
+      this.dom.helpBtn.addEventListener("click", this._onHelpBtn);
+    }
   }
 
   _msg(text, ok) {
@@ -504,7 +518,8 @@ class PieceEditor {
   }
 
   /**
-   * Turn surface blend on/off for the selected piece: only the colours down
+   * Turn surface blend on/off for the selected piece - it is on for every
+   * piece until one is tagged out, so this mostly writes exclusions. Only the colours down
    * the extrusion change, so the depth buffer is untouched and the blend map
    * alone is re-derived.
    */
@@ -520,7 +535,8 @@ class PieceEditor {
   }
 
   /**
-   * Turn colour blend on/off for the selected piece. Like surface blend it is
+   * Turn colour blend on/off for the selected piece - it is on for every piece
+   * until one is tagged out of it, as the surface blend is. Like it, this is
    * only a matter of colour, so the depth buffer stands and the colour map
    * alone is re-derived - though the master switch in the 3D effects drawer
    * can be holding the effect off whatever the tag says.
@@ -724,6 +740,7 @@ class PieceEditor {
     this.dom.saveBtn.removeEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.removeEventListener("click", this._onExportBtn);
     if (this.dom.galleriesBtn) this.dom.galleriesBtn.removeEventListener("click", this._onGalleriesBtn);
+    if (this.dom.helpBtn) this.dom.helpBtn.removeEventListener("click", this._onHelpBtn);
     this.dom.panel.hidden = true;
   }
 }

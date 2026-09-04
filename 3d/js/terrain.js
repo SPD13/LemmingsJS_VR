@@ -15,7 +15,8 @@
  * re-mesh dirty chunks with a per-tick budget. Geometry lives in game pixel
  * space (y down); the parent group flips it into world space.
  *
- * A piece tagged for *surface blend* has its side walls cut into bands down
+ * A piece taking the *surface blend* - every piece bar the ones tagged out of
+ * it - has its side walls cut into bands down
  * the depth, each band drawing one of the colours that touch the pixel's own
  * colour region instead of repeating the surface pixel's (depth.js
  * buildBlendMap). The colours are sampled from ordinary level pixels carrying
@@ -23,7 +24,8 @@
  * engines blank a dug pixel's RGB to black, and a dug donor would blacken every
  * band aiming at it. Pin RGB only, never alpha.
  *
- * A piece tagged for *colour blend* has its pixels' colours run into each
+ * A piece taking the *colour blend* - every piece the master switch covers,
+ * bar the ones tagged out of it - has its pixels' colours run into each
  * other instead of meeting at a hard edge: each face corner takes the mean of
  * the pixels of its class meeting there (the colour twin of _cornerZ), and a
  * wall runs from the colour its face ends on at the top, through a diffused

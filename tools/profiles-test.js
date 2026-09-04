@@ -119,36 +119,42 @@ async function main() {
     check("the depth pass reads the tag", D.depthClassForPiece({ key: "k" }, ProfileStore.withClass(p, "k", "backdrop")) === D.DepthClass.BACKDROP);
     check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} }, blend: { byId: {} }, colorBlend: { byId: {} } }));
 
-    check("surface blend is off by default and toggles on", ProfileStore.nextBlendToggle("k", p) === true);
-    ProfileStore.withBlend(p, "k", true);
-    check("...and off again", ProfileStore.nextBlendToggle("k", p) === false &&
-      D.surfaceBlendFor("k", p) === true);
+    check("surface blend is on by default and toggles off", D.surfaceBlendFor("k", p) === true &&
+      ProfileStore.nextBlendToggle("k", p) === false);
     ProfileStore.withBlend(p, "k", false);
-    check("off removes the entry", !("k" in p.blend.byId) && D.surfaceBlendFor("k", p) === false);
+    check("...the exclusion is what the file records", p.blend.byId["k"] === false &&
+      D.surfaceBlendFor("k", p) === false && ProfileStore.nextBlendToggle("k", p) === true);
+    ProfileStore.withBlend(p, "k", true);
+    check("back on drops the entry again", !("k" in p.blend.byId) && D.surfaceBlendFor("k", p) === true);
+    check("an older file's redundant true still reads as on",
+      D.surfaceBlendFor("k", { blend: { byId: { k: true } } }) === true);
 
-    check("colour blend is off by default and toggles on", ProfileStore.nextColorBlendToggle("k", p) === true);
-    ProfileStore.withColorBlend(p, "k", true);
-    check("...and off again", ProfileStore.nextColorBlendToggle("k", p) === false &&
-      D.colorBlendFor("k", p) === true);
+    check("colour blend is on by default and toggles off", D.colorBlendFor("k", p) === true &&
+      ProfileStore.nextColorBlendToggle("k", p) === false);
     ProfileStore.withColorBlend(p, "k", false);
-    check("off removes the colour blend entry", !("k" in p.colorBlend.byId) && D.colorBlendFor("k", p) === false);
+    check("...the exclusion is what the file records", p.colorBlend.byId["k"] === false &&
+      D.colorBlendFor("k", p) === false && ProfileStore.nextColorBlendToggle("k", p) === true);
+    ProfileStore.withColorBlend(p, "k", true);
+    check("back on drops the entry again", !("k" in p.colorBlend.byId) && D.colorBlendFor("k", p) === true);
+    check("an older file's redundant true still reads as on",
+      D.colorBlendFor("k", { colorBlend: { byId: { k: true } } }) === true);
 
     const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton(), blendBtn: fakeButton(), colorBlendBtn: fakeButton() };
     renderTagButtons(dom, "k", p, true);
     check("buttons: the class and inverted shade are lit", dom.classBtns[0].classList.contains("active") && !dom.autoBtn.classList.contains("active") &&
       dom.embossBtn.classList.contains("active") && dom.invertBtn.classList.contains("active"));
-    check("buttons: surface and colour blend are dark until they are tagged",
-      !dom.blendBtn.classList.contains("active") && !dom.colorBlendBtn.classList.contains("active"));
-    ProfileStore.withColorBlend(p, "k", true);
-    renderTagButtons(dom, "k", p, true);
-    check("buttons: ...and colour blend lights once it is", dom.colorBlendBtn.classList.contains("active"));
+    check("buttons: both blends are lit until they are tagged out",
+      dom.blendBtn.classList.contains("active") && dom.colorBlendBtn.classList.contains("active"));
     ProfileStore.withColorBlend(p, "k", false);
-    ProfileStore.withBlend(p, "k", true);
-    renderTagButtons(dom, "k", p, true);
-    check("buttons: ...and lit once it is", dom.blendBtn.classList.contains("active"));
     ProfileStore.withBlend(p, "k", false);
+    renderTagButtons(dom, "k", p, true);
+    check("buttons: ...and go dark once they are",
+      !dom.colorBlendBtn.classList.contains("active") && !dom.blendBtn.classList.contains("active"));
+    ProfileStore.withColorBlend(p, "k", true);
+    ProfileStore.withBlend(p, "k", true);
     renderTagButtons(dom, "other", p, true);
-    check("buttons: an untagged piece lights auto and 3D shade only", dom.autoBtn.classList.contains("active") && dom.embossBtn.classList.contains("active") &&
+    check("buttons: an untagged piece lights auto, 3D shade and both blends", dom.autoBtn.classList.contains("active") && dom.embossBtn.classList.contains("active") &&
+      dom.blendBtn.classList.contains("active") && dom.colorBlendBtn.classList.contains("active") &&
       !dom.invertBtn.classList.contains("active") && !dom.classBtns[0].classList.contains("active"));
     renderTagButtons(dom, null, p, false);
     check("buttons: nothing selected disables them all", dom.classBtns.every((b) => b.disabled) && dom.autoBtn.disabled && dom.embossBtn.disabled);
@@ -178,11 +184,11 @@ async function main() {
     const groundData = { terraImages: { 0: { name: "s:p" } } };
     const has = (palette, c) => palette.some((d) => d.r === c[0] && d.g === c[1] && d.b === c[2]);
 
-    const off = D.buildBlendMap(level, pieceMap, { blend: { byId: {} } }, groundData);
-    check("an untagged piece yields no donors", off.donors.length === 0 &&
+    const off = D.buildBlendMap(level, pieceMap, { blend: { byId: { "s:p": false } } }, groundData);
+    check("a piece tagged out of it yields no donors", off.donors.length === 0 &&
       off.slot.every((v) => v === 0));
 
-    const on = D.buildBlendMap(level, pieceMap, { blend: { byId: { "s:p": true } } }, groundData);
+    const on = D.buildBlendMap(level, pieceMap, { blend: { byId: {} } }, groundData);
     const dark = on.donors[on.slot[0 * W + 0] - 1];
     check("the dark green zone may use the light green that touches it",
       has(dark, DARK) && has(dark, LIGHT));
@@ -196,13 +202,13 @@ async function main() {
         return groundImage[o] === d.r && groundImage[o + 1] === d.g && groundImage[o + 2] === d.b;
       })));
 
-    const cbOn = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: { "s:p": true } } }, true, groundData);
-    check("colour blend marks every solid pixel of a tagged piece",
+    const cbOn = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: {} } }, true, groundData);
+    check("colour blend marks every solid pixel of an untagged piece",
       cbOn.length === W * H && Array.from(cbOn).every((v) => v === 1));
-    const cbOff = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: { "s:p": true } } }, false, groundData);
+    const cbOff = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: {} } }, false, groundData);
     check("the master switch off leaves nothing marked", Array.from(cbOff).every((v) => v === 0));
-    const cbUntagged = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: {} } }, true, groundData);
-    check("an untagged piece is not colour blended", Array.from(cbUntagged).every((v) => v === 0));
+    const cbExcluded = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: { "s:p": false } } }, true, groundData);
+    check("a piece tagged out of it is not colour blended", Array.from(cbExcluded).every((v) => v === 0));
 
     // one colour everywhere: nothing to blend with, so nothing is marked
     const flat = new Uint8ClampedArray(W * H * 4);
@@ -210,7 +216,7 @@ async function main() {
       flat[i * 4] = DARK[0]; flat[i * 4 + 1] = DARK[1]; flat[i * 4 + 2] = DARK[2]; flat[i * 4 + 3] = 255;
     }
     const plain = D.buildBlendMap({ ...level, groundImage: flat }, pieceMap,
-      { blend: { byId: { "s:p": true } } }, groundData);
+      { blend: { byId: {} } }, groundData);
     check("a single-colour zone is dropped", plain.donors.length === 0 &&
       plain.slot.every((v) => v === 0));
 
@@ -221,7 +227,7 @@ async function main() {
       aa[o] = LIGHT[0] + 4; aa[o + 1] = LIGHT[1] + 4; aa[o + 2] = LIGHT[2] + 4;
     }
     const merged = D.buildBlendMap({ ...level, groundImage: aa }, pieceMap,
-      { blend: { byId: { "s:p": true } } }, groundData);
+      { blend: { byId: {} } }, groundData);
     check("shades within the merge threshold count as one colour",
       merged.donors[merged.slot[0] - 1].length === 2);
   }
@@ -244,8 +250,8 @@ async function main() {
     check("save writes the file and clears dirty", r.ok && !files.isDirty("3d/profiles/nx-b.json") && files.exists("3d/profiles/nx-b.json") &&
       JSON.parse(table["3d/profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
     check("export is the file's JSON", JSON.parse(files.exportJson("3d/profiles/nx-b.json")).terrain.byId["b:q"] === "relief");
-    files.setBlend("b:q", true, "3d/profiles/nx-b.json");
-    files.setColorBlend("b:q", true, "3d/profiles/nx-b.json");
+    files.setBlend("b:q", false, "3d/profiles/nx-b.json");
+    files.setColorBlend("b:q", false, "3d/profiles/nx-b.json");
     files.resetAll("3d/profiles/nx-b.json");
     check("reset clears every tag of the file", same(files.get("3d/profiles/nx-b.json").terrain.byId, {}) &&
       same(files.get("3d/profiles/nx-b.json").blend.byId, {}) &&
@@ -260,12 +266,12 @@ async function main() {
     const r3 = await mg.save("3d/profiles/nx-c.json");
     check("a read-back that differs is not a save", !r3.ok && r3.error === "read-back mismatch");
     const mb = new ProfileFiles({ fetch: fakeFetch({}, { mangle: (json) => JSON.stringify({ ...JSON.parse(json), blend: { byId: {} } }) }).fetch });
-    mb.setBlend("c:p", true, "3d/profiles/nx-c.json");
+    mb.setBlend("c:p", false, "3d/profiles/nx-c.json");
     const r4 = await mb.save("3d/profiles/nx-c.json");
     check("a read-back that drops the surface blend is not a save", !r4.ok && r4.error === "read-back mismatch");
 
     const mc = new ProfileFiles({ fetch: fakeFetch({}, { mangle: (json) => JSON.stringify({ ...JSON.parse(json), colorBlend: { byId: {} } }) }).fetch });
-    mc.setColorBlend("c:p", true, "3d/profiles/nx-c.json");
+    mc.setColorBlend("c:p", false, "3d/profiles/nx-c.json");
     const r5 = await mc.save("3d/profiles/nx-c.json");
     check("a read-back that drops the colour blend is not a save", !r5.ok && r5.error === "read-back mismatch");
 

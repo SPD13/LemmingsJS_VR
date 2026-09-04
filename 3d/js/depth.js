@@ -154,16 +154,17 @@ const BLEND_MERGE = 24;
  * Surface blend for a piece: may its extruded side walls draw the sprite's
  * other colours down the depth instead of repeating the surface pixel's one.
  *
- * Pieces opt IN - the opposite of the emboss tag above, which they opt out of.
- * The effect changes how a sprite looks rather than fixing something that is
- * wrong by default, so nothing gets it until it is asked for.
+ * Pieces opt out, not in, as they do of the colour-keyed relief and the colour
+ * blend: a wall smearing one pixel's colour the whole depth is what turns a
+ * shaded sprite into a monolithic cliff, so the blend is the better default
+ * and a tag is worth spending on the pieces it does not suit.
  */
 function surfaceBlendFor(pieceId, profile) {
   const cfg = (profile && profile.blend) || {};
   const byId = cfg.byId || {};
   const value = Object.prototype.hasOwnProperty.call(byId, pieceId)
     ? byId[pieceId] : cfg.default;
-  return value === true;
+  return value !== false;
 }
 
 /** Perceived brightness of a packed 0xRRGGBB colour. */
@@ -183,23 +184,28 @@ function blendNear(a, b) {
  * instead of meeting at a hard edge, in x and y across its faces and in z down
  * the walls between two heights.
  *
- * Opt in, like surface blend above, and gated on top by a master switch (the
- * 3D effects drawer) because it costs geometry: a blended pixel cannot merge
- * into a greedy rectangle, since a rectangle has no corners to carry the
- * colours of the pixels inside it.
+ * Pieces opt out, not in, as they do of the colour-keyed relief above: what
+ * the blend is for - a sprite reading as a surface rather than as the grid it
+ * was drawn on - is wanted almost everywhere, so a tag is worth spending on
+ * the exceptions rather than on the rule. The master switch in the 3D effects
+ * drawer still gates the lot, which is where the cost is answered: a blended
+ * pixel cannot merge into a greedy rectangle, since a rectangle has no corners
+ * to carry the colours of the pixels inside it.
  */
 function colorBlendFor(pieceId, profile) {
   const cfg = (profile && profile.colorBlend) || {};
   const byId = cfg.byId || {};
   const value = Object.prototype.hasOwnProperty.call(byId, pieceId)
     ? byId[pieceId] : cfg.default;
-  return value === true;
+  return value !== false;
 }
 
 /**
- * Per-pixel flag: 1 where the pixel belongs to a colour-blend-tagged piece.
- * `enabled` false (the master switch off) returns a flat map, exactly as
- * buildReliefMap does for the relief.
+ * Per-pixel flag: 1 where the pixel's piece takes the colour blend - which is
+ * every piece that has not been tagged out of it. `enabled` false (the master
+ * switch off) returns a flat map, exactly as buildReliefMap does for the
+ * relief, and so does a level with no piece list to read (a special level):
+ * slot 0 of the table is "no piece", and it is never on.
  */
 function buildColorBlendMap(level, pieceMap, profile, enabled, groundData) {
   const W = level.width, H = level.height;
@@ -210,12 +216,10 @@ function buildColorBlendMap(level, pieceMap, profile, enabled, groundData) {
   let maxId = 254;
   for (const id of Object.keys(images)) maxId = Math.max(maxId, +id);
   const onById = new Uint8Array(maxId + 2);
-  let anyTagged = false;
   for (let id = 0; id <= maxId; id++) {
     const key = images[id] && images[id].name != null ? images[id].name : id;
-    if (colorBlendFor(key, profile)) { onById[id + 1] = 1; anyTagged = true; }
+    if (colorBlendFor(key, profile)) onById[id + 1] = 1;
   }
-  if (!anyTagged) return map;
 
   const mask = level.getGroundMaskLayer().groundMask;
   for (let i = 0; i < W * H; i++) {
@@ -252,18 +256,18 @@ function buildBlendMap(level, pieceMap, profile, groundData) {
   const nothing = { slot, donors: [] };
   if (!pieceMap || !groundData) return nothing;
 
-  // which piece ids are tagged (a Lemmix piece is tagged by name, so the id is
-  // looked up through its image, as buildReliefMap does)
+  // which piece ids take the blend - all of them bar the ones tagged out (a
+  // Lemmix piece is tagged by name, so the id is looked up through its image,
+  // as buildReliefMap does). Slot 0 is "no piece" and is never on, so a level
+  // with no piece list to read comes out blank, as it did before.
   const images = groundData.terraImages || {};
   let maxId = 254;
   for (const id of Object.keys(images)) maxId = Math.max(maxId, +id);
   const blendById = new Uint8Array(maxId + 2);
-  let anyTagged = false;
   for (let id = 0; id <= maxId; id++) {
     const key = images[id] && images[id].name != null ? images[id].name : id;
-    if (surfaceBlendFor(key, profile)) { blendById[id + 1] = 1; anyTagged = true; }
+    if (surfaceBlendFor(key, profile)) blendById[id + 1] = 1;
   }
-  if (!anyTagged) return nothing;
 
   const img = level.groundImage;
   const mask = level.getGroundMaskLayer().groundMask;

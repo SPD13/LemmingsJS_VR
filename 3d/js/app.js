@@ -2212,7 +2212,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
   const renderColorBlendBtn = () => {
     const level = colorBlendLevel();
     hudIcons.colorBlend({ on: level.softness > 0, softness: level.softness });
-    colorBlendBtn.title = "colour blend (softens the edge between the tagged pieces' pixels): "
+    colorBlendBtn.title = "colour blend (softens the edge between neighbouring pixels of the terrain, "
+      + "and of the water, lava and acid; pieces are tagged out of it in the piece editor): "
       + level.label + " — press for " +
       COLOR_BLEND_LEVELS[(COLOR_BLEND_LEVELS.indexOf(level) + 1) % COLOR_BLEND_LEVELS.length].label;
   };
@@ -2640,6 +2641,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     worldGroup.add(ring);
 
     const materialCache = new SpriteMaterialCache(resources);
+    // the colour blend covers the surfaces too - water, lava, acid - off the
+    // same switch as the tagged terrain pieces, at the same strength
+    materialCache.setColorBlend(colorBlendLevel().softness);
 
     // openings: recessed geometry, textured with the object's current frame
     for (const portal of portals) {
@@ -2693,7 +2697,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     const stackIndices = new Set(stacks.map((s) => s.index));
     // with the corners rounded off (the "smooth terrain" switch) a slice wears
     // the rounded cut of its frame, blended into the slices either side of it;
-    // the texture is shared with the square-edged cut
+    // the texture is shared with the square-edged cut. Its colours come from
+    // surfaceMaterialFor, which is where the colour blend is applied - the
+    // shape is the same either way, only the texture on it changes.
     const waveEntryFor = (prev, frame, next) => (state.smoothTerrain
       ? materialCache.forFrameBlended(prev || null, frame, next || null)
       : materialCache.forFrame(frame));
@@ -2705,7 +2711,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
       const first = stack.mapObject.animation.frames[0];
       const entry = waveEntryFor(null, first, null);
       for (let k = 0; k < stack.phases.length; k++) {
-        const mesh = new THREE.Mesh(entry.geometry, entry.material);
+        const mesh = new THREE.Mesh(entry.geometry, materialCache.surfaceMaterialFor(first));
         mesh.scale.y = stack.flipY ? -1 : 1;
         mesh.position.set(stack.mapObject.x + first.offsetX,
           stack.mapObject.y + first.offsetY + (stack.flipY ? entry.h : 0),
@@ -2863,7 +2869,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
             const mesh = stack.meshes[k];
             mesh.geometry = entry.geometry;
             mesh.material = game.clearPhysics
-              ? materialCache.flatMaterialFor(frame) : entry.material;
+              ? materialCache.flatMaterialFor(frame)
+              : materialCache.surfaceMaterialFor(frame);
             // the frame carries its own offsets, as it does for a billboard
             mesh.scale.y = stack.flipY ? -1 : 1;
             mesh.position.set(object.x + frame.offsetX,
@@ -3099,6 +3106,11 @@ Vfs.boot("", "setup.html").then(function (booted) {
           buildColorBlendMap(level, pieceMap, session.profile,
             state.colorBlend !== "off", groundData),
           colorBlendLevel().softness);
+        // and the surfaces with it: the slices take their material afresh
+        // every time they are dressed, so they only need drawing again -
+        // whether the clock is running or not
+        materialCache.setColorBlend(colorBlendLevel().softness);
+        syncScene(true);
       },
       // the 2D view: the terrain as one quad, the openings as the original's
       // sprites again (their geometry and the water hidden), the bar flat
