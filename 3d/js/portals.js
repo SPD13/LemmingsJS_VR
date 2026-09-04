@@ -12,10 +12,17 @@
  * slab the way the terrain beside it does.
  *
  * Stacking the same frame would only extrude it - one solid block of wave
- * sliding along. Each slice runs the same animation a few frames apart
- * instead, so at any moment the slices show different parts of the cycle and
- * the surface churns. The offsets are drawn once, from a generator seeded by
- * the object's own index, so a reload and a replay churn the same way.
+ * sliding along. Each slice runs the same animation one frame on from the
+ * slice in front of it instead, so at any moment they show consecutive parts
+ * of the cycle and the surface churns; read down the slab it is a wave
+ * travelling back through it. Where that wave starts is seeded from the
+ * object's own index, so two pools are not in step and a reload and a replay
+ * churn the same way.
+ *
+ * The slices are then blended into one another (bridge.js), so the stack
+ * reads as one body rather than as layers. A step apart is what makes that
+ * possible: neighbouring slices are as alike as the animation ever gets, and
+ * only shapes that alike have anything worth interpolating.
  *
  * Entrances and exits as real openings.
  *
@@ -51,9 +58,9 @@ const PORTAL_PANEL_THICK = 1;
 const WATER_SURFACE_DROP = 2;
 // Enough to read as water without hiding what is standing in it.
 const WATER_OPACITY = 0.55;      // the ceiling square is a game pixel thick
-// How much of the animation cycle the slices' offsets are spread over: 1 is
-// the whole of it, less keeps neighbouring slices closer together.
-const WAVE_PHASE_SPREAD = 1;
+// How many frames apart neighbouring slices run. One keeps them as alike as
+// the animation ever gets, which is what blends cleanly.
+const WAVE_PHASE_STEP = 1;
 const PORTAL_FLAP_THICK = 1;       // and so are the doors hinged under it
 
 /** Stash the object list and their metadata as the level is built. */
@@ -137,20 +144,28 @@ function waveFrameCount(mapObject) {
 }
 
 /**
- * One frame offset per slice, spread over the cycle and never equal to the
- * slice in front of it, so no two neighbours ever move together.
+ * The frame offset each slice runs at: one step per slice, from a starting
+ * point of this object's own.
+ *
+ * A ramp rather than a scatter, because neighbouring slices are now blended
+ * into one another (bridge.js) and only shapes a frame apart have enough in
+ * common to blend cleanly - a slice showing frame 2 against one showing frame
+ * 7 shares no crest to interpolate. It also costs almost nothing to draw: the
+ * slices only ever ask for consecutive frames, so a whole pool needs as many
+ * blended shapes as the animation has frames, and every pool in the level
+ * shares them. Scattered offsets would need one for every combination.
+ *
+ * Read down the slab it is a wave travelling back through it. The start is
+ * seeded from the object's own index, so two pools are not in step with each
+ * other and a reload lands the same way.
  */
 function wavePhases(frameCount, slices, seed) {
   const phases = new Uint16Array(slices);
   if (frameCount <= 1) return phases;
-  const span = Math.max(1, Math.round(frameCount * WAVE_PHASE_SPREAD));
   const rand = waveRandom(seed * 2654435761 + 1);
-  let prev = -1;
+  const base = Math.floor(rand() * frameCount) % frameCount;
   for (let k = 0; k < slices; k++) {
-    let phase = Math.floor(rand() * span) % frameCount;
-    if (phase === prev && frameCount > 1) phase = (phase + 1) % frameCount;
-    phases[k] = phase;
-    prev = phase;
+    phases[k] = (base + k * WAVE_PHASE_STEP) % frameCount;
   }
   return phases;
 }
