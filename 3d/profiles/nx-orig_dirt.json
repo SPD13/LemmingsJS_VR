@@ -1,0 +1,15 @@
+{
+  "terrain": {
+    "default": "terrain",
+    "byId": {
+      "orig_dirt:moss_03": "backdrop",
+      "orig_dirt:roots_04": "backdrop",
+      "orig_dirt:moss_02": "backdrop",
+      "orig_dirt:moss_04": "backdrop",
+      "orig_dirt:roots_03": "backdrop"
+    }
+  },
+  "emboss": {
+    "byId": {}
+  }
+}
