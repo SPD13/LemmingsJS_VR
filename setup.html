@@ -136,8 +136,9 @@
       <span class="grow">mode: <b id="mode-name">…</b> <span id="mode-what" class="dim"></span></span>
       <button id="btn-mode" data-busy>switch</button>
     </div>
-    <div class="dim">The URL decides too: <code>?assets=static</code> plays from this browser's storage,
-      <code>?assets=server</code> from the web server; the choice is remembered.</div>
+    <div class="dim">Without a choice the page plays from the web server when the launcher answers, from this browser's storage
+      otherwise. <code>?assets=static</code> or <code>?assets=server</code> in the URL forces one, and the pages carry the flag
+      along while it is set.</div>
     <div id="msg-mode" class="msg"></div>
   </div>
 

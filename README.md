@@ -15,9 +15,10 @@ distribution; `setup.md` is the player's guide to what to download, where,
 and how to install it, the original games' own files included. The game data - the level packs under `levels/`
 and NeoLemmix's own files under `neolemmix/` (styles, panel graphics, masks,
 sound effects, music) - comes from elsewhere, in one of two **asset modes**
-the 3D page chooses with the URL (`?assets=static` or `?assets=server`,
-remembered afterwards; without either it asks the server for
-`levels/index.json` and takes *server* when there is one):
+the 3D page chooses with the URL (`?assets=static` or `?assets=server`
+forces one, and the pages carry the flag along while it is set; without
+either it takes *server* when the launcher answers its health check,
+*static* otherwise):
 
 - **static** - the files live in the browser's own storage (IndexedDB),
   installed from the **setup page** (`setup.html`, the *Setup* button on

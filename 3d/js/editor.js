@@ -252,11 +252,11 @@ class PieceEditor {
 
   /** The galleries page, on the selected piece's gallery when there is one. */
   galleriesUrl() {
-    if (this.selectedId == null || !this._hasPieceData) return "galleries.html";
+    if (this.selectedId == null || !this._hasPieceData) return Vfs.link("galleries.html");
     const key = this._key(this.selectedId);
     const gallery = ProfileStore.galleryForKey(key, this.s.profileUrl ? ProfileStore.galleryForUrl(this.s.profileUrl) : null);
-    if (!gallery) return "galleries.html";
-    return "galleries.html?gallery=" + encodeURIComponent(gallery) + "&piece=" + encodeURIComponent(key);
+    if (!gallery) return Vfs.link("galleries.html");
+    return Vfs.link("galleries.html?gallery=" + encodeURIComponent(gallery) + "&piece=" + encodeURIComponent(key));
   }
 
   /** Go to another page, asking first when a file holds unsaved tags. */
@@ -284,7 +284,7 @@ class PieceEditor {
       const line = document.createElement("div");
       line.className = "ed-file";
       const a = document.createElement("a");
-      a.href = "galleries.html?gallery=" + encodeURIComponent(gallery);
+      a.href = Vfs.link("galleries.html?gallery=" + encodeURIComponent(gallery));
       a.textContent = gallery.startsWith("nx:") ? gallery.slice(3) : gallery;
       a.title = "open this gallery (" + ProfileStore.fileName(url) + ")";
       a.addEventListener("click", (e) => { e.preventDefault(); this.leaveTo(a.href); });

@@ -46,6 +46,10 @@ Besides the files it serves three things of its own:
   — the depth profile of a sprite gallery, written by the 3D page's piece
   editor and its galleries page. Only those names are writable; the reply
   is `{"ok":true}` once the file is on disk.
+- `GET /health.json` — `{"launcher":true, "version", "levels", "neolemmix":
+  {"engine","styles"}}`: the page takes server mode when this answers
+  (`?assets=` in the URL overrides), and goes to the setup page first when
+  `levels` is 0.
 - `GET /levels/dirs.json`, `GET /neolemmix/state.json`, `POST /upload`,
   `DELETE /levels/<dir>`, `DELETE /neolemmix/<folder>` — the setup page in
   server mode: the level directories on disk with their file count and

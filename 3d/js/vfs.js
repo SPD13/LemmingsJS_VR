@@ -11,9 +11,10 @@
  *   answers the game's requests for them. What a static host such as GitHub
  *   Pages runs, since it ships the engine only.
  *
- * The mode comes from the URL (?assets=static|server, remembered in
- * localStorage), else the remembered choice, else a probe: a server that has
- * levels/index.json is a server. The worker only intercepts in static mode;
+ * The mode comes from the URL (?assets=static|server forces one, and the
+ * pages carry the flag along while it is set), else from the launcher's
+ * health check: a server that answers health.json is a server, anything
+ * else is a static host. The worker only intercepts in static mode;
  * it reads the mode from the database (its memory can be dropped between
  * requests) and is told about changes by message.
  *
@@ -27,7 +28,7 @@
 (function (root) {
   const DB_NAME = "lem3d-files";
   const DB_VERSION = 1;
-  const MODE_KEY = "lem3d-assets";      // localStorage: the remembered mode
+  const HEALTH_PATH = "health.json";    // the launcher answers it (launcher/server.js)
   const SEEN_KEY = "lem3d-setup-seen";  // localStorage: the setup page was shown
   const PARAM = "assets";
   const STORE_PREFIXES = ["neolemmix/", "levels/"];
@@ -327,18 +328,35 @@
   // ---- the mode -----------------------------------------------------------
 
   let mode = null;
+  let forced = false; // the URL named the mode
+  let health = null;  // what the launcher answered, null on a static host
 
-  /** The remembered mode, if any. */
-  function savedMode() {
+  /**
+   * The launcher's health check: {launcher: true, version, levels (how
+   * many level directories), neolemmix: {engine, styles}}, or null when no
+   * launcher serves this page. Fetched past every cache, with ?probe so
+   * the worker leaves it alone.
+   */
+  async function fetchHealth(root) {
     try {
-      const s = localStorage.getItem(MODE_KEY);
-      return s === "static" || s === "server" ? s : null;
+      const res = await fetch(root + HEALTH_PATH + "?probe=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) return null;
+      const h = await res.json();
+      return h && h.launcher ? h : null;
     } catch (e) { return null; }
   }
 
-  /** Remember a mode (the URL and the setup page's switch do this). */
-  function saveMode(m) {
-    try { localStorage.setItem(MODE_KEY, m); } catch (e) {}
+  /**
+   * A page's URL carrying the mode flag: the one in force when the URL
+   * forced it (so moving between the pages never drops a forced mode), or
+   * `m` to switch. Without either, no flag.
+   */
+  function link(url, m) {
+    const u = new URL(url, location.href);
+    const want = m || (forced ? mode : null);
+    if (want) u.searchParams.set(PARAM, want);
+    else u.searchParams.delete(PARAM);
+    return u.href;
   }
 
   /** Store the mode where the worker reads it, and tell the worker. */
@@ -349,21 +367,16 @@
   }
 
   /**
-   * The mode in force: URL, then the remembered choice, then a probe of the
-   * server (`root` is the page's path to the repo root). The probe carries
-   * ?probe so the worker leaves it alone whatever mode it is in.
+   * The mode in force: the URL when it names one, else server when the
+   * launcher answers its health check, static otherwise (`root` is the
+   * page's path to the repo root). The health check runs either way, so a
+   * page knows whether a launcher is there to switch to.
    */
   async function resolveMode(root) {
-    let m = null;
     const p = (new URLSearchParams(location.search).get(PARAM) || "").toLowerCase();
-    if (p === "static" || p === "server") { m = p; saveMode(m); }
-    if (!m) m = savedMode();
-    if (!m) {
-      try {
-        const res = await fetch(root + INDEX_PATH + "?probe=1", { method: "HEAD", cache: "no-store" });
-        m = res.ok ? "server" : "static";
-      } catch (e) { m = "static"; }
-    }
+    forced = p === "static" || p === "server";
+    health = await fetchHealth(root);
+    const m = forced ? p : health ? "server" : "static";
     await setMode(m);
     return m;
   }
@@ -404,25 +417,31 @@
 
   /**
    * What a page does before touching any asset: wait for the worker, settle
-   * the mode, and - in static mode, with nothing installed and the setup
-   * page never shown - go to the setup page instead (`setupUrl`). Resolves
-   * {mode, sw} otherwise; never resolves after a redirect.
+   * the mode, and - with no levels to play (nothing installed in static
+   * mode, none on the launcher in server mode) and the setup page never
+   * shown - go to the setup page instead (`setupUrl`, carrying a forced
+   * mode). Resolves {mode, sw} otherwise; never resolves after a redirect.
    */
   async function boot(root, setupUrl) {
     const sw = await swReady;
     const m = await resolveMode(root);
-    if (setupUrl && m === "static" && !setupSeen() && !(await playable(root))) {
-      location.replace(setupUrl);
-      return new Promise(() => {});
+    if (setupUrl && !setupSeen()) {
+      const bare = m === "static" ? !(await playable(root)) : !!(health && health.levels === 0);
+      if (bare) {
+        location.replace(link(setupUrl));
+        return new Promise(() => {});
+      }
     }
     return { mode: m, sw };
   }
 
   root.Vfs = {
-    DB_NAME, MODE_KEY, SEEN_KEY, PARAM, INDEX_PATH, STORE_PREFIXES, MIME, mimeOf,
-    swReady, boot, resolveMode, setMode, saveMode, savedMode,
+    DB_NAME, SEEN_KEY, PARAM, INDEX_PATH, HEALTH_PATH, STORE_PREFIXES, MIME, mimeOf,
+    swReady, boot, resolveMode, setMode, fetchHealth, link,
     VERSION_FILE, pageVersion, checkVersion,
     get mode() { return mode; },
+    get forced() { return forced; },
+    get health() { return health; },
     playable, setupSeen, markSetupSeen,
     openDb, get, put, remove, getAll,
     putFiles, deletePrefix, deleteUnit, list, levelDirs, has, readText, readTexts, readBlob,
