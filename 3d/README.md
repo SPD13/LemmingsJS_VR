@@ -244,7 +244,21 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
 - `e` enters edit mode and toggles the piece editor (pauses the sim): click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
-  re-meshes live. A tag belongs to the sprite, not the placement, so it is
+  re-meshes live. The click goes by what is under the pointer *in the
+  diorama*: the ray is marched through the extrusion, so the piece tagged is
+  the one whose surface pixel the cursor is on — the top of a column, or the
+  wall it is seen through from the side — and not whatever the level's flat
+  plane, sitting well behind it once perspective has slid things across the
+  screen, happens to name. The highlight is a volume to match: the piece's
+  outline extruded up to one flat face standing a game pixel proud of the
+  tallest column it covers, washed translucent yellow — flat and proud on
+  purpose, since a face that followed the relief the 3D shade puts under it
+  would read as texture rather than as a marker, and one flush with the
+  surface would fight it for its pixels — with a fainter pass over everything
+  so a placement buried behind another still shows. Only the pixels the composite actually draws for the
+  piece are lit, so a covered, erased or dug-out part is left dark. The 2D
+  view, having no depth to see past, picks and highlights on the level's
+  plane, but from the same footprint. A tag belongs to the sprite, not the placement, so it is
   kept with the sprite's gallery: a DOS tileset's file
   (`profiles/<pack>-g<set>.json`) or a NeoLemmix style folder's
   (`profiles/nx-<style>.json`, pieces keyed `<style>:<piece>`), and covers

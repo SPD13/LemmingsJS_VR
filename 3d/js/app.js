@@ -3107,6 +3107,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
         if (flatOn === on) return;
         flatOn = on;
         terrain.setFlat(on, FLAT_TERRAIN_Z);
+        if (session.editor) session.editor.setFlat(on);
         session.setPortalsVisible(!on);
         gui.setRelief(state.skillBar && !on);
       },
@@ -3794,7 +3795,13 @@ Vfs.boot("", "setup.html").then(function (booted) {
       return { panelUv: hit.uv };
     }
     const local = session.worldGroup.worldToLocal(hit.point.clone());
-    return { simX: Math.round(local.x), simY: Math.round(local.y) };
+    const p = { simX: Math.round(local.x), simY: Math.round(local.y) };
+    // Tagging picks off the ray itself, not off this plane: the diorama is
+    // extruded, so the piece under the cursor is the one whose surface the
+    // ray lands on (PieceEditor.surfacePick), which a plane behind it cannot
+    // name. The plane's answer is kept for the 2D view, which has no depth.
+    if (session.editor && session.editor.enabled) p.simRay = rc.ray.clone();
+    return p;
   }
 
   /** Mouse ray: desktop camera normally; inside a session, the XR eye camera
@@ -3875,10 +3882,10 @@ Vfs.boot("", "setup.html").then(function (booted) {
   })();
 
   /** A confirmed activation on the play area (mouse click or VR trigger). */
-  function actOnSimPick(simX, simY) {
+  function actOnSimPick(simX, simY, ray) {
     if (!session) return;
     if (session.editor && session.editor.enabled) {
-      session.editor.handleSimClick(simX, simY);
+      session.editor.handleSimClick(simX, simY, ray);
       return;
     }
     const lem = session.game.getLemmingManager().getLemmingAt(simX, simY);
@@ -4196,7 +4203,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     if (p && p.panelUv) session.gui.onMouseUp(p.panelUv);
     // treat as a click only if the pointer barely moved (else it was an orbit)
     if (!downAt || Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y) > 5) return;
-    if (p && p.simX !== undefined) actOnSimPick(p.simX, p.simY);
+    if (p && p.simX !== undefined) actOnSimPick(p.simX, p.simY, p.simRay);
   });
   renderer.domElement.addEventListener("dblclick", (e) => {
     if (!mouseAllowed()) return;
@@ -4505,7 +4512,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
       session.gui.onMouseDown(p.panelUv);
       session.gui.onMouseUp(p.panelUv);
     } else if (p.simX !== undefined) {
-      actOnSimPick(p.simX, p.simY);
+      actOnSimPick(p.simX, p.simY, p.simRay);
     }
   }
 
