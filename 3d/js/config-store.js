@@ -24,8 +24,7 @@
   const DIR = "config/";
   const DEBOUNCE_MS = 250;
 
-  // localStorage keys that are preferences (the asset mode, lem3d-assets, is
-  // the page's own choice of where its assets come from, not carried)
+  // localStorage keys that are preferences
   const PREFS_KEYS = [
     "lem3d-emboss", "lem3d-smooth", "lem3d-doors", "lem3d-skillbar", "lem3d-flat", "lem3d-shadows",
     "lem3d-music", "lem3d-sound", "lem3d-volume", "lem3d-bar", "lem3d-lib-order", "lem3d-lib-path",

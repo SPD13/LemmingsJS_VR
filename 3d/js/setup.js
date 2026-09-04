@@ -834,25 +834,21 @@
           : "Your settings live in this browser too.";
     };
     await syncConfig();
-    // the mode
-    const renderMode = () => {
-      const m = Vfs.mode;
+    // the mode: the switch reloads this page with the other one forced in
+    // the URL, which the Play link and the game page's links carry along;
+    // no way to the server when no launcher answered
+    {
+      const m = Vfs.mode, other = m === "static" ? "server" : "static";
       $("mode-name").textContent = m;
-      $("mode-what").textContent = m === "static"
+      $("mode-what").textContent = (m === "static"
         ? "NeoLemmix and the levels come from this browser's storage, installed below."
-        : "NeoLemmix and the levels come from the web server (the launcher, or the folders on disk).";
-      $("btn-mode").textContent = "switch to " + (m === "static" ? "server" : "static");
-    };
-    renderMode();
-    $("btn-mode").addEventListener("click", async () => {
-      const next = Vfs.mode === "static" ? "server" : "static";
-      Vfs.saveMode(next);
-      await Vfs.setMode(next);
-      await syncConfig();
-      renderMode();
-      say("msg-mode", "the game page now plays in " + next + " mode");
-      await refresh();
-    });
+        : "NeoLemmix and the levels come from the web server (the launcher, or the folders on disk).") +
+        (Vfs.forced ? " Forced by the URL (?assets=" + m + ")." : Vfs.health ? " The launcher answered." : " No launcher answered.");
+      $("btn-mode").textContent = "switch to " + other;
+      $("btn-mode").hidden = other === "server" && !Vfs.health;
+      $("btn-mode").addEventListener("click", () => { location.href = Vfs.link(location.href, other); });
+      $("play").href = Vfs.link("index.html");
+    }
     $("version").textContent = "v" + (Vfs.pageVersion() || "?");
     Vfs.checkVersion(ROOT).then((v) => {
       if (!v.stale) return;

@@ -269,9 +269,12 @@ guide" link opens `setup.md`, the player's guide to the assets.
   indexes written by `tools/`); *static* - they live in this browser's
   storage, installed on this page, and `../sw.js`, a service worker at the
   repo root, serves them to the game. `?assets=static|server` in the URL
-  chooses and is remembered (`lem3d-assets`); without a choice the page
-  takes *server* when the server answers for `levels/index.json`, *static*
-  otherwise - so a static host such as GitHub Pages needs no parameter. The
+  forces one, and the pages carry the flag along while it is set (the
+  switch buttons, here and in the game page's footer, reload with it);
+  without a flag the page takes *server* when the launcher answers its
+  health check (`health.json`), *static* otherwise - so a static host such
+  as GitHub Pages needs no parameter, and a server with no level directory
+  yet sends a first visit to this page. The
   worker is registered in both modes and only intercepts in static mode: it
   reads the mode from the database and is told when it changes, so a filled
   store never shadows the server's files. A service worker needs

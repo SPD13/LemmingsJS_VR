@@ -1940,18 +1940,17 @@ Vfs.boot("", "setup.html").then(function (booted) {
   });
 
   // the footers (the game view's, the world library's): the asset mode in
-  // force, and a link that reloads in the other one (the URL parameter is
-  // remembered, see vfs.js)
+  // force, and a link that reloads in the other one, forced by the URL
+  // parameter (see vfs.js); no way to the server when no launcher answered
   {
     const other = state.assets === "static" ? "server" : "static";
-    const url = new URL(location.href);
-    url.searchParams.set(Vfs.PARAM, other);
     for (const el of document.querySelectorAll(".assets-name")) el.textContent = state.assets;
     for (const el of document.querySelectorAll(".assets-version")) el.textContent = "v" + (Vfs.pageVersion() || "?");
     for (const link of document.querySelectorAll(".assets-switch")) {
       link.textContent = "switch to " + other;
-      link.href = url.href;
+      link.href = Vfs.link(location.href, other);
     }
+    for (const el of document.querySelectorAll(".assets-switch-wrap")) el.hidden = other === "server" && !Vfs.health;
     // the release on the server against this page's: a newer one means the
     // browser's cache is holding this page back, and only a hard reload gets past it
     Vfs.checkVersion("").then((v) => {
@@ -4447,9 +4446,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
   // the setup page: leaving the game page mid-level loses the level, so a
   // level under way asks first; from the library with nothing playing, straight there
   const goSetup = () => {
-    if (session) askConfirm("Open the setup page?", "leave the level", () => { location.href = "setup.html"; },
+    if (session) askConfirm("Open the setup page?", "leave the level", () => { location.href = Vfs.link("setup.html"); },
       "Progress on this level is lost.");
-    else location.href = "setup.html";
+    else location.href = Vfs.link("setup.html");
   };
   document.getElementById("btn-setup").addEventListener("click", goSetup);
   document.getElementById("lib-setup").addEventListener("click", goSetup);

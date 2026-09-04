@@ -32,6 +32,7 @@ Vfs.boot("").then(function (booted) {
   const factory = new Lemmings.GameFactory(ROOT);
   const styles = new Lemmix.StyleManager(Lemmix.StyleManager.browserIO(ROOT));
   const files = new ProfileFiles();
+  document.getElementById("gal-back").href = Vfs.link("index.html"); // a forced mode goes along
 
   const dom = {
     filter: document.getElementById("gal-filter"),

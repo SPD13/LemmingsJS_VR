@@ -51,6 +51,12 @@ const NX_DIR_RE = /^\/(neolemmix\/(?:gfx|data|music|sound|styles))\/?$/;
 const UPLOAD_RE = /^(levels\/[^\/.][^\/]*|neolemmix\/(?:gfx|data|music|sound|styles))\/[^\/].*[^\/]$/;
 const MAX_BATCH = 500e6;
 
+/** The release version in version.json, or null. */
+function readVersion(absRoot) {
+  try { return JSON.parse(fs.readFileSync(path.join(absRoot, "version.json"), "utf8")).version || null; }
+  catch (e) { return null; }
+}
+
 /** A folder's {files, bytes, mtime}, the files counted through its subfolders; null when it is not one. */
 function folderStat(dir) {
   let stat;
@@ -187,6 +193,23 @@ function createStaticServer(root, port, tls = null) {
           const json = JSON.stringify(levelDirs(path.join(absRoot, "levels")));
           res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
           res.end(json);
+          return;
+        }
+
+        // the health check: a page served by the launcher takes server mode
+        // when this answers (vfs.js), and goes to the setup page when no
+        // level directory is there yet
+        if ((req.method === "GET" || req.method === "HEAD") && /^\/health\.json$/.test(urlPath)) {
+          const json = JSON.stringify({
+            launcher: true, version: readVersion(absRoot),
+            levels: levelDirs(path.join(absRoot, "levels")).length,
+            neolemmix: {
+              engine: !!folderStat(path.join(absRoot, "neolemmix", "gfx")),
+              styles: !!folderStat(path.join(absRoot, "neolemmix", "styles")),
+            },
+          });
+          res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
+          res.end(req.method === "HEAD" ? undefined : json);
           return;
         }
 

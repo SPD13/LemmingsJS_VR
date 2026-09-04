@@ -338,7 +338,7 @@ class WorldLibrary {
       b.id = "lib-galleries";
       b.textContent = "sprite galleries";
       b.title = "tag the sprites of every tileset and style";
-      b.addEventListener("click", () => { window.location.href = "galleries.html"; });
+      b.addEventListener("click", () => { window.location.href = Vfs.link("galleries.html"); });
       this.dom.order.parentNode.insertBefore(b, this.dom.order);
       this.dom.galleries = b;
     }
@@ -559,7 +559,7 @@ class WorldLibrary {
             if (i) status.appendChild(document.createTextNode(", "));
             const a = document.createElement("a");
             a.className = "lib-style";
-            a.href = "galleries.html?gallery=" + encodeURIComponent("nx:" + m[0]);
+            a.href = Vfs.link("galleries.html?gallery=" + encodeURIComponent("nx:" + m[0]));
             a.textContent = m[0];
             a.title = "tag this style's sprites";
             status.appendChild(a);
