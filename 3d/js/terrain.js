@@ -23,6 +23,17 @@
  * engines blank a dug pixel's RGB to black, and a dug donor would blacken every
  * band aiming at it. Pin RGB only, never alpha.
  *
+ * A piece tagged for *colour blend* has its pixels' colours run into each
+ * other instead of meeting at a hard edge: each face corner takes the mean of
+ * the pixels of its class meeting there (the colour twin of _cornerZ), and a
+ * wall runs from its own pixel's colour at the top to the colour of the pixel
+ * it drops onto at the base - x, y and z. Those quads carry their colour in
+ * the vertex attribute and are drawn by a second, map-less material as a
+ * second group of the same chunk geometry, since a texture sampled per pixel
+ * would put the hard edges straight back. They also need a quad per pixel, as
+ * a greedy rectangle has no corners to carry the colours of the pixels inside
+ * it - the same shape (and much the same cost) as smooth terrain.
+ *
  * The 2D view (setFlat) hides the chunks behind one quad carrying the same
  * texture: the original's terrain, exactly, since the texture is the level's
  * picture with the collision mask for its alpha. The chunks are left alone
@@ -50,6 +61,22 @@ const TERRAIN_SMOOTH_PULL = 0.35;
 const BLEND_BAND_PX = 4;   // how deep one band is, in game pixels
 const BLEND_BANDS_MAX = 4; // and how many a wall is ever cut into
 const BLEND_RUN = 4;       // a blended wall run stops at every multiple of this
+// How far a wall pixel's colour is pulled toward the mean of the eight around
+// it, in x and y, before the wall is coloured from it.
+//
+// A wall is one flat colour down the whole depth of the extrusion, so a row of
+// them reads as lines running away from the viewer - worst on the surface the
+// lemmings walk along, which is nothing but wall seen end-on, where a pair of
+// neighbouring pixels a shade apart becomes a pair of stripes 16 pixels long.
+// Diffusing across x and y first damps that difference before it is stretched:
+// on the dirt style it takes the step between neighbouring walking-surface
+// pixels down by about seven tenths. The face is left alone - the picture is
+// read from it directly, and it is not stretched by anything.
+const WALL_DIFFUSE = 0.75;
+// the eight neighbours it is diffused over
+const WALL_DIFFUSE_OFFSETS = [
+  [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1],
+];
 
 /**
  * Which colour a band takes, jittered per pixel so a wall reads as grain
@@ -65,7 +92,7 @@ function blendHash(x, y, face, band) {
 }
 
 class TerrainMesh {
-  constructor(parent, level, depthMap, reliefMap, resources, blendMap) {
+  constructor(parent, level, depthMap, reliefMap, resources, blendMap, colorMap, colorSoftness) {
     this.level = level;
     this.depth = depthMap;
     this.relief = reliefMap || new Uint8Array(level.width * level.height);
@@ -110,6 +137,16 @@ class TerrainMesh {
         side: THREE.DoubleSide,
       })
     );
+    // Colour blend draws its quads from the vertex colours alone - the colour
+    // is interpolated across the quad, which is the whole point, and a texture
+    // sampled per pixel would put the hard edges straight back. One mesh per
+    // chunk still: the two materials are two groups of the same geometry.
+    this.colorMaterial = resources.track(
+      new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })
+    );
+    this.materials = [this.material, this.colorMaterial];
+    this.colorSoftness = 1;
+    this._installColorBlend(colorMap, colorSoftness);
 
     this.chunkMeshes = new Array(this.chunksX * this.chunksY).fill(null);
     this.dirtyChunks = new Set();
@@ -197,6 +234,142 @@ class TerrainMesh {
       const o = pin.index * 4;
       this.texData[o] = pin.r; this.texData[o + 1] = pin.g; this.texData[o + 2] = pin.b;
     }
+  }
+
+  /**
+   * Take the per-pixel colour-blend flags (depth.js buildColorBlendMap). A
+   * blended pixel's colours are read from texData rather than groundImage, so
+   * a dig and clear-physics mode carry through without a second source of
+   * truth - which is also why setPhysicsPaint has to re-mesh while this is on.
+   */
+  _installColorBlend(colorMap, softness) {
+    const on = !!(colorMap && colorMap.some((v) => v !== 0));
+    this.color = on ? colorMap : null;
+    this.color0 = on ? colorMap.slice() : null; // as built, for resync
+    if (softness != null) this.colorSoftness = Math.max(0, Math.min(1, softness));
+  }
+
+  /** Swap in new colour-blend flags (the master switch or a tag) and re-mesh. */
+  setColorBlend(colorMap, softness) {
+    this._installColorBlend(colorMap, softness);
+    this._rebuildAll();
+  }
+
+  /** Does this pixel's colour run into its neighbours'. */
+  _colorAt(x, y) {
+    if (!this.color || x < 0 || x >= this.w || y < 0 || y >= this.h) return 0;
+    return this.color[x + y * this.w];
+  }
+
+  /** The pixel's colour as it is drawn, 0..1 per channel. */
+  _rgbAt(x, y) {
+    const o = (y * this.w + x) * 4;
+    return [this.texData[o] / 255, this.texData[o + 1] / 255, this.texData[o + 2] / 255];
+  }
+
+  /**
+   * The colour a *wall* takes from a pixel: its own pulled toward the mean of
+   * the eight around it in x and y (WALL_DIFFUSE), which is what keeps a row
+   * of walls from reading as stripes down the extrusion. Only pixels of the
+   * same class count, so a hole or a silhouette cannot darken it.
+   */
+  _wallRgb(x, y, cls) {
+    const own = this._rgbAt(x, y);
+    let r = own[0], g = own[1], b = own[2], n = 1;
+    for (const [dx, dy] of WALL_DIFFUSE_OFFSETS) {
+      if (this._classAt(x + dx, y + dy) !== cls) continue;
+      const c = this._rgbAt(x + dx, y + dy);
+      r += c[0]; g += c[1]; b += c[2]; n++;
+    }
+    if (n === 1) return own;
+    const d = WALL_DIFFUSE;
+    return [own[0] + (r / n - own[0]) * d,
+            own[1] + (g / n - own[1]) * d,
+            own[2] + (b / n - own[2]) * d];
+  }
+
+  /**
+   * Colour at a pixel corner: the mean of the (up to four) pixels of the same
+   * class meeting there - the colour twin of _cornerZ. Averaging is what takes
+   * the hard edge off; restricting it to one class keeps the boundaries
+   * between depth classes as crisp as their heights are. Empty pixels never
+   * count, so the black of a hole or a silhouette cannot bleed into a surface.
+   *
+   * `anchor` is the colour the corner is pulled back toward - the colour of
+   * the pixel asking for it - and `colorSoftness` says how far it is allowed
+   * to travel from it. At 1 the corner is the plain mean, every quad meeting
+   * there agrees, and the surface is perfectly continuous: the softest, and
+   * over a whole sprite the blurriest, since no pixel keeps a colour of its
+   * own. Below 1 each pixel keeps a share of its own colour, so two quads
+   * sharing a corner disagree by (1 - softness) of the difference between
+   * them: the edge survives as a step of that size with a gradient either
+   * side of it, which is what keeps a sprite legible. At 0 nothing moves and
+   * the pixels are as hard as they were drawn.
+   *
+   * A corner with fewer than four pixels of the class around it is on the
+   * outline, and the outline is where the extrusion stands: every wall corner
+   * is one of these. Those go all the way to the mean whatever the setting,
+   * for two reasons that turn out to be the same reason. The walls meeting
+   * there then agree on it, so the extruded side comes out continuous instead
+   * of striped - none of the sprite's artwork is on it, so there is nothing to
+   * keep legible. And the face meeting them there agrees too, so the wall
+   * leaves the face in the colour the face ends on rather than breaking from
+   * it: holding the two to different amounts is what put a hard line around
+   * every extruded edge.
+   */
+  _cornerColor(x, y, cls, anchor, diffuse) {
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let dy = -1; dy <= 0; dy++) {
+      for (let dx = -1; dx <= 0; dx++) {
+        if (this._classAt(x + dx, y + dy) !== cls) continue;
+        const c = diffuse ? this._wallRgb(x + dx, y + dy, cls) : this._rgbAt(x + dx, y + dy);
+        r += c[0]; g += c[1]; b += c[2]; n++;
+      }
+    }
+    if (!n) return anchor;
+    const s = n < 4 ? 1 : this.colorSoftness;
+    return [
+      anchor[0] + (r / n - anchor[0]) * s,
+      anchor[1] + (g / n - anchor[1]) * s,
+      anchor[2] + (b / n - anchor[2]) * s,
+    ];
+  }
+
+  /**
+   * The colours down a wall standing on corners `cA` and `cB`, as stops from
+   * its top to its base: this pixel's class at the top, the class it drops
+   * onto at the base, and a surface-blended wall's donor colours in between.
+   * An empty neighbour repeats the top, so a silhouette keeps one colour -
+   * there is no next pixel for it to run into.
+   *
+   * Both ends read the same corners the front face used, so the wall meets the
+   * face in the colour the face ends on.
+   */
+  _wallColors(cA, cB, cls, px, py, nx, ny, slot) {
+    const nCls = this._classAt(nx, ny);
+    const dOwn = this._wallRgb(px, py, cls);
+    const topA = this._cornerColor(cA[0], cA[1], cls, dOwn, true);
+    const topB = this._cornerColor(cB[0], cB[1], cls, dOwn, true);
+    const stops = [[topA, topB]];
+    if (slot) {
+      // read the donor's texel rather than the colour recorded with it: the
+      // texel is what a surface-blended wall samples, so clear-physics mode
+      // greys these waypoints along with every other face
+      for (const d of this.blend.donors[slot - 1]) {
+        const c = this._rgbAt(d.index % this.w, (d.index / this.w) | 0);
+        stops.push([c, c]);
+      }
+    }
+    if (nCls === DepthClass.EMPTY) {
+      stops.push([topA, topB]);
+    } else {
+      // the base is anchored on the pixel the wall drops onto, so softness
+      // pulls it toward that one's colour just as the top is pulled to this
+      const nOwn = this._wallRgb(nx, ny, nCls);
+      stops.push([this._cornerColor(cA[0], cA[1], nCls, nOwn, true),
+                  this._cornerColor(cB[0], cB[1], nCls, nOwn, true)]);
+    }
+    return stops;
   }
 
   /** Blend slot of a pixel (slot+1), 0 where the effect is off. */
@@ -400,6 +573,9 @@ class TerrainMesh {
     this.physicsHighlight = highlight;
     this._refillTexRect(0, 0, this.w, this.h);
     this.texture.needsUpdate = true;
+    // blended quads carry their colour in the geometry, so unlike every other
+    // face they do not follow a repaint on their own
+    if (this.color) this._rebuildAll();
   }
 
   /** Wrap the two Level methods every terrain mutation funnels through. */
@@ -423,6 +599,7 @@ class TerrainMesh {
     this.depth[i] = depthClass;
     this.relief[i] = 0; // dug holes and built bricks are flat
     if (this.blend) this.blend.slot[i] = 0; // nor are they the tagged piece any more
+    if (this.color) this.color[i] = 0;
     this._paintPixel(x, y);
     if (this.blendPinned && this.blendPinned.has(i)) this._paintPins();
     this.texture.needsUpdate = true;
@@ -464,11 +641,13 @@ class TerrainMesh {
           depth[i] = depth0[i] !== DepthClass.EMPTY ? depth0[i] : DepthClass.TERRAIN;
           relief[i] = relief0[i];
           if (this.blend) this.blend.slot[i] = this.blendSlot0[i];
+          if (this.color) this.color[i] = this.color0[i];
           changed = true;
         } else if (!solid && depth[i] !== DepthClass.EMPTY) {
           depth[i] = DepthClass.EMPTY;
           relief[i] = 0;
           if (this.blend) this.blend.slot[i] = 0;
+          if (this.color) this.color[i] = 0;
           changed = true;
         }
         if (!changed) continue;
@@ -515,7 +694,7 @@ class TerrainMesh {
     }
     const geom = this._buildChunkGeometry(cx, cy);
     if (!geom) return;
-    const mesh = new THREE.Mesh(geom, this.material);
+    const mesh = new THREE.Mesh(geom, geom.groups.length > 1 ? this.materials : this.material);
     this.chunkGroup.add(mesh);
     this.chunkMeshes[id] = mesh;
   }
@@ -558,7 +737,10 @@ class TerrainMesh {
     // is at the same height and averaging them only costs time
     const slope = this.smooth && this.hasRelief;
 
-    const positions = [], colors = [], uvs = [], indices = [];
+    const positions = [], colors = [], uvs = [];
+    // two buckets over one set of vertices: the textured faces and, for the
+    // colour-blended pixels, the ones carrying their colour per corner
+    const indices = [], colorIndices = [];
     const pushQuad = (p, uv, shade) => {
       const base = positions.length / 3;
       for (let i = 0; i < 4; i++) {
@@ -567,6 +749,16 @@ class TerrainMesh {
         uvs.push(uv[i][0], uv[i][1]);
       }
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
+    /** A quad whose colour is its four corners', already shaded. */
+    const pushColorQuad = (p, rgb, shade) => {
+      const base = positions.length / 3;
+      for (let i = 0; i < 4; i++) {
+        positions.push(p[i][0], p[i][1], p[i][2]);
+        colors.push(rgb[i][0] * shade, rgb[i][1] * shade, rgb[i][2] * shade);
+        uvs.push(0, 0);
+      }
+      colorIndices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
 
     for (let ly = 0; ly < ch; ly++) {
@@ -587,12 +779,22 @@ class TerrainMesh {
         const u0 = px / W, u1 = (px + 1) / W;
         const v0 = py / H, v1 = (py + 1) / H;
         const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-        pushQuad([[p00[0], p00[1], z00], [p10[0], p10[1], z10],
-                  [p11[0], p11[1], z11], [p01[0], p01[1], z01]],
-          uv, SHADE_FRONT * band.frontShade);
-        pushQuad([[p00[0], p00[1], band.back], [p10[0], p10[1], band.back],
-                  [p11[0], p11[1], band.back], [p01[0], p01[1], band.back]],
-          uv, SHADE_BACK);
+        // colour blend: the four corners carry the mean of the pixels meeting
+        // there, so neighbouring quads share an edge colour and the grid the
+        // sprite was drawn on stops reading as a grid
+        const blendCol = this._colorAt(px, py);
+        const own = blendCol ? this._rgbAt(px, py) : null;
+        const cc = blendCol ? [
+          this._cornerColor(px, py, c, own), this._cornerColor(px + 1, py, c, own),
+          this._cornerColor(px + 1, py + 1, c, own), this._cornerColor(px, py + 1, c, own),
+        ] : null;
+        const face = (p, shade) => (blendCol ? pushColorQuad(p, cc, shade) : pushQuad(p, uv, shade));
+        face([[p00[0], p00[1], z00], [p10[0], p10[1], z10],
+              [p11[0], p11[1], z11], [p01[0], p01[1], z01]],
+          SHADE_FRONT * band.frontShade);
+        face([[p00[0], p00[1], band.back], [p10[0], p10[1], band.back],
+              [p11[0], p11[1], band.back], [p01[0], p01[1], band.back]],
+          SHADE_BACK);
 
         // a wall only where this pixel overhangs empty space or a lower class
         const wallBase = (nx, ny) => {
@@ -608,51 +810,100 @@ class TerrainMesh {
         // the tops are sloped here, so each end of a band is interpolated on
         // its own corner; the bands are cut per pixel, there is no run to break
         const slot = this._blendAt(px, py);
+        /**
+         * One wall of this pixel. A wall is the surface between the pixel and
+         * the lower one beside it, so with colour blend on it runs from this
+         * pixel's colour at the top to that one's at the base - the transition
+         * in z. Against empty space there is nothing to run to and it keeps
+         * one colour. A surface-blended wall's donor colours become the
+         * waypoints in between, so its bands turn into a gradient.
+         *
+         * `pA`/`pB` are the wall's two ends on the grid, `cA`/`cB` the corners
+         * they stand on (the same corners the front face uses, so the colours
+         * meet), `place` lays the four heights out in the winding the face
+         * needs.
+         */
+        const wall = (nx, ny, base, zA, zB, faceId, shade, pA, pB, cA, cB, place) => {
+          if (!blendCol) {
+            this._wallBands(base, zA, zB, wallUv, slot, faceId, px, py,
+              (loA, hiA, hiB, loB, uv) => pushQuad(place(pA, pB, loA, hiA, hiB, loB), uv, shade));
+            return;
+          }
+          const stops = this._wallColors(cA, cB, c, px, py, nx, ny, slot);
+          const n = stops.length - 1;
+          for (let k = 0; k < n; k++) {
+            const tHi = 1 - k / n, tLo = 1 - (k + 1) / n;
+            const hi = stops[k], lo = stops[k + 1];
+            pushColorQuad(
+              place(pA, pB, base + (zA - base) * tLo, base + (zA - base) * tHi,
+                    base + (zB - base) * tHi, base + (zB - base) * tLo),
+              [lo[0], hi[0], hi[1], lo[1]], shade);
+          }
+        };
+        // the two windings the original walls use, kept exactly
+        const side = (pA, pB, loA, hiA, hiB, loB) => [
+          [pA[0], pA[1], loA], [pA[0], pA[1], hiA],
+          [pB[0], pB[1], hiB], [pB[0], pB[1], loB]];
+        const cap = (pA, pB, loA, hiA, hiB, loB) => [
+          [pB[0], pB[1], loB], [pA[0], pA[1], loA],
+          [pA[0], pA[1], hiA], [pB[0], pB[1], hiB]];
+
         let base = wallBase(px - 1, py);
         if (base !== null) {
-          this._wallBands(base, z00, z01, wallUv, slot, 2, px, py,
-            (loA, hiA, hiB, loB, uv) => pushQuad(
-              [[p00[0], p00[1], loA], [p00[0], p00[1], hiA],
-               [p01[0], p01[1], hiB], [p01[0], p01[1], loB]], uv, SHADE_LEFT));
+          wall(px - 1, py, base, z00, z01, 2, SHADE_LEFT,
+            p00, p01, [px, py], [px, py + 1], side);
         }
         base = wallBase(px + 1, py);
         if (base !== null) {
-          this._wallBands(base, z10, z11, wallUv, slot, 3, px, py,
-            (loA, hiA, hiB, loB, uv) => pushQuad(
-              [[p10[0], p10[1], loA], [p10[0], p10[1], hiA],
-               [p11[0], p11[1], hiB], [p11[0], p11[1], loB]], uv, SHADE_RIGHT));
+          wall(px + 1, py, base, z10, z11, 3, SHADE_RIGHT,
+            p10, p11, [px + 1, py], [px + 1, py + 1], side);
         }
         base = wallBase(px, py - 1);
         if (base !== null) {
-          this._wallBands(base, z10, z00, wallUv, slot, 4, px, py,
-            (loA, hiA, hiB, loB, uv) => pushQuad(
-              [[p00[0], p00[1], loB], [p10[0], p10[1], loA],
-               [p10[0], p10[1], hiA], [p00[0], p00[1], hiB]], uv, SHADE_TOP));
+          wall(px, py - 1, base, z10, z00, 4, SHADE_TOP,
+            p10, p00, [px + 1, py], [px, py], cap);
         }
         base = wallBase(px, py + 1);
         if (base !== null) {
-          this._wallBands(base, z11, z01, wallUv, slot, 5, px, py,
-            (loA, hiA, hiB, loB, uv) => pushQuad(
-              [[p01[0], p01[1], loB], [p11[0], p11[1], loA],
-               [p11[0], p11[1], hiA], [p01[0], p01[1], hiB]], uv, SHADE_BOTTOM));
+          wall(px, py + 1, base, z11, z01, 5, SHADE_BOTTOM,
+            p11, p01, [px + 1, py + 1], [px, py + 1], cap);
         }
       }
     }
 
-    if (indices.length === 0) return null;
+    if (indices.length === 0 && colorIndices.length === 0) return null;
     const geom = new THREE.BufferGeometry();
     geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
     geom.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
     geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
-    geom.setIndex(indices);
+    geom.setIndex(indices.concat(colorIndices));
+    if (colorIndices.length) {
+      geom.addGroup(0, indices.length, 0);
+      geom.addGroup(indices.length, colorIndices.length, 1);
+    }
     return geom;
+  }
+
+  /** Is any pixel of this chunk colour-blended (then it needs a quad each). */
+  _chunkHasColor(x0, y0, cw, ch) {
+    if (!this.color) return false;
+    for (let y = y0; y < y0 + ch; y++) {
+      const row = y * this.w;
+      for (let x = x0; x < x0 + cw; x++) if (this.color[row + x]) return true;
+    }
+    return false;
   }
 
   _buildChunkGeometry(cx, cy) {
     // Both smoothings need a quad per pixel to have corners to move. Sloping
     // only differs where heights vary, so with the relief flat and the
     // outline left alone the cheaper greedy stepped path still does.
-    if (this.smoothTerrain || (this.smooth && this.hasRelief)) {
+    // colour blend needs a quad per pixel too: a greedy rectangle has no
+    // corners to carry the colours of the pixels inside it
+    const x0 = cx * TERRAIN_CHUNK, y0 = cy * TERRAIN_CHUNK;
+    const cw = Math.min(TERRAIN_CHUNK, this.w - x0), ch = Math.min(TERRAIN_CHUNK, this.h - y0);
+    if (this.smoothTerrain || (this.smooth && this.hasRelief) ||
+        this._chunkHasColor(x0, y0, cw, ch)) {
       return this._buildChunkGeometrySmooth(cx, cy);
     }
     return this._buildChunkGeometryStepped(cx, cy);

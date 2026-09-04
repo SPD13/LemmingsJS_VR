@@ -50,6 +50,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
   });
 
   const params = new URLSearchParams(location.search);
+
   /**
    * A render setting: the URL first, then what was last toggled here.
    *
@@ -77,6 +78,16 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // the outline's own corners rounded off, terrain and the animated
     // surfaces alike, so nothing reads as the pixels it was drawn with
     smoothTerrain: setting("smoothterrain", "lem3d-smooth-terrain", true),
+    // pixel colours run into each other instead of meeting at a hard edge, on
+    // the pieces tagged for it. Not a switch but a strength (COLOR_BLEND_LEVELS)
+    colorBlend: (() => {
+      const p = params.get("colorblend");
+      const raw = p != null ? p : (() => {
+        try { return localStorage.getItem("lem3d-color-blend"); } catch (e) { return null; }
+      })();
+      const named = { off: "off", soft: "soft", smooth: "smooth", "0": "off", "1": "soft" };
+      return named[String(raw)] || "soft";
+    })(),
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
     // The 2D view: the original's flat picture under an orthographic camera,
@@ -680,6 +691,16 @@ Vfs.boot("", "setup.html").then(function (booted) {
     c.moveTo(10, 52); c.bezierCurveTo(32, 52, 32, 25, 54, 25);
     c.stroke();
   });
+  // two colours running into one another: the more they overlap, the softer
+  const colorBlendIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    const gap = 9 - 4 * (st.softness || 0); // 9 apart when off, 5 at full
+    c.beginPath();
+    c.arc(32 - gap, 32, 13, 0, Math.PI * 2);
+    c.stroke();
+    c.beginPath();
+    c.arc(32 + gap, 32, 13, 0, Math.PI * 2);
+    c.stroke();
+  });
   const skillBarIcon = (cx, st) => switchIcon(cx, st, (c) => {
     c.beginPath();
     c.rect(10, 24, 44, 16);
@@ -708,6 +729,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     doors: iconizeHudButton(document.getElementById("btn-doors"), doorsIcon, "3D doors"),
     smooth: iconizeHudButton(document.getElementById("btn-smooth"), smoothIcon, "smooth relief"),
     smoothTerrain: iconizeHudButton(document.getElementById("btn-smooth-terrain"), smoothTerrainIcon, "smooth terrain"),
+    colorBlend: iconizeHudButton(document.getElementById("btn-colorblend"), colorBlendIcon, "colour blend"),
     skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
   };
   // the sound column keeps its own place, so it is not in the row above, but
@@ -1533,6 +1555,20 @@ Vfs.boot("", "setup.html").then(function (booted) {
    * calls exactly what the buttons call, so the two stay in step, and it
    * carries the recentre that is otherwise only on the A/X button.
    */
+  // How far a corner colour may travel from its own pixel's. "smooth" is the
+  // plain bilinear reading of the picture: each pixel keeps its own colour at
+  // its middle and runs to the means where the pixels meet, so the surface is
+  // continuous in every direction with nothing lost from it. "soft" holds the
+  // corners back toward each pixel, which leaves a step at every boundary -
+  // the pixels stay visible as pixels. "off" leaves them exactly as drawn.
+  const COLOR_BLEND_LEVELS = [
+    { name: "off", label: "off", softness: 0 },
+    { name: "soft", label: "soft", softness: 0.35 },
+    { name: "smooth", label: "smooth", softness: 1 },
+  ];
+  const colorBlendLevel = () =>
+    COLOR_BLEND_LEVELS.find((l) => l.name === state.colorBlend) || COLOR_BLEND_LEVELS[1];
+
   const VR_SET_W = 640, VR_SET_H = 536;   // canvas pixels (a row each, plus the title)
   const VR_SET_TOP = 96;                  // first row
   const VR_SET_ROW = 68;
@@ -1542,6 +1578,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
     { label: "3D doors", get: () => state.doors, act: () => toggleDoors() },
     { label: "smooth relief", get: () => state.smooth, act: () => toggleSmooth() },
     { label: "smooth terrain", get: () => state.smoothTerrain, act: () => toggleSmoothTerrain() },
+    { label: "colour blend", get: () => state.colorBlend !== "off",
+      text: () => colorBlendLevel().label.toUpperCase(), act: () => toggleColorBlend() },
     { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
     { label: "recentre the board", act: () => vr.recenterNow() },
   ];
@@ -1605,7 +1643,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
         cx.fillStyle = on ? "#6fce7e" : "#e07a6a";
         cx.font = "bold 22px monospace";
         cx.textAlign = "center";
-        cx.fillText(on ? "ON" : "OFF", px + pw / 2, y + 36);
+        cx.fillText(row.text ? row.text() : (on ? "ON" : "OFF"), px + pw / 2, y + 36);
         cx.textAlign = "left";
       });
       tex.needsUpdate = true;
@@ -2107,6 +2145,27 @@ Vfs.boot("", "setup.html").then(function (booted) {
   smoothTerrainBtn.addEventListener("click", toggleSmoothTerrain);
   renderSmoothTerrainBtn();
 
+  // the colours of neighbouring pixels run into each other, across the faces
+  // and down the walls, on the pieces tagged for it
+  const colorBlendBtn = document.getElementById("btn-colorblend");
+  const renderColorBlendBtn = () => {
+    const level = colorBlendLevel();
+    hudIcons.colorBlend({ on: level.softness > 0, softness: level.softness });
+    colorBlendBtn.title = "colour blend (softens the edge between the tagged pieces' pixels): "
+      + level.label + " — press for " +
+      COLOR_BLEND_LEVELS[(COLOR_BLEND_LEVELS.indexOf(level) + 1) % COLOR_BLEND_LEVELS.length].label;
+  };
+  function toggleColorBlend() {
+    const i = COLOR_BLEND_LEVELS.findIndex((l) => l.name === state.colorBlend);
+    state.colorBlend = COLOR_BLEND_LEVELS[(i + 1) % COLOR_BLEND_LEVELS.length].name;
+    try { localStorage.setItem("lem3d-color-blend", state.colorBlend); } catch (e) {}
+    renderColorBlendBtn();
+    if (session && session.rebuildColorBlend) session.rebuildColorBlend();
+    paintVrSettings();
+  }
+  colorBlendBtn.addEventListener("click", toggleColorBlend);
+  renderColorBlendBtn();
+
   // the skill bar's own relief: its artwork and counters extruded off the
   // panel. Off, the bar is the flat original.
   const skillBarBtn = document.getElementById("btn-skillbar");
@@ -2441,6 +2500,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // which pixels may draw their neighbours' colours down the extrusion, and
     // where each of those colours is sampled from (depth.js)
     const blendMap = buildBlendMap(level, pieceMap, profile, groundData);
+    // which pixels' colours run into their neighbours' (the tag and the switch)
+    const colorMap = buildColorBlendMap(
+      level, pieceMap, profile, state.colorBlend !== "off", groundData);
     // entrances/exits become real openings; this also carves the terrain
     // behind them (render only - collision is untouched). Switched off, they
     // stay the flat sprites the original draws and nothing is carved.
@@ -2472,7 +2534,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     worldGroup.position.y = level.height;
     dioramaRoot.add(worldGroup);
 
-    const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources, blendMap);
+    const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources, blendMap, colorMap, colorBlendLevel().softness);
     if (state.smooth) terrain.setSmooth(true);
     if (state.smoothTerrain) terrain.setSmoothTerrain(true);
 
@@ -2969,6 +3031,13 @@ Vfs.boot("", "setup.html").then(function (booted) {
       rebuildBlend: () => {
         session.terrain.setBlend(
           buildBlendMap(level, pieceMap, session.profile, groundData));
+      },
+      // re-derive the colour blend (the master switch or a per-piece tag)
+      rebuildColorBlend: () => {
+        session.terrain.setColorBlend(
+          buildColorBlendMap(level, pieceMap, session.profile,
+            state.colorBlend !== "off", groundData),
+          colorBlendLevel().softness);
       },
       // the 2D view: the terrain as one quad, the openings as the original's
       // sprites again (their geometry and the water hidden), the bar flat

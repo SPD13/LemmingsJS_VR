@@ -179,6 +179,52 @@ function blendNear(a, b) {
 }
 
 /**
+ * Colour blend for a piece: should its pixels' colours run into each other
+ * instead of meeting at a hard edge, in x and y across its faces and in z down
+ * the walls between two heights.
+ *
+ * Opt in, like surface blend above, and gated on top by a master switch (the
+ * 3D effects drawer) because it costs geometry: a blended pixel cannot merge
+ * into a greedy rectangle, since a rectangle has no corners to carry the
+ * colours of the pixels inside it.
+ */
+function colorBlendFor(pieceId, profile) {
+  const cfg = (profile && profile.colorBlend) || {};
+  const byId = cfg.byId || {};
+  const value = Object.prototype.hasOwnProperty.call(byId, pieceId)
+    ? byId[pieceId] : cfg.default;
+  return value === true;
+}
+
+/**
+ * Per-pixel flag: 1 where the pixel belongs to a colour-blend-tagged piece.
+ * `enabled` false (the master switch off) returns a flat map, exactly as
+ * buildReliefMap does for the relief.
+ */
+function buildColorBlendMap(level, pieceMap, profile, enabled, groundData) {
+  const W = level.width, H = level.height;
+  const map = new Uint8Array(W * H);
+  if (!enabled || !pieceMap || !groundData) return map;
+
+  const images = (groundData && groundData.terraImages) || {};
+  let maxId = 254;
+  for (const id of Object.keys(images)) maxId = Math.max(maxId, +id);
+  const onById = new Uint8Array(maxId + 2);
+  let anyTagged = false;
+  for (let id = 0; id <= maxId; id++) {
+    const key = images[id] && images[id].name != null ? images[id].name : id;
+    if (colorBlendFor(key, profile)) { onById[id + 1] = 1; anyTagged = true; }
+  }
+  if (!anyTagged) return map;
+
+  const mask = level.getGroundMaskLayer().groundMask;
+  for (let i = 0; i < W * H; i++) {
+    if (mask[i] && onById[pieceMap[i]]) map[i] = 1;
+  }
+  return map;
+}
+
+/**
  * Which colours each pixel of a blend-tagged piece may use down its extrusion,
  * and where in the level texture each of those colours can be sampled from.
  *
@@ -408,6 +454,7 @@ if (typeof module !== "undefined" && module.exports) {
     DepthClass, DepthClassByName, DEPTH_BANDS, DepthProfiles, pieceKey, depthClassForPiece,
     RELIEF_MAX, buildPieceMap, embossModeFor, embossEnabledFor, embossInvertedFor,
     BLEND_PALETTE_MAX, BLEND_MERGE, surfaceBlendFor, buildBlendMap,
+    colorBlendFor, buildColorBlendMap,
     buildReliefMap, buildDepthMap,
   };
 }

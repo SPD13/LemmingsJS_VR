@@ -85,11 +85,12 @@ async function main() {
   // ================= merging
   {
     console.log("merging");
-    const a = { tileset: "A", terrain: { default: "terrain", byId: { "a:x": "backdrop" } }, emboss: { byId: { "a:x": false } }, blend: { byId: { "a:x": true } }, objects: { byId: { 4: { kind: "water" } } } };
+    const a = { tileset: "A", terrain: { default: "terrain", byId: { "a:x": "backdrop" } }, emboss: { byId: { "a:x": false } }, blend: { byId: { "a:x": true } }, colorBlend: { byId: { "a:x": true } }, objects: { byId: { 4: { kind: "water" } } } };
     const b = { terrain: { byId: { "b:y": "relief", "a:x": "overlay" } } };
     const m = ProfileStore.merge([{ url: "a", profile: a }, { url: "none", profile: null }, { url: "b", profile: b }]);
     check("byId maps are unioned", m.terrain.byId["b:y"] === "relief" && m.emboss.byId["a:x"] === false);
     check("surface blend rides along", m.blend.byId["a:x"] === true);
+    check("colour blend rides along", m.colorBlend.byId["a:x"] === true);
     check("a later file wins a duplicate key", m.terrain.byId["a:x"] === "overlay");
     check("object settings ride along", m.objects.byId[4].kind === "water");
     check("the default class is terrain", m.terrain.default === "terrain");
@@ -116,7 +117,7 @@ async function main() {
     ProfileStore.withEmboss(p, "k", "invert");
     check("invert from inverted goes back to light raised", ProfileStore.nextEmbossInvert("k", p) === true);
     check("the depth pass reads the tag", D.depthClassForPiece({ key: "k" }, ProfileStore.withClass(p, "k", "backdrop")) === D.DepthClass.BACKDROP);
-    check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} }, blend: { byId: {} } }));
+    check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} }, blend: { byId: {} }, colorBlend: { byId: {} } }));
 
     check("surface blend is off by default and toggles on", ProfileStore.nextBlendToggle("k", p) === true);
     ProfileStore.withBlend(p, "k", true);
@@ -125,11 +126,23 @@ async function main() {
     ProfileStore.withBlend(p, "k", false);
     check("off removes the entry", !("k" in p.blend.byId) && D.surfaceBlendFor("k", p) === false);
 
-    const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton(), blendBtn: fakeButton() };
+    check("colour blend is off by default and toggles on", ProfileStore.nextColorBlendToggle("k", p) === true);
+    ProfileStore.withColorBlend(p, "k", true);
+    check("...and off again", ProfileStore.nextColorBlendToggle("k", p) === false &&
+      D.colorBlendFor("k", p) === true);
+    ProfileStore.withColorBlend(p, "k", false);
+    check("off removes the colour blend entry", !("k" in p.colorBlend.byId) && D.colorBlendFor("k", p) === false);
+
+    const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton(), blendBtn: fakeButton(), colorBlendBtn: fakeButton() };
     renderTagButtons(dom, "k", p, true);
     check("buttons: the class and inverted shade are lit", dom.classBtns[0].classList.contains("active") && !dom.autoBtn.classList.contains("active") &&
       dom.embossBtn.classList.contains("active") && dom.invertBtn.classList.contains("active"));
-    check("buttons: surface blend is dark until it is tagged", !dom.blendBtn.classList.contains("active"));
+    check("buttons: surface and colour blend are dark until they are tagged",
+      !dom.blendBtn.classList.contains("active") && !dom.colorBlendBtn.classList.contains("active"));
+    ProfileStore.withColorBlend(p, "k", true);
+    renderTagButtons(dom, "k", p, true);
+    check("buttons: ...and colour blend lights once it is", dom.colorBlendBtn.classList.contains("active"));
+    ProfileStore.withColorBlend(p, "k", false);
     ProfileStore.withBlend(p, "k", true);
     renderTagButtons(dom, "k", p, true);
     check("buttons: ...and lit once it is", dom.blendBtn.classList.contains("active"));
@@ -183,6 +196,14 @@ async function main() {
         return groundImage[o] === d.r && groundImage[o + 1] === d.g && groundImage[o + 2] === d.b;
       })));
 
+    const cbOn = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: { "s:p": true } } }, true, groundData);
+    check("colour blend marks every solid pixel of a tagged piece",
+      cbOn.length === W * H && Array.from(cbOn).every((v) => v === 1));
+    const cbOff = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: { "s:p": true } } }, false, groundData);
+    check("the master switch off leaves nothing marked", Array.from(cbOff).every((v) => v === 0));
+    const cbUntagged = D.buildColorBlendMap(level, pieceMap, { colorBlend: { byId: {} } }, true, groundData);
+    check("an untagged piece is not colour blended", Array.from(cbUntagged).every((v) => v === 0));
+
     // one colour everywhere: nothing to blend with, so nothing is marked
     const flat = new Uint8ClampedArray(W * H * 4);
     for (let i = 0; i < W * H; i++) {
@@ -224,9 +245,11 @@ async function main() {
       JSON.parse(table["3d/profiles/nx-b.json"]).terrain.byId["b:q"] === "relief");
     check("export is the file's JSON", JSON.parse(files.exportJson("3d/profiles/nx-b.json")).terrain.byId["b:q"] === "relief");
     files.setBlend("b:q", true, "3d/profiles/nx-b.json");
+    files.setColorBlend("b:q", true, "3d/profiles/nx-b.json");
     files.resetAll("3d/profiles/nx-b.json");
     check("reset clears every tag of the file", same(files.get("3d/profiles/nx-b.json").terrain.byId, {}) &&
-      same(files.get("3d/profiles/nx-b.json").blend.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
+      same(files.get("3d/profiles/nx-b.json").blend.byId, {}) &&
+      same(files.get("3d/profiles/nx-b.json").colorBlend.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
 
     const st = new ProfileFiles({ fetch: fakeFetch({ "3d/profiles/nx-c.json": "{}" }, { postAs: "static" }).fetch });
     st.setClass("c:p", "relief", "3d/profiles/nx-c.json");
@@ -240,6 +263,11 @@ async function main() {
     mb.setBlend("c:p", true, "3d/profiles/nx-c.json");
     const r4 = await mb.save("3d/profiles/nx-c.json");
     check("a read-back that drops the surface blend is not a save", !r4.ok && r4.error === "read-back mismatch");
+
+    const mc = new ProfileFiles({ fetch: fakeFetch({}, { mangle: (json) => JSON.stringify({ ...JSON.parse(json), colorBlend: { byId: {} } }) }).fetch });
+    mc.setColorBlend("c:p", true, "3d/profiles/nx-c.json");
+    const r5 = await mc.save("3d/profiles/nx-c.json");
+    check("a read-back that drops the colour blend is not a save", !r5.ok && r5.error === "read-back mismatch");
 
     const two = new ProfileFiles({ fetch: fakeFetch({}).fetch });
     two.setClass("a:p", "relief", "3d/profiles/nx-a.json");

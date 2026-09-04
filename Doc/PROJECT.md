@@ -106,8 +106,8 @@ own Z band:
 Everything drawn defaults to TERRAIN — in Lemmings almost every drawn pixel is
 standable ground — and the other classes come only from JSON profiles in
 `3d/profiles/`, one per sprite gallery, tagged per sprite in the editor or the
-galleries page — as do the `emboss` (3D shade) and `blend` (surface blend)
-sections of the same files. A tag belongs to the sprite, so it is kept with the gallery
+galleries page — as do the `emboss` (3D shade), `blend` (surface blend) and
+`colorBlend` (colour blend) sections of the same files. A tag belongs to the sprite, so it is kept with the gallery
 the sprite comes from — a DOS tileset (`<pack>-g<set>.json`, pieces keyed by
 their index in the ground set) or a NeoLemmix style folder (`nx-<style>.json`,
 pieces keyed `<style>:<piece>`) — and a level reads the files of every gallery
@@ -146,6 +146,41 @@ Two optional treatments sit on top:
   borders nothing of it. The frontmost band keeps the surface pixel, so the lip
   still matches the front face. Colours come from ordinary level pixels carrying
   them, so clear-physics mode greys the bands along with everything else.
+- **colour blend**: the tagged pieces' pixels stop meeting at a hard edge.
+  Every face corner takes the mean of the pixels of its class meeting there,
+  and a wall runs from its own pixel's colour at the top to the colour of the
+  pixel it drops onto at the base — x, y and z. A silhouette keeps one colour
+  down z: there is no next pixel for it to run into. A corner with fewer than
+  four pixels of the class around it is on the outline, and the outline is
+  where the extrusion stands — every wall corner is one of these — so those go
+  all the way to the mean whatever the setting. Two walls meeting there then
+  agree on it, so the extruded side is continuous rather than striped (none of
+  the sprite's artwork is on it, so there is nothing to keep legible), and the
+  face meeting them agrees too, so a wall leaves the face in the colour the
+  face ends on instead of breaking from it. Where surface blend is also on,
+  its donor colours become waypoints down the wall, so its bands turn into a
+  gradient. These quads carry their colour per vertex and are drawn by a
+  second, map-less material as another group of the same chunk geometry; like
+  smooth terrain they need a quad per pixel, and cost about the same.
+
+  A wall is one flat colour down the whole depth of the extrusion, so a row of
+  them reads as lines running away from the viewer — worst on the surface the
+  lemmings walk along, which is nothing but wall seen end-on, where two
+  neighbouring pixels a shade apart become two stripes 16 pixels long. So a
+  wall takes its colour from a diffused reading of the picture: each pixel
+  pulled three quarters of the way toward the mean of the eight around it in x
+  and y, which on the dirt style takes the step between neighbouring
+  walking-surface pixels down by about seven tenths. The face is left alone —
+  the picture is read from it directly, and nothing stretches it.
+
+  It is a strength rather than a switch, cycled by its button in the 3D effects
+  drawer (`lem3d-color-blend`, `?colorblend=off|soft|smooth`). At *smooth* a
+  corner is the plain mean of the pixels meeting there, every quad sharing it
+  agrees and the surface is continuous — which over a whole sprite reads as
+  blur, since no pixel keeps a colour of its own. *soft* (the default) lets
+  each pixel keep most of its own, so an edge survives as a small step with a
+  gradient either side and the sprite stays legible. *off* leaves the pixels
+  as they were drawn.
 - **smooth relief**: slopes the relief between neighbouring heights by
   averaging the pixel heights meeting at each quad corner, staying crisp at
   depth-class boundaries and silhouettes. This is smoothing through the slab.
@@ -658,8 +693,8 @@ paused stays paused and two overlapping dialogs do not resume it between them.
 
 | where | what |
 |---|---|
-| URL | `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?doors= ?edit=` |
-| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-smooth-terrain` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
+| URL | `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?smoothterrain= ?colorblend= ?doors= ?edit=` |
+| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-smooth-terrain` `lem3d-color-blend` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
 
 The URL overrides both for one load. This matters more than it sounds: the
 switches are DOM buttons, invisible inside a session, and the headset is
