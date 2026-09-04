@@ -58,6 +58,12 @@ remembered afterwards; without either it asks the server for
     `neolemmix/music/`. See `neolemmix/README.md`.
   `.gitignore` excludes everything under `levels/` and `neolemmix/` but their
   READMEs.
+  In this mode the launcher also keeps the player's configuration - the
+  same three JSON files the setup page downloads and uploads - in
+  `config/` at the repo root: the game writes them whenever a setting, a
+  binding or the progress changes, reads them at start, and they take
+  precedence over the browser's own copy (`config/README.md`; the folder
+  is in git, its files are not).
 
 Tracker music (`.it/.xm/.mod`) plays through libopenmpt via chiptune3,
 vendored under `lemmix/vendor/chiptune3/` (MIT, libopenmpt BSD); the setup

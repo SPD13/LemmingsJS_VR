@@ -39,6 +39,32 @@ const MIME = {
   ".mod": "application/octet-stream",
 };
 
+// the configuration files the game keeps on the server (config/README.md)
+const CONFIG_FILE_RE = /^\/config\/lemmings-3d-(controls|preferences|progress)\.json$/;
+
+/**
+ * Read a request's body as JSON (at most 1 MB), hand its pretty-printed
+ * text to `write`, and answer {"ok":true} - or 400 when it is not JSON.
+ */
+function readJsonBody(req, res, write) {
+  let body = "";
+  req.on("data", (chunk) => {
+    body += chunk;
+    if (body.length > 1e6) req.destroy();
+  });
+  req.on("end", () => {
+    try {
+      const json = JSON.stringify(JSON.parse(body), null, 2) + "\n";
+      write(json);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"ok":true}');
+    } catch (e) {
+      res.writeHead(400);
+      res.end("invalid JSON");
+    }
+  });
+}
+
 /**
  * Serve `root` on `port` (all interfaces). Pass `tls` ({key, cert} PEMs) to
  * serve HTTPS — required for WebXR on other devices, which refuse insecure
@@ -51,6 +77,19 @@ function createStaticServer(root, port, tls = null) {
     const handler = (req, res) => {
       try {
         const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+
+        // the player's configuration in server mode: the game page and the
+        // setup page PUT the three files named in config/README.md here,
+        // and read them back with a plain GET like any other file. Only
+        // those names are writable, and only under config/.
+        if ((req.method === "PUT" || req.method === "POST") && CONFIG_FILE_RE.test(urlPath)) {
+          const savePath = path.join(absRoot, "config", path.basename(urlPath));
+          readJsonBody(req, res, (json) => {
+            fs.mkdirSync(path.dirname(savePath), { recursive: true });
+            fs.writeFileSync(savePath, json);
+          });
+          return;
+        }
 
         // profile save endpoint: the piece editor and the galleries page
         // POST a depth profile here - one file per DOS tileset
@@ -66,22 +105,7 @@ function createStaticServer(root, port, tls = null) {
             res.end("forbidden");
             return;
           }
-          let body = "";
-          req.on("data", (chunk) => {
-            body += chunk;
-            if (body.length > 1e6) req.destroy();
-          });
-          req.on("end", () => {
-            try {
-              const json = JSON.stringify(JSON.parse(body), null, 2) + "\n";
-              fs.writeFileSync(savePath, json);
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end('{"ok":true}');
-            } catch (e) {
-              res.writeHead(400);
-              res.end("invalid JSON");
-            }
-          });
+          readJsonBody(req, res, (json) => fs.writeFileSync(savePath, json));
           return;
         }
 

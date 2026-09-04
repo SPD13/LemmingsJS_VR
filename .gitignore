@@ -31,3 +31,8 @@ tmp/
 
 # the release tool (builder/): kept out of git, run from a local copy
 builder/
+
+# the player's configuration files the launcher keeps in server mode
+# (config/README.md says which) - each player's own, not committed
+config/*
+!config/README.md
