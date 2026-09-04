@@ -33,7 +33,7 @@ Everything the port adds lives in `3d/`:
   index.html          the page: canvas, DOM HUD, dialogs, script tags
   js/
     app.js     2664   boot, scene, camera, input, level lifecycle, VR UI
-    portals.js  898   objects that are not flat sprites: openings and water
+    portals.js 1097   objects that are not flat sprites: openings, water, lava
     gui.js      703   the original skill panel, extruded and made pickable
     minimap.js  227   the minimap in the panel's last box: map, dots, view frame
     cursor.js   121   NeoLemmix's cursor: a cross, a square over a lemming, for both engines
@@ -178,13 +178,39 @@ data does describe the pool, just not obviously: the drowning trigger is the
 surface, and the hollow under it is whatever the terrain leaves empty. The
 body is built from both — as wide as the sprite, starting just under the
 waves, reaching down column by column to whatever ground stops it — in the
-average colour of the sprite's own pixels, translucent, deep enough to fill
-the slab. The waves go on animating on top of it as the surface they are.
+average colour of the sprite's own pixels, translucent, and as deep as the
+slab, so the lemmings inside it are seen through the water.
+
+It is shaped to the hollow rather than boxed around it: a pool's rectangle
+often has land in it, a shore rising at one end or a pillar standing in the
+middle, and a box tints all of that as though it were under water. The
+columns that hold water are merged into runs and the body is a prism over
+them. Only the outside is emitted — faces left between two runs would be seen
+through the translucent front and tint the water twice — and every face is
+split at the same set of levels, the surface and every floor in the pool, so
+no vertex is left stranded partway along another's edge. Such a junction is
+watertight on paper but not once the two edges are rasterised.
+
+**Water and lava as a surface, not a decal.** The waves are the surface of the
+water, so they are drawn through the depth of the slab rather than once at the
+plane objects sit on: the sprite is repeated every `SPRITE_DEPTH` from the
+front of the slab to the back, reusing the geometry each animation frame is
+already cached as. Stacking the same frame would only extrude it — one solid
+block of wave sliding along — so each slice runs the same animation a few
+frames apart, and at any moment they show different parts of the cycle and the
+surface churns. The offsets are drawn once from a generator seeded by the
+object's own index, never letting two neighbouring slices share one, so a
+reload and a replay churn the same way. A DOS animation is a function of the
+tick, so the offset is added to it; a Lemmix gadget carries its own counter,
+so it is wound on, the composite taken and the counter put back.
 
 Which objects are openings comes from the profile
 (`objects.byId[<id>] = {shape, depth}`), defaulting to entrances (object id 1)
 and anything carrying the `EXIT_LEVEL` trigger; water defaults to anything
-carrying `DROWN`.
+carrying `DROWN`. The slices go to those, and to fire that is a stretch of it
+rather than a single flame — NeoLemmix marks lava, acid and fire walls
+horizontally resizable and a flamethrower or a candle not, which is the same
+distinction — with `shape: "flat"` opting an object out of either.
 
 ### 2.5 The skill panel (`gui.js`)
 
@@ -666,8 +692,8 @@ which case `fetch(url, {cache: "reload"})` before reloading is the way out.
    system is waiting on, and the largest remaining item.
 2. **Automated replay comparison** — 2D vs 3D end states are still compared by
    hand (`r` dump plus `?replay=`). Phase 0 debt, now with the caveat in §2.6.
-3. **Remaining object shape classes** — objects that are not openings or water
-   still extrude like any sprite at fixed depths.
+3. **Remaining object shape classes** — objects that are not openings, water
+   or a stretch of fire still extrude like any sprite at fixed depths.
 4. **The piece editor has no in-scene equivalent** — it is a desktop
    workbench, and edit mode is not offered in a headset. This is a decision,
    not an omission.
