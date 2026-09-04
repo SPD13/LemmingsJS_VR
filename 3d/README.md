@@ -302,10 +302,16 @@ guide" link opens `setup.md`, the player's guide to the assets.
   (`lemmings-3d-controls.json`, the hotkey dialog's own format), the
   preferences (`lemmings-3d-preferences.json`: every `lem3d-*` setting the
   page keeps - 3D effects, the 2D/3D default, sound and music, the VR bar's
-  place, the library's order and place, the asset mode) and the progress
+  place, the library's order and place) and the progress
   (`lemmings-3d-progress.json`: the levels cleared with best time, most
   lemmings saved and clear count, and the NeoLemmix talismans; an upload
-  merges, keeping the best of both and never dropping a clear).
+  merges, keeping the best of both and never dropping a clear). In server
+  mode the launcher keeps the same three files in `config/` at the repo
+  root (`3d/js/config-store.js`): a page reads them at start and they take
+  precedence over the browser's copy (a file the server lacks is seeded
+  from it), every later change is written back, and the download / upload
+  buttons work on the server's files. To carry progress made in static
+  mode over, download it there and upload it in server mode, which merges.
 - **Credits**: the root README's own "Credits" section, fetched and shown
   at the bottom, so the two never drift apart.
 - The notice at the top says it: everything installed here is in this

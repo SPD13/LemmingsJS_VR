@@ -16,8 +16,12 @@
 
 // Nothing runs before the asset store is settled: the service worker in
 // control, the asset mode known, and - static mode with nothing installed -
-// the setup page shown instead (see vfs.js).
+// the setup page shown instead (see vfs.js); then, in server mode, the
+// player's configuration read from the server (see config-store.js), so
+// every setting below sees it.
 Vfs.boot("", "setup.html").then(function (booted) {
+  return ConfigStore.sync(booted.mode, "").then(function () { return booted; });
+}).then(function (booted) {
   // lemmings live embedded mid-slab (sprite centered at TERRAIN_DEPTH/2), so
   // they walk inside the carved space rather than floating in front of it;
   // normal objects (hatch/exit/traps) sit just behind them at the same depth

@@ -46,3 +46,10 @@ Besides the files it serves three things of its own:
   — the depth profile of a sprite gallery, written by the 3D page's piece
   editor and its galleries page. Only those names are writable; the reply
   is `{"ok":true}` once the file is on disk.
+- `PUT /config/lemmings-3d-controls.json`, `…-preferences.json`,
+  `…-progress.json` — the player's configuration in server mode: the game
+  page writes them whenever a setting, a binding or the progress changes,
+  and reads them back at start (a plain `GET`), where they take precedence
+  over the browser's own copy. The setup page's download / upload buttons
+  work on these files in server mode. Only those three names are accepted;
+  `config/README.md` says more. The folder is in git, its files are not.

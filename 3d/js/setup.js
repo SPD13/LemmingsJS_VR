@@ -31,19 +31,12 @@
     parallel: 4,
   };
 
-  // the player's files: what each one holds
-  const CONTROLS_FILE = Hotkeys.EXPORT_FILE;
-  const PREFS_FORMAT = "lemmings-3d-preferences";
-  const PREFS_FILE = "lemmings-3d-preferences.json";
-  const PREFS_KEYS = [
-    "lem3d-emboss", "lem3d-smooth", "lem3d-doors", "lem3d-skillbar", "lem3d-flat", "lem3d-shadows",
-    "lem3d-music", "lem3d-sound", "lem3d-volume", "lem3d-bar", "lem3d-lib-order", "lem3d-lib-path",
-    "lem3d-gal-open", "lem3d-assets",
-  ];
-  const PROGRESS_FORMAT = "lemmings-3d-progress";
-  const PROGRESS_FILE = "lemmings-3d-progress.json";
-  const CLEARED_KEY = "lem3d-cleared";     // library.js LevelProgress
-  const TALISMANS_KEY = "lem3d-talismans"; // app.js, the NeoLemmix talismans earned
+  // the player's files: what each one holds (config-store.js builds and
+  // reads them; in server mode the server keeps them)
+  const PREFS_FORMAT = ConfigStore.FILES.prefs.format;
+  const PROGRESS_FORMAT = ConfigStore.FILES.progress.format;
+  const CLEARED_KEY = ConfigStore.CLEARED_KEY;
+  const TALISMANS_KEY = ConfigStore.TALISMANS_KEY;
   const SCAN_CACHE_KEY = "lem3d-worlds-v4"; // library.js: the classic packs' scan, rebuilt on demand
 
   const $ = (id) => document.getElementById(id);
@@ -585,42 +578,49 @@
     try { return JSON.parse(text); } catch (e) { throw new Error(name + " is not a JSON file"); }
   };
 
-  const hotkeys = new Hotkeys.HotkeyManager();
-  function exportControls() { download(CONTROLS_FILE, hotkeys.exportJSON()); }
+  /**
+   * A download of one of the three files: the server's copy in server mode
+   * (the one in force there), else - or when the server has none - the
+   * file built from this browser's settings.
+   */
+  async function exportFile(kind, local) {
+    const name = ConfigStore.FILES[kind].name;
+    const text = ConfigStore.active ? await ConfigStore.serverFile(kind) : null;
+    download(name, text !== null ? text : local());
+  }
+  // where an upload lands: the browser, and the server's file in server mode
+  const landed = () => ConfigStore.active ? ", saved on the server" : "";
+
+  // a table of its own, so an upload's validation is the hotkey dialog's;
+  // its save lands in localStorage, and on the server in server mode
+  let hotkeys = null;
+  const controls = () => hotkeys || (hotkeys = new Hotkeys.HotkeyManager());
+  function exportControls() { exportFile("controls", () => controls().exportJSON()); }
   function importControls(text, name) {
     try {
-      const r = hotkeys.importJSON(text);
-      say("msg-controls", name + ": " + r.loaded + " bindings loaded" + (r.skipped ? ", " + r.skipped + " skipped" : ""));
+      const r = controls().importJSON(text);
+      say("msg-controls", name + ": " + r.loaded + " bindings loaded" + (r.skipped ? ", " + r.skipped + " skipped" : "") + landed());
     } catch (e) { say("msg-controls", name + ": " + e.message, true); }
   }
 
   function exportPrefs() {
-    const values = {};
-    for (const k of PREFS_KEYS) {
-      let v = null;
-      try { v = localStorage.getItem(k); } catch (e) {}
-      if (v !== null) values[k] = v;
-    }
-    download(PREFS_FILE, JSON.stringify({ format: PREFS_FORMAT, version: 1, values }, null, 2));
+    exportFile("prefs", () => JSON.stringify(ConfigStore.build("prefs") || { format: PREFS_FORMAT, version: 1, values: {} }, null, 2));
   }
   function importPrefs(text, name) {
     try {
       const data = parseJSON(text, name);
       if (data.format !== PREFS_FORMAT || !data.values || typeof data.values !== "object") throw new Error("not a preferences file");
       let n = 0;
-      for (const k of PREFS_KEYS) {
+      for (const k of ConfigStore.PREFS_KEYS) {
         if (typeof data.values[k] === "string") { localStorage.setItem(k, data.values[k]); n++; }
       }
-      say("msg-prefs", name + ": " + n + " preferences loaded (in force when the game page reloads)");
+      say("msg-prefs", name + ": " + n + " preferences loaded" + landed() + " (in force when the game page reloads)");
     } catch (e) { say("msg-prefs", name + ": " + e.message, true); }
   }
 
   const readJSONKey = (k) => { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } };
   function exportProgress() {
-    download(PROGRESS_FILE, JSON.stringify({
-      format: PROGRESS_FORMAT, version: 1,
-      cleared: readJSONKey(CLEARED_KEY), talismans: readJSONKey(TALISMANS_KEY),
-    }, null, 2));
+    exportFile("progress", () => JSON.stringify(ConfigStore.build("progress") || { format: PROGRESS_FORMAT, version: 1, cleared: {}, talismans: {} }, null, 2));
   }
   /** Merge: the best of both for every level, so a file never loses a clear. */
   function importProgress(text, name) {
@@ -649,7 +649,7 @@
         talismans[id] = Array.from(new Set([...(talismans[id] || []), ...list]));
       }
       localStorage.setItem(TALISMANS_KEY, JSON.stringify(talismans));
-      say("msg-progress", name + ": " + n + " levels merged");
+      say("msg-progress", name + ": " + n + " levels merged" + landed());
     } catch (e) { say("msg-progress", name + ": " + e.message, true); }
   }
 
@@ -695,6 +695,17 @@
   async function main() {
     Vfs.markSetupSeen();
     const booted = await Vfs.boot(ROOT);
+    // the player's files: the server's in server mode
+    const syncConfig = async () => {
+      hotkeys = null; // read again from what the sync leaves
+      await ConfigStore.sync(Vfs.mode, ROOT);
+      $("config-where").textContent = ConfigStore.active
+        ? "In server mode they are kept on the server too, in its config/ folder, and take precedence over this browser's copy: the downloads are those files and the uploads change them."
+        : Vfs.mode === "server"
+          ? "This server does not keep them (only the launcher does): they stay in this browser."
+          : "Your settings live in this browser too.";
+    };
+    await syncConfig();
     // the mode
     const renderMode = () => {
       const m = Vfs.mode;
@@ -709,6 +720,7 @@
       const next = Vfs.mode === "static" ? "server" : "static";
       Vfs.saveMode(next);
       await Vfs.setMode(next);
+      await syncConfig();
       renderMode();
       say("msg-mode", "the game page now plays in " + next + " mode");
       await refresh();
