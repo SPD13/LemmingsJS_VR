@@ -20,8 +20,8 @@
  * remembered; the filter searches the whole tree and opens whatever holds
  * a match; opening a gallery opens its branch.
  */
-Vfs.boot("../").then(function () {
-  const ROOT = "../";
+Vfs.boot("").then(function () {
+  const ROOT = "";
   const STYLES_INDEX = ROOT + "neolemmix/styles/index.json";
   const CARD_PX = 96;       // the miniature's larger side, before integer zoom
   const MAX_DOS_SETS = 10;  // GROUND0O.DAT .. GROUND9O.DAT

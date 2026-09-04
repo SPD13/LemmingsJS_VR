@@ -54,7 +54,7 @@ remembered afterwards; without either it asks the server for
 `levels/index.json` and takes *server* when there is one):
 
 - **static** - the files live in the browser's own storage (IndexedDB),
-  installed from the **setup page** (`3d/setup.html`, the *Setup* button on
+  installed from the **setup page** (`setup.html`, the *Setup* button on
   the right edge of the 3D page; the page also opens by itself the first
   time nothing is installed). A service worker at the repo root (`sw.js`)
   serves them to the game, so the site can be hosted with nothing but the
@@ -98,7 +98,7 @@ vendored under `lemmix/vendor/chiptune3/` (MIT, libopenmpt BSD); the setup
 page unpacks zips with fflate, vendored as `3d/lib/fflate.min.js` (MIT).
 
 The level browser reads `levels/index.json`, the sprite galleries
-(`3d/galleries.html`) `neolemmix/styles/index.json`. In static mode the
+(`galleries.html`) `neolemmix/styles/index.json`. In static mode the
 setup page writes both into the browser's storage after every change. On
 disk, regenerate them after adding or removing a pack or unpacking the styles:
 
@@ -106,6 +106,23 @@ disk, regenerate them after adding or removing a pack or unpacking the styles:
 node tools/levels-index.js
 node tools/styles-index.js
 ```
+
+## Releases
+
+The site carries a release version: `version.json` at the repo root, and
+the same number stamped as a marker into every page (`<meta
+name="lem3d-version">`) and into `sw.js`. The Electron **builder**
+(`builder/`, `npm install && npm start` there; or `node
+builder/version.js minor|major|set X.Y.Z` without Electron) steps it -
+*minor* the last number, *major* the middle one - and writes all of those
+files; commit them, then its **Publish** button pushes the committed tree to
+the `gh-pages` branch of `origin` (switching GitHub Pages on through `gh`
+when the repository has no site yet), which serves the static asset mode at
+`https://<owner>.github.io/<repo>/`. A page fetches `version.json` on load, past
+every cache, and when the server's number differs from its own marker it
+shows a yellow warning asking for a hard reload, since the browser's cache
+is what holds an old page back. The version in force shows in the 3D page's
+footer next to the asset mode. See `builder/README.md`.
 
 The Electron launcher (`launcher/`) serves both indexes live from the
 folders, so with it no regeneration step is needed; it is also what saves the

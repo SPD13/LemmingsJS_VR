@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="lem3d-version" content="1.0.0">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lemmings 3D — setup</title>
+<title>Lemmix JS+VR — setup</title>
 <style>
   /* The look of index.html's HUD, restated: there is no shared stylesheet
      (the 3D page keeps its styles inline), so the ground, buttons and rows
@@ -87,9 +88,10 @@
 <body>
 <div id="page">
   <div id="head">
-    <h1>LEMMINGS 3D — SETUP</h1>
+    <h1>LEMMIX JS+VR — SETUP <span id="version" class="dim"></span></h1>
     <a id="back" href="index.html">‹ 3D view</a>
   </div>
+  <div id="version-warning" class="card notice" hidden></div>
 
   <div class="card notice">
     <b>The NeoLemmix engine and the levels are stored locally, in this browser.</b>
@@ -192,11 +194,11 @@
   </div>
 </div>
 
-<script src="js/vfs.js"></script>
-<script src="lib/fflate.min.js"></script>
-<script src="../tools/levels-index.js"></script>
-<script src="../tools/styles-index.js"></script>
-<script src="js/hotkeys.js"></script>
-<script src="js/setup.js"></script>
+<script src="3d/js/vfs.js"></script>
+<script src="3d/lib/fflate.min.js"></script>
+<script src="tools/levels-index.js"></script>
+<script src="tools/styles-index.js"></script>
+<script src="3d/js/hotkeys.js"></script>
+<script src="3d/js/setup.js"></script>
 </body>
 </html>

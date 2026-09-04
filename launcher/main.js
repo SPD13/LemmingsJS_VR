@@ -108,8 +108,8 @@ function status() {
     running: !!server,
     port: config.port,
     https: config.https,
-    internalUrl: scheme + "://localhost:" + config.port + "/3d/",
-    externalUrl: ip ? scheme + "://" + ip + ":" + config.port + "/3d/" : null,
+    internalUrl: scheme + "://localhost:" + config.port + "/",
+    externalUrl: ip ? scheme + "://" + ip + ":" + config.port + "/" : null,
     error: lastError,
     notice,
   };

@@ -4,7 +4,7 @@ The Lemmix engine (`lemmix/`) needs NeoLemmix's own files: the `styles/`
 graphics that levels reference, the panel and mask graphics in `gfx/`, the
 sound effects in `sound/`, and the music packs in `music/`.
 
-The easy way is the **setup page** (`3d/setup.html`, the Setup button of the
+The easy way is the **setup page** (`setup.html`, the Setup button of the
 3D page): it unpacks the NeoLemmix zip and the styles package into the
 browser's own storage and the game plays from there (the *static* asset
 mode, see the root README). Nothing lands in this folder then.

@@ -7,7 +7,7 @@ committed, this README apart.
 
 Two ways to fill it:
 
-- **The setup page** (`3d/setup.html`, the Setup button of the 3D page):
+- **The setup page** (`setup.html`, the Setup button of the 3D page):
   installs the classic games from the LemmingsJS repository and any pack zip
   or folder into the browser's own storage, and serves them from there in
   the *static* asset mode. Nothing lands in this folder.

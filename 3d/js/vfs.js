@@ -7,7 +7,7 @@
  * - server: neolemmix/ and levels/ are files on the web server (the launcher,
  *   any static server, a checkout with the folders on disk). Today's mode.
  * - static: they live in this browser's IndexedDB, installed from the setup
- *   page (3d/setup.html), and a service worker at the repo root (sw.js)
+ *   page (setup.html), and a service worker at the repo root (sw.js)
  *   answers the game's requests for them. What a static host such as GitHub
  *   Pages runs, since it ships the engine only.
  *
@@ -52,7 +52,7 @@
     return (dot >= 0 && MIME[path.slice(dot).toLowerCase()]) || "application/octet-stream";
   };
 
-  // this script sits at <repo>/3d/js/vfs.js; the worker at <repo>/sw.js
+  // this script sits at <repo>/3d/js/vfs.js (the pages at <repo>/); the worker at <repo>/sw.js
   const scriptSrc = (document.currentScript && document.currentScript.src) || location.href;
   const SW_URL = new URL("../../sw.js", scriptSrc).href;
 
@@ -374,6 +374,31 @@
     try { return await has(INDEX_PATH); } catch (e) { return false; }
   }
 
+  // ---- the release version ------------------------------------------------
+
+  const VERSION_FILE = "version.json";
+
+  /** The version this page was built as: its marker (builder/ stamps it). */
+  function pageVersion() {
+    const meta = document.querySelector('meta[name="lem3d-version"]');
+    return meta ? meta.content : null;
+  }
+
+  /**
+   * The version on the server against this page's: {page, server, stale}.
+   * Fetched past every cache, since a stale page is what a cache gives; a
+   * server that does not answer is no news (stale false, server null).
+   */
+  async function checkVersion(root) {
+    const page = pageVersion();
+    let server = null;
+    try {
+      const res = await fetch(root + VERSION_FILE + "?probe=" + Date.now(), { cache: "no-store" });
+      if (res.ok) server = String((await res.json()).version || "") || null;
+    } catch (e) { server = null; }
+    return { page, server, stale: !!(page && server && page !== server) };
+  }
+
   const setupSeen = () => { try { return !!localStorage.getItem(SEEN_KEY); } catch (e) { return false; } };
   const markSetupSeen = () => { try { localStorage.setItem(SEEN_KEY, "1"); } catch (e) {} };
 
@@ -396,6 +421,7 @@
   root.Vfs = {
     DB_NAME, MODE_KEY, SEEN_KEY, PARAM, INDEX_PATH, STORE_PREFIXES, MIME, mimeOf,
     swReady, boot, resolveMode, setMode, saveMode, savedMode,
+    VERSION_FILE, pageVersion, checkVersion,
     get mode() { return mode; },
     playable, setupSeen, markSetupSeen,
     openDb, get, put, remove, getAll,

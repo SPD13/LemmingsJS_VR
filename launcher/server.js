@@ -150,7 +150,7 @@ function createStaticServer(root, port, tls = null) {
 if (require.main === module) {
   const port = parseInt(process.argv[2], 10) || 8123;
   createStaticServer(path.join(__dirname, ".."), port).then((srv) => {
-    console.log("serving on http://localhost:" + srv.port + "/3d/  (ctrl-c stops it)");
+    console.log("serving on http://localhost:" + srv.port + "/  (ctrl-c stops it)");
   }).catch((e) => { console.error(e.message); process.exit(1); });
 }
 

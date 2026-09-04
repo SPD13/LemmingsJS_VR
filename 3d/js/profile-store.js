@@ -20,7 +20,7 @@
     ? require("./depth.js")
     : { embossEnabledFor, embossInvertedFor };
 
-  const PROFILE_DIR = "profiles/";
+  const PROFILE_DIR = "3d/profiles/"; // page-relative: the pages sit at the repo root
   const CLASSES = ["backdrop", "terrain", "relief", "overlay"];
   /** What `c` (cycle class) walks through: the classes, then back to auto. */
   const CLASS_CYCLE = ["terrain", "relief", "backdrop", "overlay", null];

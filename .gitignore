@@ -28,3 +28,6 @@ Doc/neolemmix-src/
 
 # scratch: screenshots, test downloads and other throwaways
 tmp/
+
+# the release tool (builder/): kept out of git, run from a local copy
+builder/
