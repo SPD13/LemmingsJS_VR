@@ -127,8 +127,10 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // one is remembered the moment its button is pressed.
     emboss: setting("emboss", "lem3d-emboss", true), // colour-keyed relief
     smooth: setting("smooth", "lem3d-smooth", true), // slope between heights
-    // the outline's own corners rounded off, terrain and the animated
-    // surfaces alike, so nothing reads as the pixels it was drawn with
+    // "edge smoothing": the outline's own corners rounded off - terrain, the
+    // animated surfaces and the openings alike - so nothing reads as the
+    // pixels it was drawn with. The name in storage and in the URL is the
+    // older `smoothterrain`, kept so saved settings and shared links hold.
     smoothTerrain: setting("smoothterrain", "lem3d-smooth-terrain", true),
     // pixel colours run into each other instead of meeting at a hard edge, on
     // the pieces tagged for it. Not a switch but a strength (COLOR_BLEND_LEVELS)
@@ -782,7 +784,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     emboss: iconizeHudButton(document.getElementById("btn-emboss"), embossIcon, "3D terrain"),
     doors: iconizeHudButton(document.getElementById("btn-doors"), doorsIcon, "3D doors"),
     smooth: iconizeHudButton(document.getElementById("btn-smooth"), smoothIcon, "smooth relief"),
-    smoothTerrain: iconizeHudButton(document.getElementById("btn-smooth-terrain"), smoothTerrainIcon, "smooth terrain"),
+    smoothTerrain: iconizeHudButton(document.getElementById("btn-smooth-terrain"), smoothTerrainIcon, "edge smoothing"),
     colorBlend: iconizeHudButton(document.getElementById("btn-colorblend"), colorBlendIcon, "colour blend"),
     skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
   };
@@ -1634,7 +1636,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     { label: "3D terrain", get: () => state.emboss, act: () => toggleEmboss() },
     { label: "3D doors", get: () => state.doors, act: () => toggleDoors() },
     { label: "smooth relief", get: () => state.smooth, act: () => toggleSmooth() },
-    { label: "smooth terrain", get: () => state.smoothTerrain, act: () => toggleSmoothTerrain() },
+    { label: "edge smoothing", get: () => state.smoothTerrain, act: () => toggleSmoothTerrain() },
     { label: "colour blend", get: () => state.colorBlend !== "off",
       text: () => colorBlendLevel().label.toUpperCase(), act: () => toggleColorBlend() },
     { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
@@ -2188,8 +2190,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
   const smoothTerrainBtn = document.getElementById("btn-smooth-terrain");
   const renderSmoothTerrainBtn = () => {
     hudIcons.smoothTerrain({ on: state.smoothTerrain });
-    smoothTerrainBtn.title = "smooth terrain (rounds the pixel corners off the terrain and the water): "
-      + (state.smoothTerrain ? "on" : "off");
+    smoothTerrainBtn.title = "edge smoothing (rounds the pixel corners off the terrain, "
+      + "the water and the openings): " + (state.smoothTerrain ? "on" : "off");
   };
   function toggleSmoothTerrain() {
     state.smoothTerrain = !state.smoothTerrain;
@@ -2197,6 +2199,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     renderSmoothTerrainBtn();
     if (session) {
       session.terrain.setSmoothTerrain(state.smoothTerrain);
+      if (session.rebuildPortalEdges) session.rebuildPortalEdges();
       // the wave slices wear their geometry per tick: draw them again now,
       // whether the clock is running or not
       session.syncScene(true);
@@ -2569,7 +2572,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // behind them (render only - collision is untouched). Switched off, they
     // stay the flat sprites the original draws and nothing is carved.
     const portals = state.doors
-      ? buildPortals(level, profile, depthMap, OBJECT_Z) : [];
+      ? buildPortals(level, profile, depthMap, OBJECT_Z, state.smoothTerrain) : [];
     const portalIndices = new Set(portals.map((p) => p.index));
 
     // music: the original rotates tunes with the level ordinal
@@ -2697,7 +2700,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // instead of sliding along as one extruded block
     const stacks = state.doors ? stackedObjectsFrom(level, profile) : [];
     const stackIndices = new Set(stacks.map((s) => s.index));
-    // with the corners rounded off (the "smooth terrain" switch) a slice wears
+    // with the corners rounded off (the "edge smoothing" switch) a slice wears
     // the rounded cut of its frame, blended into the slices either side of it;
     // the texture is shared with the square-edged cut. Its colours come from
     // blendedMaterialFor, which is where the colour blend is applied - the
@@ -3090,6 +3093,23 @@ Vfs.boot("", "setup.html").then(function (booted) {
         if (portalsShown === v) return;
         portalsShown = v;
         syncScene(true); // the sprites drawn again, whether the clock runs or not
+      },
+      // the openings cut again when the edge-smoothing switch moves: a door's
+      // outline is a staircase like the terrain's and is rounded off the same
+      // way, so it has to be re-meshed. The carve behind it and the hatch's
+      // own square are unaffected, so this is geometry alone - no level
+      // rebuild, and nothing to reposition.
+      rebuildPortalEdges: () => {
+        for (const portal of portals) {
+          if (!portal.rebuild || !portal.mesh) continue;
+          const geom = buildPortalGeometry(portal.rebuild.frame, portal.rebuild.depth,
+            portal.rebuild.sky, state.smoothTerrain);
+          if (!geom) continue;
+          const old = portal.mesh.geometry;
+          portal.geometry = resources.track(geom);
+          portal.mesh.geometry = geom;
+          if (old) old.dispose();
+        }
       },
       // re-derive the colour-keyed relief (master switch or a per-piece tag)
       rebuildRelief: () => {

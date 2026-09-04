@@ -254,7 +254,10 @@ Two optional treatments sit on top:
 - **smooth relief**: slopes the relief between neighbouring heights by
   averaging the pixel heights meeting at each quad corner, staying crisp at
   depth-class boundaries and silhouettes. This is smoothing through the slab.
-- **smooth terrain**: smoothing across it. Extruded pixels leave the outline a
+- **edge smoothing** (`smoothTerrain` in the code, `?smoothterrain=` in the
+  URL and `lem3d-smooth-terrain` in storage: the name it was given before it
+  reached past the terrain, kept so links and saved settings hold): smoothing
+  across it. Extruded pixels leave the outline a
   staircase, so each of its corners slides along its own diagonal — toward the
   lone pixel that owns a convex corner, into the lone gap of a concave one.
   The rule is deliberately narrow: a corner with four pixels around it, or two
@@ -265,6 +268,15 @@ Two optional treatments sit on top:
   a chunk boundary and the seams stay closed. Both smoothings need a quad per
   pixel to have corners to move; with the relief flat and the outline left
   alone, the cheaper greedy stepped path still runs.
+
+  The openings take the same rule over their own silhouette
+  (`buildPortalGeometry`), so an exit set into the ground is cut the way the
+  ground around it is; its corners are shared by the face, the tunnel floor
+  and the walls, which is what keeps the slab closed however far they move. A
+  change of the switch re-meshes them (`session.rebuildPortalEdges`) rather
+  than rebuilding the level: the carve behind an opening and the hatch's own
+  square do not depend on it. An entrance hatch has nothing to round — its
+  ceiling square and its two doors are flat panels with straight edges.
 
 ### 2.4 Objects that are not sprites (`portals.js`)
 
@@ -338,7 +350,7 @@ Scattered offsets would need one shape per combination — 512 against 25 for an
 eight-frame water, some 288 MB of geometry — and would blend shapes with
 nothing in common anyway.
 
-With **smooth terrain** on, the slices are rounded off and blended into one
+With **edge smoothing** on, the slices are rounded off and blended into one
 another so the stack reads as one body rather than as layers. Across a slice
 the outline's corners slide as the terrain's do. Through it, how far a column
 reaches toward each face is asked of the neighbouring slice: where that slice
