@@ -9,7 +9,17 @@ const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
-const { createStaticServer } = require("./server");
+/**
+ * The server module, read from disk at every start rather than once at
+ * launch: a stop/start from the window then serves the code as it is now
+ * (its routes change with the game), with no need to quit the app.
+ */
+function loadServer() {
+  for (const m of ["./server", "../tools/levels-index", "../tools/styles-index"]) {
+    delete require.cache[require.resolve(m)];
+  }
+  return require("./server");
+}
 const { reclaimPort } = require("./port");
 const selfsigned = require("selfsigned");
 
@@ -126,6 +136,7 @@ async function startServer() {
   let tls = null;
   try {
     tls = config.https ? await ensureCert() : null;
+    const { createStaticServer } = loadServer();
     server = await createStaticServer(WEB_ROOT, config.port, tls);
   } catch (e) {
     server = null;
@@ -141,7 +152,7 @@ async function startServer() {
     const taken = await reclaimPort(config.port, __dirname);
     if (taken.killed.length > 0 && taken.free) {
       try {
-        server = await createStaticServer(WEB_ROOT, config.port, tls);
+        server = await loadServer().createStaticServer(WEB_ROOT, config.port, tls);
         notice = "port " + config.port + " was still held by a previous " +
           "launcher (pid " + taken.killed.join(", ") + ") — stopped it and " +
           "started fresh";
