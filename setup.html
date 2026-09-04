@@ -78,6 +78,7 @@
   .empty { color: #8fa1bb; padding: 6px 12px; }
   #credits-list div { margin: 4px 0; }
   #credits-list a { color: #7fd6e8; }
+  #credits-list .credit-icon { width: 13px; height: 13px; vertical-align: -2px; margin-right: 3px; }
   #progress { margin-top: 10px; }
   #progress[hidden] { display: none; }
   #progress-track { height: 6px; background: #0b0f16; border: 1px solid #33405a; border-radius: 4px; overflow: hidden; }
@@ -126,6 +127,7 @@
     <b>The NeoLemmix engine and the levels are stored locally, in this browser.</b>
     Nothing installed here goes to a server: it lives in this site's storage on this device, and it is wiped
     if you clear the browser's data for this site (each browser, and each address of the site, has its own copy).
+    <b>None of the copyrighted assets are shipped with this engine, you will need to bring your own versions.</b>
     <div id="storage" class="dim"></div>
   </div>
   <div id="sw-warning" class="card warn" hidden></div>
@@ -153,8 +155,8 @@
       <span class="dot off" id="dot-engine"></span>
       <span class="lib-row-name">NeoLemmix <span class="dim">gfx, sounds, music, the classic styles and its two level packs</span></span>
       <span id="state-engine" class="dim"></span>
-      <button id="btn-get-engine" data-busy>get NeoLemmix</button>
-      <button id="btn-zip-engine" data-busy>install zip…</button>
+      <button id="btn-get-engine" data-busy>1. get NeoLemmix</button>
+      <button id="btn-zip-engine" data-busy>2. install zip…</button>
       <input type="file" id="file-engine" accept=".zip,application/zip">
     </div>
     <div class="row" id="row-styles">
@@ -162,8 +164,8 @@
       <span class="dot off" id="dot-styles"></span>
       <span class="lib-row-name">Styles package <span class="dim">every style the level packs use</span></span>
       <span id="state-styles" class="dim"></span>
-      <button id="btn-get-styles" data-busy>get the styles</button>
-      <button id="btn-zip-styles" data-busy>install zip…</button>
+      <button id="btn-get-styles" data-busy>1. get the styles</button>
+      <button id="btn-zip-styles" data-busy>2. install zip…</button>
       <input type="file" id="file-styles" accept=".zip,application/zip">
     </div>
     <div id="msg-nx" class="msg"></div>
@@ -171,17 +173,24 @@
 
   <div class="card" id="levels">
     <h2>Levels</h2>
-    <div id="levels-where" class="dim"></div>
-    <div id="level-list"></div>
+    <div class="dim"><b>None of the copyrighted assets ship with this engine.</b> You need to own the original game to use the
+      Lemmings and Oh No! More Lemmings levels. The NeoLemmix levels are provided by their authors, and their licences apply.
+      Check the licence of the levels with their respective authors.</div>
+    <div class="dim">A level zip or folder lands in its own directory (NeoLemmix packs, or a DOS game's files). Drop a zip anywhere on this section.</div>
+    <div class="dim">The Lemmings Plus packs come from <a id="packs-site" href="https://www.neolemmix.com/?page=level_packs" target="_blank" rel="noopener">neolemmix.com</a>: the first button opens the official download there in a new tab, the second installs the zip your browser saved.</div>
+    <div class="dim">The original Lemmings levels come two ways: the NeoLemmix install above brings them as NeoLemmix packs,
+      played by the Lemmix engine, and the button below installs the DOS game files, played by the classic DOS-like engine.</div>
+    <div class="dim">Lemmings and Oh No! More Lemmings come from <a id="classic-repo" href="https://github.com/oklemenz/LemmingsJS" target="_blank" rel="noopener">github.com/oklemenz/LemmingsJS</a>, the project this one forks: that button copies the game files straight from the repository, with no zip to save.</div>
     <div class="btnrow">
-      <button id="btn-get-packs" data-busy>get the Lemmings Plus packs</button>
-      <button id="btn-zip-levels" data-busy>install zip…</button>
+      <button id="btn-get-packs" data-busy>1. get the Lemmings Plus packs</button>
+      <button id="btn-zip-levels" data-busy>2. install zip…</button>
       <button id="btn-classic" data-busy>Lemmings &amp; Oh No! More Lemmings (LemmingsJS git)</button>
       <button id="btn-folder-levels" data-busy>upload a folder…</button>
       <input type="file" id="file-levels" accept=".zip,application/zip">
       <input type="file" id="folder-levels" webkitdirectory directory multiple>
     </div>
-    <div class="dim">A level zip or folder lands in its own directory (NeoLemmix packs, or a DOS game's files). Drop a zip anywhere on this section.</div>
+    <div id="levels-where" class="dim"></div>
+    <div id="level-list"></div>
     <div id="msg-levels" class="msg"></div>
   </div>
 

@@ -18,12 +18,14 @@
 
   const OFFICIAL = {
     site: "https://www.neolemmix.com/?page=neolemmix",
+    packsSite: "https://www.neolemmix.com/?page=level_packs",
     engine: { url: "https://www.neolemmix.com/download.php?program=16", name: "NeoLemmix V12.14.0", size: "7 MB" },
     styles: { url: "https://www.neolemmix.com/download.php?program=52", name: "the styles package", size: "92 MB" },
     packs: { url: "https://www.neolemmix.com/download.php?program=47", name: "Lemmings Plus (every pack)", size: "22 MB" },
   };
   const GITHUB = {
     repo: "oklemenz/LemmingsJS",
+    site: "https://github.com/oklemenz/LemmingsJS",
     dirs: ["lemmings", "lemmings_ohNo"],
     list: "https://data.jsdelivr.com/v1/packages/gh/oklemenz/LemmingsJS@master?structure=flat",
     apiList: (dir) => "https://api.github.com/repos/oklemenz/LemmingsJS/contents/" + dir + "?ref=master",
@@ -639,7 +641,7 @@
         ? "installed" + (u.version ? " (" + u.version + ")" : "") +
           [u.files != null ? ": " + u.files + " files, " + fmtMB(u.bytes) : "", u.installedAt ? ", " + fmtDate(u.installedAt) : ""].join("")
         : "not installed";
-      $("btn-zip-" + kind).textContent = u ? "re-install zip…" : "install zip…";
+      $("btn-zip-" + kind).textContent = u ? "2. re-install zip…" : "2. install zip…";
     }
     // the level directories of the store in force, named by its index when it knows them
     const dirs = await s.dirs();
@@ -788,7 +790,8 @@
     } catch (e) { /* no README on this host */ }
     const m = /^## Credits\s*\n([\s\S]*?)(?=^## |\s*$(?![\s\S]))/m.exec(text);
     if (!m) { box.textContent = "see the README's Credits section"; return; }
-    // bullets: "- text", continuation lines indented; a URL becomes a link
+    // bullets: "- text", continuation lines indented; a URL becomes a link,
+    // ![alt](src) an image (the Claude Code note carries one)
     const items = [];
     for (const line of m[1].split("\n")) {
       if (/^- /.test(line)) items.push(line.slice(2).trim());
@@ -797,7 +800,10 @@
     box.innerHTML = "";
     for (const item of items) {
       const div = document.createElement("div");
-      div.innerHTML = escapeHtml(item).replace(/(https?:\/\/[^\s<)]+)/g, (u) =>
+      div.innerHTML = escapeHtml(item)
+        .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, src) =>
+          '<img class="credit-icon" src="' + ROOT + src + '" alt="' + alt + '">')
+        .replace(/(https?:\/\/[^\s<)]+)/g, (u) =>
           '<a href="' + u + '" target="_blank" rel="noopener">' + u.replace(/^https?:\/\/(www\.)?/, "") + "</a>");
       box.appendChild(div);
     }
@@ -862,9 +868,11 @@
         ". Installs still land in this browser's storage, but the game cannot play from it here.";
     }
     $("official").href = OFFICIAL.site;
+    $("packs-site").href = OFFICIAL.packsSite;
+    $("classic-repo").href = GITHUB.site;
     for (const kind of ["engine", "styles"]) {
       const o = OFFICIAL[kind];
-      $("btn-get-" + kind).textContent = "get " + o.name + " (" + o.size + ")";
+      $("btn-get-" + kind).textContent = "1. get " + o.name + " (" + o.size + ")";
       $("btn-get-" + kind).addEventListener("click", () => window.open(o.url, "_blank", "noopener"));
       $("btn-zip-" + kind).addEventListener("click", () => {
         const input = $("file-" + kind);
@@ -874,7 +882,7 @@
       });
       dropZone($("row-" + kind), kind);
     }
-    $("btn-get-packs").textContent = "get " + OFFICIAL.packs.name + " (" + OFFICIAL.packs.size + ")";
+    $("btn-get-packs").textContent = "1. get " + OFFICIAL.packs.name + " (" + OFFICIAL.packs.size + ")";
     $("btn-get-packs").addEventListener("click", () => window.open(OFFICIAL.packs.url, "_blank", "noopener"));
     $("btn-zip-levels").addEventListener("click", () => {
       const input = $("file-levels");
