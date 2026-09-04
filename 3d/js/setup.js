@@ -653,6 +653,32 @@
     } catch (e) { say("msg-progress", name + ": " + e.message, true); }
   }
 
+  // ---- the credits: the README's own "Credits" section, so the two never drift ----
+
+  async function loadCredits() {
+    const box = $("credits-list");
+    let text = "";
+    try {
+      const res = await fetch(ROOT + "README.md", { cache: "no-store" });
+      if (res.ok) text = await res.text();
+    } catch (e) { /* no README on this host */ }
+    const m = /^## Credits\s*\n([\s\S]*?)(?=^## |\s*$(?![\s\S]))/m.exec(text);
+    if (!m) { box.textContent = "see the README's Credits section"; return; }
+    // bullets: "- text", continuation lines indented; a URL becomes a link
+    const items = [];
+    for (const line of m[1].split("\n")) {
+      if (/^- /.test(line)) items.push(line.slice(2).trim());
+      else if (items.length && line.trim()) items[items.length - 1] += " " + line.trim();
+    }
+    box.innerHTML = "";
+    for (const item of items) {
+      const div = document.createElement("div");
+      div.innerHTML = escapeHtml(item).replace(/(https?:\/\/[^\s<)]+)/g, (u) =>
+        '<a href="' + u + '" target="_blank" rel="noopener">' + u.replace(/^https?:\/\/(www\.)?/, "") + "</a>");
+      box.appendChild(div);
+    }
+  }
+
   // ---- wiring ----
 
   function dropZone(el, kind) {
@@ -737,6 +763,7 @@
     $("btn-ul-progress").addEventListener("click", () => pickFile($("file-progress"), importProgress));
 
     await refresh();
+    loadCredits();
   }
 
   main().catch((e) => {
