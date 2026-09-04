@@ -2,11 +2,14 @@
 /**
  * Piece-tagging editor (plan §6): the authoring tool for depth profiles.
  *
- * Toggle with 'e' (pauses the sim). Click a terrain piece in the 3D view:
- * the click is hit-tested against the level's placed-piece list in composite
- * order, honoring per-pixel transparency, upside-down placement and erase
- * pieces — so what you click is what you see. Every placement of that piece
- * id highlights; assigning a class (backdrop / terrain / relief / overlay,
+ * Toggle with 'e' (pauses the sim). Click a terrain piece in the 3D view: the
+ * ray is marched through the extrusion (surfacePick) and the first column it
+ * enters names the piece, read off the composite's own piece map — so what is
+ * tagged is the pixel being looked at, whichever face of the diorama it sits
+ * on and however far the perspective has slid it from the level's flat plane.
+ * Every placement of that piece id lights up as a translucent yellow *volume*
+ * standing where the extrusion put it, the piece's own shape rather than a
+ * card floating over it; assigning a class (backdrop / terrain / relief / overlay,
  * or back to auto) writes the tag into the profile file of the piece's own
  * sprite gallery (profile-store.js), rebuilds the depth buffer and re-meshes
  * only the chunks that changed. Save posts every changed file to the
@@ -16,6 +19,17 @@
  * that draws it — tag once, fixed everywhere. The galleries page
  * (galleries.html) tags the same files sprite by sprite.
  */
+
+// The tagging highlight: the selected piece drawn as a translucent yellow
+// volume standing where the extrusion put it.
+const TAG_HILITE_COLOR = 0xffd866;
+// How far the volume stands proud of the terrain it wraps, in game pixels: a
+// whole one, so the highlight is a lip toward the eye rather than a skin
+// fighting the surface for its pixels, and reads from any angle.
+const TAG_HILITE_LIFT = 1;
+// Picking through the extrusion: how far the ray steps between samples - under
+// a pixel, so a one-pixel column cannot be stepped over.
+const TAG_PICK_STEP = 0.4;
 
 class PieceEditor {
   /**
@@ -34,13 +48,36 @@ class PieceEditor {
     this.selectedId = null;
     this._wasRunning = false;
 
+    this._flat = false; // the 2D view: nothing is extruded, so nothing to stand up
+
+    // The flat footprint the 2D view gets, on the level's own plane...
     this.highlightGroup = new THREE.Group();
     this.highlightGroup.visible = false;
     session.worldGroup.add(this.highlightGroup);
-    this._highlightGeom = new THREE.PlaneGeometry(1, 1);
+    // ...and the diorama's volume, hung off the terrain chunks so the change
+    // of view squeezes it with them and the flat view hides it with them.
+    this.volumeGroup = new THREE.Group();
+    this.volumeGroup.visible = false;
+    (session.terrain ? session.terrain.chunkGroup : session.worldGroup).add(this.volumeGroup);
+    this._volumeGeom = null; // both are rebuilt whenever the selection or the
+    this._flatGeom = null;   // depth under it changes
     this._highlightMat = new THREE.MeshBasicMaterial({
-      color: 0xffd866, transparent: true, opacity: 0.32,
-      depthTest: false, side: THREE.DoubleSide,
+      color: TAG_HILITE_COLOR, transparent: true, opacity: 0.55,
+      side: THREE.DoubleSide, depthWrite: false,
+      // its walls sit exactly on the terrain's own: nudged toward the eye so
+      // the two cannot fight over the pixel
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+    });
+    // the same volume once more, faintly and through everything, so a piece
+    // buried behind another still shows where it is
+    this._ghostMat = new THREE.MeshBasicMaterial({
+      color: TAG_HILITE_COLOR, transparent: true, opacity: 0.15,
+      side: THREE.DoubleSide, depthWrite: false, depthTest: false,
+    });
+    // and the 2D view's wash over the picture, where there is no volume
+    this._flatMat = new THREE.MeshBasicMaterial({
+      color: TAG_HILITE_COLOR, transparent: true, opacity: 0.45,
+      side: THREE.DoubleSide, depthWrite: false, depthTest: false,
     });
 
     this.dom = {
@@ -103,6 +140,7 @@ class PieceEditor {
     if (this._wasRunning) this.timer.suspend();
     this.dom.panel.hidden = false;
     this.highlightGroup.visible = true;
+    this.volumeGroup.visible = true;
     this._renderInfo();
   }
 
@@ -112,6 +150,7 @@ class PieceEditor {
     if (this._wasRunning) this.timer.continue();
     this.dom.panel.hidden = true;
     this.highlightGroup.visible = false;
+    this.volumeGroup.visible = false;
   }
 
   /** Topmost opaque piece at sim coords, honoring composite order + erase. */
@@ -133,10 +172,97 @@ class PieceEditor {
     return hit;
   }
 
-  /** Click from the app's pointer handler while edit mode is on. */
-  handleSimClick(px, py) {
+  /**
+   * Which piece owns a pixel as the level is actually composited: the piece
+   * map the depth pass already builds (depth.js buildPieceMap), which knows
+   * about erase, no-overwrite and only-overwrite placements as well as
+   * transparency. pieceAt above is the fallback for a level that has none.
+   */
+  pieceIdAt(px, py) {
+    const t = this.s.terrain, map = this.s.pieceMap;
+    if (map && t && px >= 0 && py >= 0 && px < t.w && py < t.h) {
+      const id = map[py * t.w + px] - 1;
+      return id >= 0 ? id : null;
+    }
     const piece = this.pieceAt(px, py);
-    this.select(piece ? piece.id : null);
+    return piece ? piece.id : null;
+  }
+
+  /**
+   * The pixel whose *surface* a ray lands on.
+   *
+   * The diorama is extruded, so under a perspective camera the pixel seen at
+   * a point on screen is not the one the flat pick plane behind it names: a
+   * column standing proud of its neighbours covers them, and the wall it is
+   * seen through from the side belongs to the column it rises from, not to
+   * the floor beyond it. So the ray is marched through the depth buffer read
+   * as a heightfield - every solid pixel a column from its class's back to
+   * its front, relief included - and the first column it enters is the one
+   * under the cursor, which is the one whose pixel the eye is looking at.
+   *
+   * `ray` is in world space; the walk happens in the world group's own space,
+   * where x and y are sim coordinates and z is the extrusion depth. Returns
+   * null when the ray passes the level by - clicking the sky drops the
+   * selection rather than tagging whatever lies behind it.
+   */
+  surfacePick(ray) {
+    const t = this.s.terrain;
+    if (!t || !this.s.worldGroup) return null;
+    const local = ray.clone().applyMatrix4(
+      new THREE.Matrix4().copy(this.s.worldGroup.matrixWorld).invert());
+    const o = local.origin, d = local.direction.normalize();
+
+    // clip to the box the terrain lives in, so only the pixels the ray
+    // actually crosses are walked
+    let t0 = 0, t1 = Infinity;
+    const clip = (p, dd, lo, hi) => {
+      if (Math.abs(dd) < 1e-9) return p >= lo && p <= hi;
+      let a = (lo - p) / dd, b = (hi - p) / dd;
+      if (a > b) { const swap = a; a = b; b = swap; }
+      if (a > t0) t0 = a;
+      if (b < t1) t1 = b;
+      return t1 >= t0;
+    };
+    const zTop = DEPTH_BANDS.reduce((m, b) => Math.max(m, b ? b.front : 0), 0) +
+      RELIEF_MAX;
+    if (!clip(o.x, d.x, 0, t.w) || !clip(o.y, d.y, 0, t.h) ||
+        !clip(o.z, d.z, 0, zTop)) return null;
+
+    for (let s = Math.max(t0, 0); s <= t1; s += TAG_PICK_STEP) {
+      const x = Math.floor(o.x + d.x * s), y = Math.floor(o.y + d.y * s);
+      if (x < 0 || y < 0 || x >= t.w || y >= t.h) continue;
+      const i = y * t.w + x;
+      const cls = t.depth[i];
+      if (cls === DepthClass.EMPTY) continue;
+      const band = DEPTH_BANDS[cls];
+      const z = o.z + d.z * s;
+      if (z <= band.front + (t.relief ? t.relief[i] : 0) && z >= band.back) {
+        return { x, y };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Click from the app's pointer handler while edit mode is on. The ray is
+   * what picks in the diorama (surfacePick); the flat coordinates are what
+   * the 2D view goes by, where there is no depth to see past.
+   */
+  handleSimClick(px, py, ray) {
+    if (ray && !this._flat) {
+      const surface = this.surfacePick(ray);
+      this.select(surface ? this.pieceIdAt(surface.x, surface.y) : null);
+      return;
+    }
+    this.select(this.pieceIdAt(px, py));
+  }
+
+  /** The 2D view is on or off: the volume gives way to a flat footprint. */
+  setFlat(on) {
+    on = !!on;
+    if (this._flat === on) return;
+    this._flat = on;
+    this._rebuildHighlights();
   }
 
   select(pieceId) {
@@ -152,16 +278,162 @@ class PieceEditor {
       (p) => (p.key != null ? p.key === key : p.id === id) && !p.drawProperties.isErase);
   }
 
-  _rebuildHighlights() {
-    while (this.highlightGroup.children.length) {
-      this.highlightGroup.remove(this.highlightGroup.children[0]);
+  /** The ids tagged under the same key as `id` - what a tag really covers. */
+  _idsForKey(id) {
+    // terraImages is an array for a DOS tileset and a plain object for a
+    // Lemmix style, so it is walked by its own keys either way
+    const imgs = this.s.groundData ? this.s.groundData.terraImages : null;
+    const key = this._key(id);
+    const ids = new Set();
+    for (const k of imgs ? Object.keys(imgs) : []) {
+      const i = Number(k);
+      if (imgs[i] && this._key(i) === key) ids.add(i);
     }
+    return ids;
+  }
+
+  /**
+   * The selected piece's pixels as the diorama actually stands, and how high
+   * the highlight's front face stands over each of them; -1 everywhere else,
+   * which is also what a pixel covered by a later piece, erased, or dug away
+   * since gets. Null when the level has no piece map to read, or the piece is
+   * nowhere on show.
+   *
+   * The front is *flat*: every pixel of a depth class is given the height of
+   * the tallest column that class has here, so the face clears the relief the
+   * 3D shade puts into the terrain under it rather than following it - a
+   * highlight that rippled with those bumps would read as texture instead of
+   * as a marker. A piece whose placements fall into different classes (the
+   * flag defaults can do that) keeps one flat face per class, so a recessed
+   * placement is not dragged up to the height of a proud one.
+   */
+  _footprint() {
+    const t = this.s.terrain, map = this.s.pieceMap;
+    if (!t || !map || map.length !== t.w * t.h) return null;
+    const ids = this._idsForKey(this.selectedId);
+    const cls = new Uint8Array(t.w * t.h);            // this tag's pixels, by class
+    const tallest = new Float32Array(DEPTH_BANDS.length); // and their highest column
+    let any = false;
+    for (let i = 0; i < cls.length; i++) {
+      const id = map[i] - 1;
+      if (id < 0 || !ids.has(id)) continue;
+      const c = t.depth[i];
+      if (c === DepthClass.EMPTY) continue; // dug out from under the tag
+      cls[i] = c;
+      const front = DEPTH_BANDS[c].front + (t.relief ? t.relief[i] : 0);
+      if (front > tallest[c]) tallest[c] = front;
+      any = true;
+    }
+    if (!any) return null;
+    const heights = new Float32Array(cls.length).fill(-1);
+    for (let i = 0; i < cls.length; i++) {
+      if (cls[i]) heights[i] = tallest[cls[i]] + TAG_HILITE_LIFT;
+    }
+    return heights;
+  }
+
+  /**
+   * The footprint as geometry. With `flatZ` given it is the outline alone, one
+   * quad per run on that plane (the 2D view). Without it, it is the volume:
+   * the piece's shape extruded from the back of the slab up to the flat front
+   * face _footprint worked out for each of its pixels. Only the faces that are
+   * exposed are emitted - the front of each run, and a wall wherever the
+   * neighbour's face is lower or the piece is not there at all, spanning just
+   * the exposed part. So the highlight is the piece's own shape standing in
+   * the diorama, not a card floating over it, and its inside faces do not pile
+   * translucency onto themselves.
+   */
+  _footprintGeometry(heights, flatZ) {
+    const t = this.s.terrain, w = t.w, h = t.h;
+    const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? -1 : heights[y * w + x];
+    const pos = [];
+    const quad = (a, b, c, d) => pos.push(
+      a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2],
+      a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+
+    for (let y = 0; y < h; y++) {
+      let x = 0;
+      while (x < w) {
+        const z = at(x, y);
+        if (z < 0) { x++; continue; }
+        let run = 1; // the pixels beside it under the same stretch of face
+        while (at(x + run, y) === z) run++;
+        const top = flatZ != null ? flatZ : z;
+        quad([x, y, top], [x + run, y, top], [x + run, y + 1, top], [x, y + 1, top]);
+        if (flatZ == null) {
+          // the walls across the run, up and down, merged while the drop is
+          // the same; then the two ends, where the run stops by definition
+          for (const dy of [-1, 1]) {
+            const wy = dy < 0 ? y : y + 1;
+            let i = 0;
+            while (i < run) {
+              const n = at(x + i, y + dy);
+              if (n >= z) { i++; continue; }
+              let k = 1;
+              while (i + k < run && at(x + i + k, y + dy) === n) k++;
+              // between two faces of the piece the wall spans the drop
+              // alone; onto open ground it goes the whole way down
+              const base = n < 0 ? 0 : n;
+              quad([x + i, wy, base], [x + i + k, wy, base],
+                   [x + i + k, wy, top], [x + i, wy, top]);
+              i += k;
+            }
+          }
+          for (const dx of [-1, 1]) {
+            const n = at(dx < 0 ? x - 1 : x + run, y);
+            if (n >= z) continue;
+            const wx = dx < 0 ? x : x + run;
+            const base = n < 0 ? 0 : n;
+            quad([wx, y, base], [wx, y + 1, base], [wx, y + 1, top], [wx, y, top]);
+          }
+        }
+        x += run;
+      }
+    }
+    if (!pos.length) return null;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    return geom;
+  }
+
+  _clearGroup(group) {
+    while (group.children.length) group.remove(group.children[0]);
+  }
+
+  _rebuildHighlights() {
+    this._clearGroup(this.highlightGroup);
+    this._clearGroup(this.volumeGroup);
+    if (this._volumeGeom) { this._volumeGeom.dispose(); this._volumeGeom = null; }
+    if (this._flatGeom) { this._flatGeom.dispose(); this._flatGeom = null; }
     if (this.selectedId == null) return;
-    const src = this.s.groundData.terraImages[this.selectedId];
+    const heights = this._footprint();
+    if (!heights) { this._rebuildPlacementRects(); return; }
+    if (this._flat) {
+      this._flatGeom = this._footprintGeometry(heights, this.s.terrain.flatZ + 0.6);
+      if (this._flatGeom) {
+        const m = new THREE.Mesh(this._flatGeom, this._flatMat);
+        m.renderOrder = 10;
+        this.highlightGroup.add(m);
+      }
+      return;
+    }
+    this._volumeGeom = this._footprintGeometry(heights, null);
+    if (!this._volumeGeom) return;
+    for (const mat of [this._highlightMat, this._ghostMat]) {
+      const m = new THREE.Mesh(this._volumeGeom, mat);
+      m.renderOrder = mat === this._ghostMat ? 11 : 10;
+      this.volumeGroup.add(m);
+    }
+  }
+
+  /** No piece map (a special level): the placements as flat cards, as before. */
+  _rebuildPlacementRects() {
+    const src = this.s.groundData && this.s.groundData.terraImages[this.selectedId];
     if (!src) return;
+    if (!this._rectGeom) this._rectGeom = new THREE.PlaneGeometry(1, 1);
     for (const piece of this._placements(this.selectedId)) {
       const img = this.s.groundData.terraImages[piece.id] || src;
-      const m = new THREE.Mesh(this._highlightGeom, this._highlightMat);
+      const m = new THREE.Mesh(this._rectGeom, this._flatMat);
       m.scale.set(img.width, img.height, 1);
       m.position.set(piece.x + img.width / 2, piece.y + img.height / 2, 28);
       m.renderOrder = 10;
@@ -205,6 +477,7 @@ class PieceEditor {
     this.files.setClass(this._key(this.selectedId), name, url);
     this._refreshProfile();
     this._applyProfile();
+    this._rebuildHighlights(); // the piece stands at a new height now
     this._renderInfo();
   }
 
@@ -214,6 +487,7 @@ class PieceEditor {
     this.files.setEmboss(this._key(this.selectedId), value, url);
     this._refreshProfile();
     if (this.s.rebuildRelief) this.s.rebuildRelief();
+    this._rebuildHighlights(); // relief changes the columns' heights
     this._renderInfo();
   }
 
@@ -413,6 +687,7 @@ class PieceEditor {
     if (this.s.rebuildRelief) this.s.rebuildRelief();
     if (this.s.rebuildBlend) this.s.rebuildBlend();
     if (this.s.rebuildColorBlend) this.s.rebuildColorBlend();
+    this._rebuildHighlights();
     this._renderInfo();
     this._msg("all tags reset in " + urls.map(ProfileStore.fileName).join(", ") + " (not saved yet)", true);
   }
@@ -432,8 +707,13 @@ class PieceEditor {
   dispose() {
     this.disable();
     this.highlightGroup.parent.remove(this.highlightGroup);
-    this._highlightGeom.dispose();
+    if (this.volumeGroup.parent) this.volumeGroup.parent.remove(this.volumeGroup);
+    if (this._volumeGeom) this._volumeGeom.dispose();
+    if (this._flatGeom) this._flatGeom.dispose();
+    if (this._rectGeom) this._rectGeom.dispose();
     this._highlightMat.dispose();
+    this._ghostMat.dispose();
+    this._flatMat.dispose();
     this.dom.classBtns.forEach((b) => b.removeEventListener("click", this._onClassBtn));
     this.dom.autoBtn.removeEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.removeEventListener("click", this._onEmbossBtn);
