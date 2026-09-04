@@ -33,7 +33,7 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
-`?emboss=`, `?smooth=`, `?doors=`, `?skillbar=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
+`?emboss=`, `?smooth=`, `?smoothterrain=`, `?doors=`, `?skillbar=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
 `0`/`off`/`false`), and `?assets=static|server` - where `neolemmix/` and
 `levels/` come from: this browser's storage, filled on the setup page, or
 the web server (see "Setup" below). Those are normally toggled with the buttons and
@@ -211,10 +211,20 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   terrain behind an opening is left uncarved. The carve happens as the level
   is built, so toggling this rebuilds the level rather than swapping in
   place.
-- "smooth" slopes the relief between neighbouring heights instead of stepping
-  them, by averaging the pixel heights that meet at each quad corner (crisp
-  at depth-class boundaries and silhouettes); it only changes anything while
-  "3D terrain" is on.
+- "smooth relief" slopes the relief between neighbouring heights instead of
+  stepping them, by averaging the pixel heights that meet at each quad corner
+  (crisp at depth-class boundaries and silhouettes); it only changes anything
+  while "3D terrain" is on. It works through the depth of the slab.
+- "smooth terrain" works across it instead, taking the staircase off the
+  outline: each corner of it slides along its own diagonal, toward the lone
+  pixel that owns a convex corner and into the lone gap of a concave one. A
+  corner with four pixels round it, or two side by side, is not the corner of
+  anything and stays put, so a straight edge stays straight rather than the
+  whole silhouette eroding inward. Water and lava get it in the third
+  direction too: a slice's rim is thinner than its middle, so the edge rolls
+  off instead of ending in a square wall, and the pool reads as a surface
+  rather than as a heap of cubes. Lemmings and ordinary objects are left
+  square-edged - the switch is about the scenery.
 - "3D skills bar" extrudes the skill panel's artwork and counters off the
   panel, so they read as embossed; off, the bar is the flat original (a
   hovered button still rises, since that is how the bar answers the pointer).
@@ -463,7 +473,12 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   software-blitted pixels. Sprites are not flat cutouts: each animation
   frame's opaque pixels are greedy-meshed once into a `SPRITE_DEPTH`-deep
   relief with shaded edge walls (the plan's "characters get volume", §5.5)
-  and cached. `HeadlessStage` satisfies the Stage contract for
+  and cached. A second, rounded cut of the same frames is built on demand for
+  the surfaces drawn as a stack of slices (`buildSmoothSpriteGeometry`): the
+  outline's corners slide along their diagonals and the rim gives up some of
+  its depth, so water and lava lose the staircase and the square edge at
+  once. It shares the square-edged entry's texture, so only geometry is
+  added. `HeadlessStage` satisfies the Stage contract for
   `DisplayImage` without a canvas.
 - `js/portals.js` — entrances and exits as real openings (plan §5.4). The
   entrance is a hatch lying flat overhead with two doors hinged along

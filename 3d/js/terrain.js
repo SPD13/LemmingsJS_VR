@@ -32,6 +32,10 @@ const SHADE_RIGHT = 0.66;
 const SHADE_TOP = 0.85;
 const SHADE_BOTTOM = 0.5;
 
+// How far a corner of the outline slides along its diagonal when the terrain
+// is smoothed across the board (the "smooth terrain" switch), in pixels.
+const TERRAIN_SMOOTH_PULL = 0.35;
+
 class TerrainMesh {
   constructor(parent, level, depthMap, reliefMap, resources) {
     this.level = level;
@@ -57,7 +61,8 @@ class TerrainMesh {
 
     this.maskLayer = level.getGroundMaskLayer();
     this.hasRelief = this.relief.some((v) => v > 0);
-    this.smooth = false;
+    this.smooth = false;         // slope the relief between heights (z)
+    this.smoothTerrain = false;  // round the outline's corners off (x, y)
 
     // one texture for the whole level; alpha mirrors the solidity mask
     this.texData = new Uint8Array(this.w * this.h * 4);
@@ -126,6 +131,40 @@ class TerrainMesh {
   setSmooth(smooth) {
     this.smooth = !!smooth;
     this._rebuildAll();
+  }
+
+  /** Round the outline's corners off across the board (toggle). */
+  setSmoothTerrain(on) {
+    on = !!on;
+    if (this.smoothTerrain === on) return;
+    this.smoothTerrain = on;
+    this._rebuildAll();
+  }
+
+  /**
+   * Where a corner of the pixel grid actually sits.
+   *
+   * Extruded pixels leave the outline a staircase. Each corner slides along
+   * its own diagonal to take the step off: toward the lone pixel that owns a
+   * convex corner, and into the lone gap of a concave one. A corner with four
+   * pixels around it, or two side by side, is not the corner of anything and
+   * stays where it is - which is what keeps a straight edge straight instead
+   * of eroding the whole silhouette inward.
+   *
+   * It reads the depth buffer rather than the chunk, so the same corner comes
+   * out the same from either side of a chunk boundary.
+   */
+  _cornerPos(x, y) {
+    if (!this.smoothTerrain) return [x, y];
+    const solid = (px, py) => this._classAt(px, py) !== DepthClass.EMPTY;
+    const a = solid(x - 1, y - 1), b = solid(x, y - 1);
+    const c = solid(x - 1, y), d = solid(x, y);
+    const n = (a ? 1 : 0) + (b ? 1 : 0) + (c ? 1 : 0) + (d ? 1 : 0);
+    if (n !== 1 && n !== 3) return [x, y];
+    const odd = n === 1 ? [a, b, c, d] : [!a, !b, !c, !d];
+    const dx = (odd[0] || odd[2]) ? -1 : 1;
+    const dy = (odd[0] || odd[1]) ? -1 : 1;
+    return [x + dx * TERRAIN_SMOOTH_PULL, y + dy * TERRAIN_SMOOTH_PULL];
   }
 
   _rebuildAll() {
@@ -355,11 +394,14 @@ class TerrainMesh {
   }
 
   /**
-   * Smooth path: every solid pixel becomes one quad whose corners sit at the
-   * averaged corner heights, so differing heights slope into each other. No
-   * internal walls are needed (the slope covers them) - only silhouettes and
-   * drops onto a lower depth class - which usually makes this cheaper than
-   * the stepped path even though the fronts are no longer greedy-merged.
+   * Smooth path: every solid pixel becomes one quad of its own, so the
+   * corners can be moved.
+   *
+   * With "smooth relief" the corners sit at the averaged corner heights, and
+   * differing heights slope into each other instead of stepping. With "smooth
+   * terrain" they also slide along their diagonals, taking the staircase off
+   * the outline. Either way no internal walls are needed - the shared corners
+   * cover them - only silhouettes and drops onto a lower depth class.
    */
   _buildChunkGeometrySmooth(cx, cy) {
     const x0 = cx * TERRAIN_CHUNK;
@@ -367,6 +409,9 @@ class TerrainMesh {
     const cw = Math.min(TERRAIN_CHUNK, this.w - x0);
     const ch = Math.min(TERRAIN_CHUNK, this.h - y0);
     const W = this.w, H = this.h;
+    // relief is what the sloping is for: with none, every corner of a class
+    // is at the same height and averaging them only costs time
+    const slope = this.smooth && this.hasRelief;
 
     const positions = [], colors = [], uvs = [], indices = [];
     const pushQuad = (p, uv, shade) => {
@@ -386,19 +431,22 @@ class TerrainMesh {
         if (c === DepthClass.EMPTY) continue;
         const band = DEPTH_BANDS[c];
         const front = this._frontAt(px, py);
-        const z00 = this._cornerZ(px, py, c, front);
-        const z10 = this._cornerZ(px + 1, py, c, front);
-        const z11 = this._cornerZ(px + 1, py + 1, c, front);
-        const z01 = this._cornerZ(px, py + 1, c, front);
+        const z00 = slope ? this._cornerZ(px, py, c, front) : front;
+        const z10 = slope ? this._cornerZ(px + 1, py, c, front) : front;
+        const z11 = slope ? this._cornerZ(px + 1, py + 1, c, front) : front;
+        const z01 = slope ? this._cornerZ(px, py + 1, c, front) : front;
+        // shared with the pixels next door, so the surface stays closed
+        const p00 = this._cornerPos(px, py), p10 = this._cornerPos(px + 1, py);
+        const p11 = this._cornerPos(px + 1, py + 1), p01 = this._cornerPos(px, py + 1);
 
         const u0 = px / W, u1 = (px + 1) / W;
         const v0 = py / H, v1 = (py + 1) / H;
         const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-        pushQuad([[px, py, z00], [px + 1, py, z10],
-                  [px + 1, py + 1, z11], [px, py + 1, z01]],
+        pushQuad([[p00[0], p00[1], z00], [p10[0], p10[1], z10],
+                  [p11[0], p11[1], z11], [p01[0], p01[1], z01]],
           uv, SHADE_FRONT * band.frontShade);
-        pushQuad([[px, py, band.back], [px + 1, py, band.back],
-                  [px + 1, py + 1, band.back], [px, py + 1, band.back]],
+        pushQuad([[p00[0], p00[1], band.back], [p10[0], p10[1], band.back],
+                  [p11[0], p11[1], band.back], [p01[0], p01[1], band.back]],
           uv, SHADE_BACK);
 
         // a wall only where this pixel overhangs empty space or a lower class
@@ -414,24 +462,26 @@ class TerrainMesh {
         const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
         let base = wallBase(px - 1, py);
         if (base !== null) {
-          pushQuad([[px, py, base], [px, py, z00], [px, py + 1, z01], [px, py + 1, base]],
+          pushQuad([[p00[0], p00[1], base], [p00[0], p00[1], z00],
+                    [p01[0], p01[1], z01], [p01[0], p01[1], base]],
             wallUv, SHADE_LEFT);
         }
         base = wallBase(px + 1, py);
         if (base !== null) {
-          pushQuad([[px + 1, py, base], [px + 1, py, z10],
-                    [px + 1, py + 1, z11], [px + 1, py + 1, base]],
+          pushQuad([[p10[0], p10[1], base], [p10[0], p10[1], z10],
+                    [p11[0], p11[1], z11], [p11[0], p11[1], base]],
             wallUv, SHADE_RIGHT);
         }
         base = wallBase(px, py - 1);
         if (base !== null) {
-          pushQuad([[px, py, base], [px + 1, py, base], [px + 1, py, z10], [px, py, z00]],
+          pushQuad([[p00[0], p00[1], base], [p10[0], p10[1], base],
+                    [p10[0], p10[1], z10], [p00[0], p00[1], z00]],
             wallUv, SHADE_TOP);
         }
         base = wallBase(px, py + 1);
         if (base !== null) {
-          pushQuad([[px, py + 1, base], [px + 1, py + 1, base],
-                    [px + 1, py + 1, z11], [px, py + 1, z01]],
+          pushQuad([[p01[0], p01[1], base], [p11[0], p11[1], base],
+                    [p11[0], p11[1], z11], [p01[0], p01[1], z01]],
             wallUv, SHADE_BOTTOM);
         }
       }
@@ -447,9 +497,12 @@ class TerrainMesh {
   }
 
   _buildChunkGeometry(cx, cy) {
-    // smoothing only differs where heights vary, so keep the cheaper greedy
-    // stepped path when the relief is flat
-    if (this.smooth && this.hasRelief) return this._buildChunkGeometrySmooth(cx, cy);
+    // Both smoothings need a quad per pixel to have corners to move. Sloping
+    // only differs where heights vary, so with the relief flat and the
+    // outline left alone the cheaper greedy stepped path still does.
+    if (this.smoothTerrain || (this.smooth && this.hasRelief)) {
+      return this._buildChunkGeometrySmooth(cx, cy);
+    }
     return this._buildChunkGeometryStepped(cx, cy);
   }
 
