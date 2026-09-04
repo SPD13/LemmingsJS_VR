@@ -474,7 +474,15 @@ opened on the directory of the level being played. A level is addressed by
 its id, its path in the tree (`lemmings/0/3`,
 `LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Just_Walk!.nxlv`); `?level=`
 takes it, the old `?type=&group=&level=` are mapped onto classic ids, and
-prev/next walk the pack's play order. Progress records are keyed by id, with
+prev/next walk the pack's play order. That id is also written to the address
+bar's hash whenever a level is settled, which is what makes a level a link
+you can send: `resolveLevel` is the one place every route into a level passes
+through, so the catalog, prev/next and an arriving link all keep it in step.
+Written with `replaceState`, so playing through a pack does not bury the page
+the player arrived from under a history entry per level, and the `?level=`
+form is dropped as the hash goes in — left together, the stale query would
+win at the next boot and send the link somewhere else. A hash arrived at by
+hand or with the back button is loaded through the catalog's own `enter`. Progress records are keyed by id, with
 a one-time migration of the old `<game>/<group>/<level>` keys.
 
 Classic packs are scanned once for level names and tilesets (a VGASPEC
@@ -693,7 +701,7 @@ paused stays paused and two overlapping dialogs do not resume it between them.
 
 | where | what |
 |---|---|
-| URL | `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?smoothterrain= ?colorblend= ?doors= ?edit=` |
+| URL | `#<id>` (the level being played, written by the page), `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?smoothterrain= ?colorblend= ?doors= ?edit=` |
 | localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-smooth-terrain` `lem3d-color-blend` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
 
 The URL overrides both for one load. This matters more than it sounds: the
