@@ -215,16 +215,20 @@ Two optional treatments sit on top:
   structure as the face above it rather than either the full blur or stripes.
   *off* leaves the pixels as they were drawn.
 
-  The switch covers the animated surfaces too — water, lava, acid — with no
-  tag of its own: those are the only sprites drawn as scenery rather than as
-  things standing in it, so they are in whenever it is on. They cannot be
-  built the same way: their faces are greedy rectangles wearing a texture,
+  The switch covers everything else drawn from a sprite frame, with no tag of
+  its own: the animated surfaces (water, lava, acid), the openings' tunnels
+  and hatch doors, and the objects standing on the field. All of that is
+  scenery, and scenery is what the blend is for; the lemmings are left out,
+  being what the eye has to pick out of it (BillboardPool takes a `blend`
+  flag, true for the object pool and false for the lemming one). None of it
+  can be built the way the terrain is: their faces are greedy rectangles wearing a texture,
   and their stack is redressed every tick out of a cache of shapes shared
   between pools, so there is no per-pixel quad to hang corner colours on. The
   same profile is written into the texture instead and read back out by the
   sampler (`bridge.js` buildBlendedFrameRgba): each pixel is drawn four texels
   across, every sub-texel holding the colour the terrain's grid would put at
-  that point of it, and the texture is filtered linearly rather than nearest.
+  that point of it, and the texture is filtered linearly rather than nearest
+  (`blendedMaterialFor`).
   Only opaque pixels are averaged, as only pixels of the same class are in the
   terrain; the transparent ones along the rim are filled with the mean of the
   opaque pixels beside them, which is the colour the rim was heading for

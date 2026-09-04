@@ -217,9 +217,12 @@ a *strength* rather than an on/off: press it to cycle.
   blur.
 - **off** leaves the pixels as they were drawn, whatever any tag says.
 
-The same switch and the same two strengths also cover **water, lava and acid**,
-which have no tag of their own — a surface is scenery rather than a thing
-standing in it, so all of it is in whenever the switch is on.
+The same switch and the same two strengths also cover everything else on the
+board that is **scenery**, none of which has a tag of its own: the water, lava
+and acid, the entrances and exits — the tunnel and the hatch's swinging doors
+alike — and every other object standing on the field. All of it is in whenever
+the switch is on. The **lemmings are the exception** and keep their pixels
+crisp, being the thing the eye has to pick out of all that.
 
 Colour blend costs geometry: a blended pixel cannot merge into a greedy
 rectangle, since a rectangle has no corners to carry the colours of the pixels
