@@ -202,8 +202,12 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   darker pixels are the ones standing proud).
 - "3D doors" builds the objects that are not flat sprites (`js/portals.js`):
   entrances and exits as real openings, and water given the body its waves
-  are the surface of — as wide as the sprite, reaching down to whatever
-  ground stops it. Off, they all stay the sprites the original draws and the
+  are the surface of — as wide as the sprite, reaching down column by column
+  to whatever ground stops it and as deep as the slab. Water and any stretch
+  of lava or acid are drawn through that depth as well, as a stack of slices
+  of the wave sprite each running the animation at its own offset, so the
+  surface churns instead of sliding along as one block. Off, they all stay
+  the sprites the original draws and the
   terrain behind an opening is left uncarved. The carve happens as the level
   is built, so toggling this rebuilds the level rather than swapping in
   place.
@@ -518,6 +522,25 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   openings comes from the profile (`objects.byId[<id>] = {shape, depth}`),
   defaulting to entrances (object id 1) and anything carrying the EXIT_LEVEL
   trigger.
+  Water is given the body its waves are the surface of. The drowning trigger
+  says where the surface is; the hollow under it is whatever the terrain
+  leaves empty, so the body reaches down column by column to whatever ground
+  stops it, and it is shaped to those columns rather than boxed around them —
+  a pool's rectangle often has a shore or a pillar in it that a box would
+  tint as though it were submerged. Only the outside of that prism is
+  emitted, or the faces between two runs would be seen through the
+  translucent front and tint the water twice, and every face is split at the
+  same set of levels so no vertex is stranded partway along another's edge.
+  The waves themselves are drawn through the depth of the slab rather than
+  once at the object plane: the sprite is repeated every `SPRITE_DEPTH` from
+  front to back, reusing the geometry each frame is already cached as. Since
+  stacking one frame would only extrude it into a block of wave sliding
+  along, each slice runs the animation a few frames apart, so the slices show
+  different parts of the cycle at once and the surface churns. The offsets
+  are seeded from the object's index and never repeat between neighbours, so
+  a reload and a replay churn the same way. Any stretch of lava or acid gets
+  the same treatment — NeoLemmix marks those horizontally resizable where a
+  flamethrower or a candle is not — and `shape: "flat"` opts an object out.
 - `js/depth.js` — depth compositing (plan §5.1). A per-pixel depth-class
   buffer (backdrop / terrain / relief / overlay) is built by replaying the
   compositor's terrain piece list with the original draw-flag semantics.
@@ -581,8 +604,9 @@ camera, renderer, controls}` for console debugging and automated checks.
   (the editor, `e`, and the galleries page), the authoring sessions have not
   happened. Saving needs the launcher's server; on a static host the
   exported profiles must be copied into `3d/profiles/` by hand.
-- Objects that are not openings or water still extrude like any sprite, at
-  fixed depths (background objects behind the slab, others in front).
+- Objects that are not openings, water or a stretch of fire still extrude like
+  any sprite, at fixed depths (background objects behind the slab, others in
+  front).
 - Audio (music + SFX) plays through the engine's own AdLib/OPL synth
   (`js/audio.js`; "sound" button toggles, persisted). SFX indexes into
   ADLIB.DAT are a best-effort mapping — audition with

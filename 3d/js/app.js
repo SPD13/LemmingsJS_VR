@@ -29,6 +29,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
   const OBJECT_Z = LEMMING_Z - 0.8;
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
+  // water and lava fill the slab from here back: a shade proud of the
+  // terrain's own face, so a surface meeting a shore is not fighting it
+  const WAVE_FRONT_Z = OBJECT_DECAL_Z;
   // the 2D view's terrain: one quad just behind the objects and lemmings, so
   // a digger in the ground or a climber on a wall draws over it as in the
   // original; the background objects and the backdrop stay behind it
@@ -2499,23 +2502,46 @@ Vfs.boot("", "setup.html").then(function (booted) {
         });
       }
     }
-    // water: a translucent body under the wave sprites, which keep animating
-    // on top of it. Deep enough to fill the slab, so a drowning lemming is
+    // water: a translucent body under the wave sprites, shaped to the hollow
+    // the water lies in and as deep as the slab, so a drowning lemming is
     // seen through it rather than in front of it.
     const waterMeshes = [];
-    for (const pool of state.doors ? waterObjectsFrom(level, profile, OBJECT_Z) : []) {
-      const w = pool.x1 - pool.x0, h = pool.y1 - pool.y0, d = pool.z1 - pool.z0;
-      if (w <= 0 || h <= 0 || d <= 0) continue;
+    for (const pool of state.doors ? waterObjectsFrom(level, profile) : []) {
+      const geometry = buildPoolGeometry(pool.runs, pool.y0, pool.z0, pool.z1);
+      if (!geometry) continue;
       const mesh = new THREE.Mesh(
-        resources.track(new THREE.BoxGeometry(w, h, d)),
+        resources.track(geometry),
         resources.track(new THREE.MeshBasicMaterial({
           color: pool.colour, transparent: true, opacity: WATER_OPACITY,
           depthWrite: false,
         })));
-      mesh.position.set(pool.x0 + w / 2, pool.y0 + h / 2, pool.z0 + d / 2);
+      // the geometry is already in level coordinates
       mesh.renderOrder = 1; // after the terrain, so it tints what is behind it
       worldGroup.add(mesh);
       waterMeshes.push({ mesh, colour: pool.colour });
+    }
+    // water and lava as the surface they are rather than a decal on it: the
+    // wave sprite repeated through the depth of the slab, each slice running
+    // the animation at its own offset (portals.js) so the surface churns
+    // instead of sliding along as one extruded block
+    const stacks = state.doors ? stackedObjectsFrom(level, profile) : [];
+    const stackIndices = new Set(stacks.map((s) => s.index));
+    for (const stack of stacks) {
+      stack.meshes = [];
+      // built wearing the first frame rather than bare: an empty mesh carries
+      // a default geometry and material that nothing owns, and would sit at
+      // the origin until the first tick redressed it
+      const first = stack.mapObject.animation.frames[0];
+      const entry = materialCache.forFrame(first);
+      for (let k = 0; k < stack.phases.length; k++) {
+        const mesh = new THREE.Mesh(entry.geometry, entry.material);
+        mesh.scale.y = stack.flipY ? -1 : 1;
+        mesh.position.set(stack.mapObject.x + first.offsetX,
+          stack.mapObject.y + first.offsetY + (stack.flipY ? entry.h : 0),
+          WAVE_FRONT_Z - (k + 1) * SPRITE_DEPTH);
+        worldGroup.add(mesh);
+        stack.meshes.push(mesh);
+      }
     }
 
     let flatOn = false; // the 2D view on this level (session.setFlat)
@@ -2597,8 +2623,11 @@ Vfs.boot("", "setup.html").then(function (booted) {
       // (with their geometry hidden - the 2D view, a change of view under
       // way - the openings are drawn as the original's sprites again)
       const dropPortals = portalIndices.size > 0 && portalsShown;
-      const objectItems = !dropPortals && !cpmOn ? objCapture.items
-        : objCapture.items.filter((_, i) => !(dropPortals && portalIndices.has(i)) && !(cpmOn && cpmHides(i)));
+      // a stacked surface draws its own slices, so its flat copy goes too
+      const dropStacks = stackIndices.size > 0 && portalsShown;
+      const objectItems = !dropPortals && !dropStacks && !cpmOn ? objCapture.items
+        : objCapture.items.filter((_, i) => !(dropPortals && portalIndices.has(i))
+          && !(dropStacks && stackIndices.has(i)) && !(cpmOn && cpmHides(i)));
       if (cpmOverlay) {
         // clear physics: the terrain as its physics map, the layer of
         // trigger areas and marks repainted for this frame
@@ -2641,6 +2670,28 @@ Vfs.boot("", "setup.html").then(function (booted) {
           }
           for (const flap of portal.flaps) {
             flap.mesh.rotation.z = flap.sign * angle;
+          }
+        }
+      }
+      // the wave slices: the same animation at each slice's own offset, so
+      // the stack reads as a churning surface and not an extruded block
+      if (stacks.length > 0 && portalsShown) {
+        const waveTick = game.getGameTimer().getGameTicks();
+        for (const stack of stacks) {
+          const object = stack.mapObject;
+          for (let k = 0; k < stack.meshes.length; k++) {
+            const frame = frameAtPhase(object, waveTick, stack.phases[k]);
+            if (!frame) continue;
+            const entry = materialCache.forFrame(frame);
+            const mesh = stack.meshes[k];
+            mesh.geometry = entry.geometry;
+            mesh.material = game.clearPhysics
+              ? materialCache.flatMaterialFor(frame) : entry.material;
+            // the frame carries its own offsets, as it does for a billboard
+            mesh.scale.y = stack.flipY ? -1 : 1;
+            mesh.position.set(object.x + frame.offsetX,
+              object.y + frame.offsetY + (stack.flipY ? entry.h : 0),
+              WAVE_FRONT_Z - (k + 1) * SPRITE_DEPTH);
           }
         }
       }
@@ -2848,6 +2899,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
           if (portal.flaps) for (const flap of portal.flaps) flap.mesh.visible = v;
         }
         for (const w of waterMeshes) w.mesh.visible = v;
+        for (const stack of stacks) for (const mesh of stack.meshes) mesh.visible = v;
         if (portalsShown === v) return;
         portalsShown = v;
         syncScene(true); // the sprites drawn again, whether the clock runs or not

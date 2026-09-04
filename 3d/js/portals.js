@@ -3,6 +3,20 @@
  * The objects that are not flat sprites (plan §5.4): entrances and exits as
  * real openings, and water given the body its waves are the surface of.
  *
+ * Water and lava as a surface rather than a decal.
+ *
+ * The waves are a strip of sprite a few pixels tall. Drawn once, at the plane
+ * objects sit on, a pool reads as a sticker hanging inside a slab sixteen
+ * pixels deep. So the strip is drawn many times instead, once every sprite
+ * depth from the front of the slab to the back, and the surface fills the
+ * slab the way the terrain beside it does.
+ *
+ * Stacking the same frame would only extrude it - one solid block of wave
+ * sliding along. Each slice runs the same animation a few frames apart
+ * instead, so at any moment the slices show different parts of the cycle and
+ * the surface churns. The offsets are drawn once, from a generator seeded by
+ * the object's own index, so a reload and a replay churn the same way.
+ *
  * Entrances and exits as real openings.
  *
  * Their sprites are perspective drawings of a box - a rim, slanted walls
@@ -37,6 +51,9 @@ const PORTAL_PANEL_THICK = 1;
 const WATER_SURFACE_DROP = 2;
 // Enough to read as water without hiding what is standing in it.
 const WATER_OPACITY = 0.55;      // the ceiling square is a game pixel thick
+// How much of the animation cycle the slices' offsets are spread over: 1 is
+// the whole of it, less keeps neighbouring slices closer together.
+const WAVE_PHASE_SPREAD = 1;
 const PORTAL_FLAP_THICK = 1;       // and so are the doors hinged under it
 
 /** Stash the object list and their metadata as the level is built. */
@@ -75,17 +92,138 @@ function portalConfigFor(objectId, info, profile) {
 }
 
 /**
+ * How many slices a surface is drawn as: enough of them, at the depth a
+ * sprite is extruded to, to fill the terrain slab.
+ *
+ * Called rather than kept as a constant because the slab's depth is defined
+ * in terrain.js, which the page loads after this file.
+ */
+function waveSliceCount() {
+  return Math.max(1, Math.round(TERRAIN_DEPTH / SPRITE_DEPTH));
+}
+
+/** A small deterministic generator, so the offsets survive a reload. */
+function waveRandom(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => {
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5; s >>>= 0;
+    return s / 4294967296;
+  };
+}
+
+/**
+ * Water always; fire only where the gadget is a stretch of it rather than a
+ * single flame. NeoLemmix marks lava, acid and fire pits as horizontally
+ * resizable and a flamethrower or a candle is not, which is the same
+ * distinction: a surface you could fall into against a thing that burns you.
+ * A DOS level has no gadget at all, so its fire traps stay ordinary sprites.
+ */
+function isStackedSurface(info, mapObject) {
+  const T = Lemmings.TriggerTypes;
+  if (info.trigger_effect_id === T.DROWN) return true;
+  if (info.trigger_effect_id !== T.KILL) return false;
+  const g = mapObject.gadget;
+  return !!(g && g.v && g.v.resizeH);
+}
+
+/** How many frames this object's own animation runs to. */
+function waveFrameCount(mapObject) {
+  const g = mapObject.gadget;
+  if (g && g.frameCount) return g.frameCount;
+  const frames = mapObject.animation && mapObject.animation.frames;
+  return frames && frames.length ? frames.length : 1;
+}
+
+/**
+ * One frame offset per slice, spread over the cycle and never equal to the
+ * slice in front of it, so no two neighbours ever move together.
+ */
+function wavePhases(frameCount, slices, seed) {
+  const phases = new Uint16Array(slices);
+  if (frameCount <= 1) return phases;
+  const span = Math.max(1, Math.round(frameCount * WAVE_PHASE_SPREAD));
+  const rand = waveRandom(seed * 2654435761 + 1);
+  let prev = -1;
+  for (let k = 0; k < slices; k++) {
+    let phase = Math.floor(rand() * span) % frameCount;
+    if (phase === prev && frameCount > 1) phase = (phase + 1) % frameCount;
+    phases[k] = phase;
+    prev = phase;
+  }
+  return phases;
+}
+
+/**
+ * Every object drawn as a stack of slices through the slab, with the frame
+ * offset each of its slices runs at.
+ *
+ * Which objects those are comes from the trigger, as the pool bodies do, so
+ * this needs no tileset knowledge; the profile's `shape: "flat"` tag opts one
+ * out the same way it opts one out of a body.
+ */
+function stackedObjectsFrom(level, profile) {
+  const data = window.__lem3dObjectData;
+  const out = [];
+  if (!data || !Array.isArray(data.objects)) return out;
+  const byId = ((profile && profile.objects) || {}).byId || {};
+  const slices = waveSliceCount();
+  const count = Math.min(level.objects.length, data.objects.length);
+  for (let i = 0; i < count; i++) {
+    const id = data.objects[i].id;
+    const info = data.objectImg ? data.objectImg[id] : null;
+    if (!info) continue;
+    if (byId[id] && byId[id].shape === "flat") continue; // tagged out by hand
+    const mapObject = level.objects[i];
+    if (!isStackedSurface(info, mapObject)) continue;
+    const frames = mapObject.animation && mapObject.animation.frames;
+    if (!frames || !frames.length) continue;
+    out.push({
+      index: i, mapObject,
+      flipY: !!(mapObject.drawProperties && mapObject.drawProperties.isUpsideDown),
+      phases: wavePhases(waveFrameCount(mapObject), slices, i + 1),
+    });
+  }
+  return out;
+}
+
+/**
+ * The frame this object's animation shows `offset` steps on from now.
+ *
+ * A DOS animation is a function of the tick, so the offset is simply added to
+ * it. A Lemmix gadget carries its own counter instead, and composes its
+ * picture from every animation it owns, so the counter is wound on, the
+ * composite taken and the counter put back. That composite is memoised on the
+ * frames it was built from, so a slice costs one lookup after the first time.
+ */
+function frameAtPhase(mapObject, tick, offset) {
+  const g = mapObject.gadget;
+  if (!g) return mapObject.animation.getFrame(tick + offset);
+  const count = g.frameCount || 1;
+  if (!offset || count <= 1) return mapObject.animation.getFrame(tick);
+  const saved = g.currentFrame;
+  g.currentFrame = (saved + offset) % count;
+  const frame = g.render();
+  g.currentFrame = saved;
+  return frame;
+}
+
+/**
  * Water: the pool an object's waves are the surface of.
  *
  * The sprite is a strip of animated waves a few pixels tall, laid along the
- * top of a pool that the level data does not otherwise describe - flat, it
- * reads as a decal hanging in front of the scenery. The drowning trigger does
- * describe the pool, though: it is the box a lemming drowns in. So the body
- * is built from the trigger, in the colour of the sprite's own pixels and
- * deep enough to fill the terrain slab, and the waves go on animating on top
- * of it as the surface they are.
+ * top of a pool that the level data does not otherwise describe. The drowning
+ * trigger does describe it, though: it is the box a lemming drowns in. So the
+ * body is built from the trigger, in the colour of the sprite's own pixels,
+ * as deep as the terrain slab so the lemmings inside it are seen through the
+ * water rather than in front of it.
+ *
+ * It is shaped to the hollow rather than boxed around it. A pool's rectangle
+ * often has land in it - a shore rising at one end, a pillar standing in the
+ * middle - and a box tints all of that as though it were under water.
  */
-function waterObjectsFrom(level, profile, objectZ) {
+function waterObjectsFrom(level, profile) {
   const data = window.__lem3dObjectData;
   const out = [];
   if (!data || !Array.isArray(data.objects)) return out;
@@ -104,39 +242,100 @@ function waterObjectsFrom(level, profile, objectZ) {
     // The trigger says where a lemming drowns, which is the surface and a few
     // pixels under it - not the pool. The pool is the hollow the water is
     // lying in, so the body reaches down to whatever ground stops it, column
-    // by column, and settles on the deepest of them.
+    // by column.
     const top = y + (info.trigger_height ? info.trigger_top : 0);
     const surface = top + WATER_SURFACE_DROP;
-    const bottom = poolFloor(level, x, x + frame.width, surface);
-    if (bottom <= surface) continue;
+    const runs = poolRuns(level, x, x + frame.width, surface);
+    if (!runs.length) continue;
     out.push({
       index: i,
-      x0: x, x1: x + frame.width,
-      y0: surface, y1: bottom,
+      runs, y0: surface,
       colour: averageFrameColour(frame),
       z0: DEPTH_BANDS[DepthClass.TERRAIN].back,
-      // stopping short of the object plane keeps the waves clearly in front
-      // of the water instead of fighting it for the same pixels
-      z1: objectZ - WATER_SURFACE_DROP,
+      z1: TERRAIN_DEPTH,
     });
   }
   return out;
 }
 
 /**
- * How deep the hollow under a stretch of water goes: the lowest point that
- * any of its columns falls to before meeting ground, and the level's own
- * floor for a column that never does.
+ * The hollow under a stretch of water, column by column: how far each one
+ * falls before it meets ground, with neighbours that fall equally far merged
+ * into a run. A column with ground at the surface holds no water and is left
+ * out, which is what keeps an island inside the pool's rectangle dry.
  */
-function poolFloor(level, x0, x1, surface) {
+function poolRuns(level, x0, x1, surface) {
   const mask = level.getGroundMaskLayer();
-  let deepest = surface;
-  for (let x = Math.max(0, x0); x < Math.min(level.width, x1); x++) {
+  const runs = [];
+  const lo = Math.max(0, Math.floor(x0)), hi = Math.min(level.width, Math.ceil(x1));
+  for (let x = lo; x < hi; x++) {
     let y = surface;
     while (y < level.height && !mask.hasGroundAt(x, y)) y++;
-    if (y > deepest) deepest = y;
+    if (y <= surface) continue;
+    const last = runs.length ? runs[runs.length - 1] : null;
+    if (last && last.floor === y && last.x1 === x) last.x1 = x + 1;
+    else runs.push({ x0: x, x1: x + 1, floor: y });
   }
-  return deepest;
+  return runs;
+}
+
+/**
+ * The body of a pool: a prism over its runs, closed on every side.
+ *
+ * Only the outside is emitted. Where two runs meet, the depth they share is
+ * inside the water and gets no face - just the step between their floors,
+ * turned toward whichever side is shallower. Faces left in there would be
+ * seen through the translucent front and tint the water twice.
+ *
+ * Every face is split at the same set of levels - the surface and every floor
+ * in the pool - so wherever two runs meet, the edge they share is divided the
+ * same way on both sides and no vertex is left stranded partway along
+ * another's edge. Such a junction is watertight on paper but not once the two
+ * edges are rasterised, and the hairline it opens would show the background
+ * straight through the water.
+ */
+function buildPoolGeometry(runs, surface, z0, z1) {
+  const positions = [], indices = [];
+  const quad = (a, b, c, d) => {
+    const base = positions.length / 3;
+    for (const p of [a, b, c, d]) positions.push(p[0], p[1], p[2]);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const levels = Array.from(new Set([surface].concat(runs.map((r) => r.floor))))
+    .sort((a, b) => a - b);
+  for (let i = 0; i < runs.length; i++) {
+    const run = runs[i];
+    const x0 = run.x0, x1 = run.x1, floor = run.floor;
+    // how far down each side is shared with the run beside it, and so needs
+    // no face: all of it where the neighbour is deeper, none where there is
+    // no neighbour to touch
+    const prev = i > 0 ? runs[i - 1] : null;
+    const next = i + 1 < runs.length ? runs[i + 1] : null;
+    const leftTop = prev && prev.x1 === x0 ? Math.min(prev.floor, floor) : surface;
+    const rightTop = next && next.x0 === x1 ? Math.min(next.floor, floor) : surface;
+    // the surface, and the ground it is lying on
+    quad([x0, surface, z1], [x1, surface, z1], [x1, surface, z0], [x0, surface, z0]);
+    quad([x0, floor, z0], [x1, floor, z0], [x1, floor, z1], [x0, floor, z1]);
+    for (let b = 0; b + 1 < levels.length; b++) {
+      const ya = levels[b], yb = levels[b + 1];
+      if (yb > floor) break; // past the ground under this run
+      // the front and back of the slab
+      quad([x0, ya, z1], [x0, yb, z1], [x1, yb, z1], [x1, ya, z1]);
+      quad([x1, ya, z0], [x1, yb, z0], [x0, yb, z0], [x0, ya, z0]);
+      // and the sides, over the depth the neighbour leaves exposed
+      if (ya >= leftTop) {
+        quad([x0, ya, z0], [x0, yb, z0], [x0, yb, z1], [x0, ya, z1]);
+      }
+      if (ya >= rightTop) {
+        quad([x1, ya, z1], [x1, yb, z1], [x1, yb, z0], [x1, ya, z0]);
+      }
+    }
+  }
+  if (!indices.length) return null;
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.setIndex(indices);
+  return geom;
 }
 
 /** The average of a frame's opaque pixels: this tileset's own water colour. */
