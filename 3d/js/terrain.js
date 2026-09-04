@@ -26,13 +26,17 @@
  * A piece tagged for *colour blend* has its pixels' colours run into each
  * other instead of meeting at a hard edge: each face corner takes the mean of
  * the pixels of its class meeting there (the colour twin of _cornerZ), and a
- * wall runs from its own pixel's colour at the top to the colour of the pixel
- * it drops onto at the base - x, y and z. Those quads carry their colour in
- * the vertex attribute and are drawn by a second, map-less material as a
- * second group of the same chunk geometry, since a texture sampled per pixel
- * would put the hard edges straight back. They also need a quad per pixel, as
- * a greedy rectangle has no corners to carry the colours of the pixels inside
- * it - the same shape (and much the same cost) as smooth terrain.
+ * wall runs from the colour its face ends on at the top, through a diffused
+ * reading of the picture, to the colour of the pixel it drops onto at the
+ * base - x, y and z (_wallColors). Its shade is per corner as well
+ * (_wallShade), mixed from the way the outline faces there, so a staircase of
+ * one-pixel steps reads as one rounded surface rather than as alternating
+ * stripes down the extrusion. Those quads carry their colour in the vertex
+ * attribute and are drawn by a second, map-less material as a second group of
+ * the same chunk geometry, since a texture sampled per pixel would put the
+ * hard edges straight back. They also need a quad per pixel, as a greedy
+ * rectangle has no corners to carry the colours of the pixels inside it - the
+ * same shape (and much the same cost) as smooth terrain.
  *
  * The 2D view (setFlat) hides the chunks behind one quad carrying the same
  * texture: the original's terrain, exactly, since the texture is the level's
@@ -77,6 +81,11 @@ const WALL_DIFFUSE = 0.75;
 const WALL_DIFFUSE_OFFSETS = [
   [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1],
 ];
+// How far down a wall the face's own colour takes to run out into the
+// diffused one, in game pixels. The wall leaves the face in exactly the colour
+// the face ends on - no seam - and is the diffused colour from here down, so
+// the picture's grain fades with depth rather than stopping dead at the edge.
+const WALL_DIFFUSE_DEPTH = 4;
 
 /**
  * Which colour a band takes, jittered per pixel so a wall reads as grain
@@ -90,6 +99,11 @@ function blendHash(x, y, face, band) {
   h ^= h >>> 15; h = Math.imul(h, 0x2545f491); h ^= h >>> 13;
   return h >>> 0;
 }
+
+// A wall by face id (2 left, 3 right, 4 top, 5 bottom): the pixel it looks
+// across at, and the direction it runs along - the columns beside it.
+const WALL_ACROSS = { 2: [-1, 0], 3: [1, 0], 4: [0, -1], 5: [0, 1] };
+const WALL_ALONG = { 2: [0, 1], 3: [0, 1], 4: [1, 0], 5: [1, 0] };
 
 class TerrainMesh {
   constructor(parent, level, depthMap, reliefMap, resources, blendMap, colorMap, colorSoftness) {
@@ -241,6 +255,9 @@ class TerrainMesh {
    * blended pixel's colours are read from texData rather than groundImage, so
    * a dig and clear-physics mode carry through without a second source of
    * truth - which is also why setPhysicsPaint has to re-mesh while this is on.
+   * `softness` is the strength, 0..1: how much of each pixel runs out into
+   * the shared colours (1 = all of it; below that a plateau of its own colour
+   * is left in the middle - see _buildChunkGeometrySmooth).
    */
   _installColorBlend(colorMap, softness) {
     const on = !!(colorMap && colorMap.some((v) => v !== 0));
@@ -271,10 +288,15 @@ class TerrainMesh {
    * The colour a *wall* takes from a pixel: its own pulled toward the mean of
    * the eight around it in x and y (WALL_DIFFUSE), which is what keeps a row
    * of walls from reading as stripes down the extrusion. Only pixels of the
-   * same class count, so a hole or a silhouette cannot darken it.
+   * same class count, so a hole or a silhouette cannot darken it. The blur is
+   * smooth's alone: at full strength the face is a blur and the walls diffuse
+   * to match; below it the face keeps its pixels, and the walls carry the
+   * same pixels straight down their depth rather than running off into a blur
+   * the face does not have.
    */
   _wallRgb(x, y, cls) {
     const own = this._rgbAt(x, y);
+    if (this.colorSoftness < 1) return own;
     let r = own[0], g = own[1], b = own[2], n = 1;
     for (const [dx, dy] of WALL_DIFFUSE_OFFSETS) {
       if (this._classAt(x + dx, y + dy) !== cls) continue;
@@ -295,29 +317,14 @@ class TerrainMesh {
    * between depth classes as crisp as their heights are. Empty pixels never
    * count, so the black of a hole or a silhouette cannot bleed into a surface.
    *
-   * `anchor` is the colour the corner is pulled back toward - the colour of
-   * the pixel asking for it - and `colorSoftness` says how far it is allowed
-   * to travel from it. At 1 the corner is the plain mean, every quad meeting
-   * there agrees, and the surface is perfectly continuous: the softest, and
-   * over a whole sprite the blurriest, since no pixel keeps a colour of its
-   * own. Below 1 each pixel keeps a share of its own colour, so two quads
-   * sharing a corner disagree by (1 - softness) of the difference between
-   * them: the edge survives as a step of that size with a gradient either
-   * side of it, which is what keeps a sprite legible. At 0 nothing moves and
-   * the pixels are as hard as they were drawn.
-   *
-   * A corner with fewer than four pixels of the class around it is on the
-   * outline, and the outline is where the extrusion stands: every wall corner
-   * is one of these. Those go all the way to the mean whatever the setting,
-   * for two reasons that turn out to be the same reason. The walls meeting
-   * there then agree on it, so the extruded side comes out continuous instead
-   * of striped - none of the sprite's artwork is on it, so there is nothing to
-   * keep legible. And the face meeting them there agrees too, so the wall
-   * leaves the face in the colour the face ends on rather than breaking from
-   * it: holding the two to different amounts is what put a hard line around
-   * every extruded edge.
+   * Every quad meeting at a corner reads the same colour there, whatever the
+   * strength: the surface stays continuous, and a wall leaves the face in the
+   * colour the face ends on. The strength (colorSoftness) is instead how much
+   * of each pixel is given over to reaching these means - see the plateau in
+   * _buildChunkGeometrySmooth. `fallback` is what a corner with no pixel of
+   * the class around it returns, which a solid pixel's own corner never is.
    */
-  _cornerColor(x, y, cls, anchor, diffuse) {
+  _cornerColor(x, y, cls, fallback, diffuse) {
     let r = 0, g = 0, b = 0, n = 0;
     for (let dy = -1; dy <= 0; dy++) {
       for (let dx = -1; dx <= 0; dx++) {
@@ -326,50 +333,136 @@ class TerrainMesh {
         r += c[0]; g += c[1]; b += c[2]; n++;
       }
     }
-    if (!n) return anchor;
-    const s = n < 4 ? 1 : this.colorSoftness;
-    return [
-      anchor[0] + (r / n - anchor[0]) * s,
-      anchor[1] + (g / n - anchor[1]) * s,
-      anchor[2] + (b / n - anchor[2]) * s,
-    ];
+    return n ? [r / n, g / n, b / n] : fallback;
+  }
+
+  /**
+   * Colour in the middle of a pixel's edge: the mean of the pixel and the
+   * neighbour across that edge when it is of the same class, else the pixel's
+   * own - the edge twin of _cornerColor, for the plateau's ramps.
+   */
+  _edgeColor(x, y, nx, ny, cls, own) {
+    if (this._classAt(nx, ny) !== cls) return own;
+    const c = this._rgbAt(nx, ny);
+    return [(own[0] + c[0]) / 2, (own[1] + c[1]) / 2, (own[2] + c[2]) / 2];
   }
 
   /**
    * The colours down a wall standing on corners `cA` and `cB`, as stops from
-   * its top to its base: this pixel's class at the top, the class it drops
-   * onto at the base, and a surface-blended wall's donor colours in between.
-   * An empty neighbour repeats the top, so a silhouette keeps one colour -
-   * there is no next pixel for it to run into.
+   * its top to its base: `{ t, c }`, t the height as a fraction of the
+   * wall's span (1 = top, 0 = base) and c the colours across it, one per entry
+   * of `fr` - the points across the wall as fractions of the way from A to B,
+   * the first and last being the corners themselves and any between them
+   * reading the pixel's own colour (the ends of a soft plateau, matching the
+   * face's edge exactly).
    *
-   * Both ends read the same corners the front face used, so the wall meets the
-   * face in the colour the face ends on.
+   * The top is the colour the front face ends on at those corners - the same
+   * corner reading, undiffused - so the wall leaves the face without a seam.
+   * At full strength WALL_DIFFUSE_DEPTH down it has run out into the diffused
+   * reading (_wallRgb), which is what it stays from there; below full strength
+   * there is no diffusion and it carries the face's colour straight down. The
+   * base is the same the other way up when the wall drops onto a lower class:
+   * it runs into the colour that pixel's face begins on. An empty neighbour
+   * has nothing to run into.
+   *
+   * A surface-blended wall is instead cut into bands down its depth, the same
+   * bands the textured path cuts (_wallBands), each a donor colour picked per
+   * pixel and jittered (_donorPick) so a row of walls reads as grain rather
+   * than as one gradient repeated down every column. Each band is a plateau of
+   * its colour with a ramp to the next - the plateaus in x carried into z; at
+   * full strength the plateaus are points and the bands become one gradient
+   * through the picks. A corner point takes the mean of the picks of the two
+   * columns sharing it (when the next column stands the same wall of the same
+   * slot), so the grain is continuous across the columns as the face is.
    */
-  _wallColors(cA, cB, cls, px, py, nx, ny, slot) {
+  _wallColors(cA, cB, fr, cls, own, px, py, nx, ny, faceId, slot, span) {
     const nCls = this._classAt(nx, ny);
-    const dOwn = this._wallRgb(px, py, cls);
-    const topA = this._cornerColor(cA[0], cA[1], cls, dOwn, true);
-    const topB = this._cornerColor(cB[0], cB[1], cls, dOwn, true);
-    const stops = [[topA, topB]];
-    if (slot) {
-      // read the donor's texel rather than the colour recorded with it: the
-      // texel is what a surface-blended wall samples, so clear-physics mode
-      // greys these waypoints along with every other face
-      for (const d of this.blend.donors[slot - 1]) {
-        const c = this._rgbAt(d.index % this.w, (d.index / this.w) | 0);
-        stops.push([c, c]);
+    const empty = nCls === DepthClass.EMPTY;
+    const ramp = this.colorSoftness;
+    const diffusing = ramp >= 1;
+    // a colour per point across the wall: the corners read the corner mean,
+    // the points between them the pixel's own
+    const pts = fr.map((f, i) => (i === 0 ? cA : i === fr.length - 1 ? cB : null));
+    const across = (c, mid, diffuse) =>
+      pts.map((p) => (p ? this._cornerColor(p[0], p[1], c, mid, diffuse) : mid));
+    const face = across(cls, own);
+    const diff = across(cls, this._wallRgb(px, py, cls), true);
+    const faceN = empty ? null : across(nCls, this._rgbAt(nx, ny));
+    const stops = [{ t: 1, c: face }];
+    const bands = slot ? this._blendBands(span) : 1;
+    if (bands >= 2) {
+      const h = 1 / bands;
+      const [ox, oy] = WALL_ALONG[faceId];
+      const pick = (k) => {
+        const mine = this._donorPick(slot, px, py, faceId, k, bands);
+        return pts.map((p) => {
+          if (!p) return mine;
+          // the column sharing this corner: the one on the corner's side
+          const qx = px + (ox ? (p[0] > px ? 1 : -1) : 0);
+          const qy = py + (oy ? (p[1] > py ? 1 : -1) : 0);
+          if (this._blendAt(qx, qy) !== slot || !this._wallExposed(qx, qy, faceId)) return mine;
+          const theirs = this._donorPick(slot, qx, qy, faceId, k, bands);
+          return [(mine[0] + theirs[0]) / 2, (mine[1] + theirs[1]) / 2, (mine[2] + theirs[2]) / 2];
+        });
+      };
+      // band 0 is the pixel's own colour, as the textured path keeps the
+      // face's uv there; at full strength that is the diffused reading
+      stops.push({ t: 1 - h + ramp * h / 2, c: diffusing ? diff : face });
+      for (let k = 1; k < bands; k++) {
+        const c = pick(k);
+        stops.push({ t: 1 - k * h - ramp * h / 2, c });
+        stops.push({ t: k === bands - 1 && empty ? 0 : 1 - (k + 1) * h + ramp * h / 2, c });
       }
-    }
-    if (nCls === DepthClass.EMPTY) {
-      stops.push([topA, topB]);
     } else {
-      // the base is anchored on the pixel the wall drops onto, so softness
-      // pulls it toward that one's colour just as the top is pulled to this
-      const nOwn = this._wallRgb(nx, ny, nCls);
-      stops.push([this._cornerColor(cA[0], cA[1], nCls, nOwn, true),
-                  this._cornerColor(cB[0], cB[1], nCls, nOwn, true)]);
+      // the fade takes WALL_DIFFUSE_DEPTH at each end that has a face to
+      // leave, and on a short wall no more than half of it each, so the two
+      // never cross; with no diffusion there is nothing to fade into, and the
+      // wall runs straight from the one face to the other
+      const fade = diffusing && span > 0 ? WALL_DIFFUSE_DEPTH / span : 1;
+      const d = Math.min(faceN ? 0.5 : 1, fade);
+      stops.push({ t: 1 - d, c: diff });
+      if (faceN) stops.push({ t: d, c: across(nCls, this._wallRgb(nx, ny, nCls), true) });
+      else stops.push({ t: 0, c: diff });
+    }
+    if (faceN) stops.push({ t: 0, c: faceN });
+    // two stops at one height (a short wall's fades meeting, or a plateau
+    // shrunk to a point) become one, so no zero-height band is emitted
+    for (let i = 1; i < stops.length; i++) {
+      if (stops[i].t < stops[i - 1].t) continue;
+      const a = stops[i - 1].c, b = stops[i].c;
+      stops[i - 1].c = a.map((ca, k) => ca.map((v, j) => (v + b[k][j]) / 2));
+      stops.splice(i--, 1);
     }
     return stops;
+  }
+
+  /**
+   * Shade at a grid corner for the walls of a pixel of class `cls`: the four
+   * wall shades mixed by the way the outline faces there, read off the four
+   * pixels around the corner - a pixel this class would not drop onto counts
+   * as solid, the rest as open, and the normal points from the one to the
+   * other. A corner in the middle of a straight run faces straight out and
+   * gets that wall's own shade; a corner of a step faces diagonally and gets
+   * the mean of the two. Every wall meeting at a corner shares it, so the
+   * shading runs smoothly around the outline instead of breaking at each step
+   * of the staircase - which, stretched down the whole extrusion, is what
+   * made a jagged walking surface a row of alternating stripes. A corner
+   * facing nowhere (a checkerboard) falls back to the wall's own shade.
+   */
+  _wallShade(x, y, cls, fallback) {
+    const front = DEPTH_BANDS[cls].front;
+    const solid = (px, py) => {
+      const c = this._classAt(px, py);
+      return c !== DepthClass.EMPTY && DEPTH_BANDS[c].front >= front ? 1 : 0;
+    };
+    const tl = solid(x - 1, y - 1), tr = solid(x, y - 1);
+    const bl = solid(x - 1, y), br = solid(x, y);
+    const nx = (tl + bl) - (tr + br); // > 0: the outline faces +x, right
+    const ny = (tl + tr) - (bl + br); // > 0: it faces +y, down (y is down here)
+    const ax = Math.abs(nx), ay = Math.abs(ny);
+    if (!ax && !ay) return fallback;
+    return (ax * (nx < 0 ? SHADE_LEFT : SHADE_RIGHT) +
+            ay * (ny < 0 ? SHADE_TOP : SHADE_BOTTOM)) / (ax + ay);
   }
 
   /** Blend slot of a pixel (slot+1), 0 where the effect is off. */
@@ -390,12 +483,36 @@ class TerrainMesh {
    */
   _blendUvFor(slot, qx, qy, face, band, bands) {
     const uv = this.blendUv[slot - 1];
-    const n = uv.length / 2;
-    const t = bands > 1 ? band / (bands - 1) : 0;
-    let i = Math.round(t * (n - 1)) + (blendHash(qx, qy, face, band) % 3) - 1;
-    i = Math.max(0, Math.min(n - 1, i));
+    const i = this._donorIndex(slot, qx, qy, face, band, bands);
     const u = uv[i * 2], v = uv[i * 2 + 1];
     return [[u, v], [u, v], [u, v], [u, v]];
+  }
+
+  /** Which donor of the slot's palette band `band` of a wall of pixel (qx,qy) draws (see _blendUvFor). */
+  _donorIndex(slot, qx, qy, face, band, bands) {
+    const n = this.blend.donors[slot - 1].length;
+    const t = bands > 1 ? band / (bands - 1) : 0;
+    const i = Math.round(t * (n - 1)) + (blendHash(qx, qy, face, band) % 3) - 1;
+    return Math.max(0, Math.min(n - 1, i));
+  }
+
+  /**
+   * That donor's colour, read from its texel rather than the colour recorded
+   * with it: the texel is what a surface-blended wall samples, so
+   * clear-physics mode greys these along with every other face.
+   */
+  _donorPick(slot, qx, qy, face, band, bands) {
+    const d = this.blend.donors[slot - 1][this._donorIndex(slot, qx, qy, face, band, bands)];
+    return this._rgbAt(d.index % this.w, (d.index / this.w) | 0);
+  }
+
+  /** Does pixel (x,y) stand a wall on face `faceId` - the same test the smooth path's wallBase makes. */
+  _wallExposed(x, y, faceId) {
+    const c = this._classAt(x, y);
+    if (c === DepthClass.EMPTY) return false;
+    const [dx, dy] = WALL_ACROSS[faceId];
+    const nc = this._classAt(x + dx, y + dy);
+    return nc === DepthClass.EMPTY || (nc !== c && DEPTH_BANDS[nc].front < DEPTH_BANDS[c].front);
   }
 
   /**
@@ -736,6 +853,9 @@ class TerrainMesh {
     // relief is what the sloping is for: with none, every corner of a class
     // is at the same height and averaging them only costs time
     const slope = this.smooth && this.hasRelief;
+    // colour blend: how much of a pixel runs out to its neighbours' colours
+    // (1 = all of it, the plain mean at every corner; less leaves a plateau)
+    const ramp = this.colorSoftness;
 
     const positions = [], colors = [], uvs = [];
     // two buckets over one set of vertices: the textured faces and, for the
@@ -750,12 +870,13 @@ class TerrainMesh {
       }
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
-    /** A quad whose colour is its four corners', already shaded. */
+    /** A quad whose colour is its four corners', shaded by one factor or one per corner. */
     const pushColorQuad = (p, rgb, shade) => {
       const base = positions.length / 3;
       for (let i = 0; i < 4; i++) {
+        const s = Array.isArray(shade) ? shade[i] : shade;
         positions.push(p[i][0], p[i][1], p[i][2]);
-        colors.push(rgb[i][0] * shade, rgb[i][1] * shade, rgb[i][2] * shade);
+        colors.push(rgb[i][0] * s, rgb[i][1] * s, rgb[i][2] * s);
         uvs.push(0, 0);
       }
       colorIndices.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -789,9 +910,44 @@ class TerrainMesh {
           this._cornerColor(px + 1, py + 1, c, own), this._cornerColor(px, py + 1, c, own),
         ] : null;
         const face = (p, shade) => (blendCol ? pushColorQuad(p, cc, shade) : pushQuad(p, uv, shade));
-        face([[p00[0], p00[1], z00], [p10[0], p10[1], z10],
-              [p11[0], p11[1], z11], [p01[0], p01[1], z01]],
-          SHADE_FRONT * band.frontShade);
+        const frontQuad = [[p00[0], p00[1], z00], [p10[0], p10[1], z10],
+                           [p11[0], p11[1], z11], [p01[0], p01[1], z01]];
+        if (blendCol && ramp < 1) {
+          /*
+           * Below full strength the pixel keeps its own colour over a plateau
+           * in its middle and only its outer `ramp` runs out to the colours it
+           * shares with its neighbours: the corner means at the corners and,
+           * along each edge, the mean of the two pixels across it. The next
+           * pixel does the same from its side, so the boundary is crossed in a
+           * continuous slope `ramp` wide with no step in it, while the pixel
+           * survives as a flat of its own colour. A 3x3 grid of quads: the
+           * middle one the plateau, the ring around it the ramps.
+           */
+          const em = [
+            this._edgeColor(px, py, px, py - 1, c, own), this._edgeColor(px, py, px + 1, py, c, own),
+            this._edgeColor(px, py, px, py + 1, c, own), this._edgeColor(px, py, px - 1, py, c, own),
+          ];
+          const U = [0, ramp / 2, 1 - ramp / 2, 1];
+          const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+          const at = (u, v) => lerp3(lerp3(frontQuad[0], frontQuad[1], u), lerp3(frontQuad[3], frontQuad[2], u), v);
+          const col = (i, j) => {
+            const iu = i === 0 ? 0 : i === 3 ? 2 : 1, jv = j === 0 ? 0 : j === 3 ? 2 : 1;
+            if (iu === 1 && jv === 1) return own;
+            if (iu === 1) return jv === 0 ? em[0] : em[2];
+            if (jv === 1) return iu === 0 ? em[3] : em[1];
+            return cc[jv === 0 ? (iu === 0 ? 0 : 1) : (iu === 0 ? 3 : 2)];
+          };
+          for (let j = 0; j < 3; j++) {
+            for (let i = 0; i < 3; i++) {
+              pushColorQuad(
+                [at(U[i], U[j]), at(U[i + 1], U[j]), at(U[i + 1], U[j + 1]), at(U[i], U[j + 1])],
+                [col(i, j), col(i + 1, j), col(i + 1, j + 1), col(i, j + 1)],
+                SHADE_FRONT * band.frontShade);
+            }
+          }
+        } else {
+          face(frontQuad, SHADE_FRONT * band.frontShade);
+        }
         face([[p00[0], p00[1], band.back], [p10[0], p10[1], band.back],
               [p11[0], p11[1], band.back], [p01[0], p01[1], band.back]],
           SHADE_BACK);
@@ -812,41 +968,53 @@ class TerrainMesh {
         const slot = this._blendAt(px, py);
         /**
          * One wall of this pixel. A wall is the surface between the pixel and
-         * the lower one beside it, so with colour blend on it runs from this
-         * pixel's colour at the top to that one's at the base - the transition
-         * in z. Against empty space there is nothing to run to and it keeps
-         * one colour. A surface-blended wall's donor colours become the
-         * waypoints in between, so its bands turn into a gradient.
+         * the lower one beside it, so with colour blend on it runs from the
+         * colour this pixel's face ends on at the top to the one that pixel's
+         * face begins on at the base - the transition in z (_wallColors).
+         * Against empty space there is nothing to run to and it keeps the
+         * diffused colour down. Its shade is per corner too (_wallShade), so
+         * it runs smoothly around the outline.
          *
          * `pA`/`pB` are the wall's two ends on the grid, `cA`/`cB` the corners
          * they stand on (the same corners the front face uses, so the colours
-         * meet), `place` lays the four heights out in the winding the face
-         * needs.
+         * meet), `place` lays the four corners - given as A-low, A-high,
+         * B-high, B-low - out in the winding the face needs; the positions,
+         * colours and shades all go through it, so they cannot come apart.
          */
         const wall = (nx, ny, base, zA, zB, faceId, shade, pA, pB, cA, cB, place) => {
+          const at = (loA, hiA, hiB, loB) => place(
+            [pA[0], pA[1], loA], [pA[0], pA[1], hiA], [pB[0], pB[1], hiB], [pB[0], pB[1], loB]);
           if (!blendCol) {
             this._wallBands(base, zA, zB, wallUv, slot, faceId, px, py,
-              (loA, hiA, hiB, loB, uv) => pushQuad(place(pA, pB, loA, hiA, hiB, loB), uv, shade));
+              (loA, hiA, hiB, loB, uv) => pushQuad(at(loA, hiA, hiB, loB), uv, shade));
             return;
           }
-          const stops = this._wallColors(cA, cB, c, px, py, nx, ny, slot);
-          const n = stops.length - 1;
-          for (let k = 0; k < n; k++) {
-            const tHi = 1 - k / n, tLo = 1 - (k + 1) / n;
-            const hi = stops[k], lo = stops[k + 1];
-            pushColorQuad(
-              place(pA, pB, base + (zA - base) * tLo, base + (zA - base) * tHi,
-                    base + (zB - base) * tHi, base + (zB - base) * tLo),
-              [lo[0], hi[0], hi[1], lo[1]], shade);
+          // the points across the wall: its two corners and, with a plateau
+          // on the face, the plateau's two ends, so the wall's top runs the
+          // way the face's edge does and the two meet everywhere along it
+          const fr = ramp < 1 ? [0, ramp / 2, 1 - ramp / 2, 1] : [0, 1];
+          const stops = this._wallColors(cA, cB, fr, c, own, px, py, nx, ny, faceId, slot, (zA + zB) / 2 - base);
+          const sA = this._wallShade(cA[0], cA[1], c, shade);
+          const sB = this._wallShade(cB[0], cB[1], c, shade);
+          for (let i = 0; i + 1 < fr.length; i++) {
+            const fA = fr[i], fB = fr[i + 1];
+            const qA = [pA[0] + (pB[0] - pA[0]) * fA, pA[1] + (pB[1] - pA[1]) * fA];
+            const qB = [pA[0] + (pB[0] - pA[0]) * fB, pA[1] + (pB[1] - pA[1]) * fB];
+            const tA = zA + (zB - zA) * fA, tB = zA + (zB - zA) * fB;
+            const shA = sA + (sB - sA) * fA, shB = sA + (sB - sA) * fB;
+            const shades = place(shA, shA, shB, shB);
+            for (let k = 0; k + 1 < stops.length; k++) {
+              const hi = stops[k], lo = stops[k + 1];
+              pushColorQuad(
+                place([qA[0], qA[1], base + (tA - base) * lo.t], [qA[0], qA[1], base + (tA - base) * hi.t],
+                      [qB[0], qB[1], base + (tB - base) * hi.t], [qB[0], qB[1], base + (tB - base) * lo.t]),
+                place(lo.c[i], hi.c[i], hi.c[i + 1], lo.c[i + 1]), shades);
+            }
           }
         };
         // the two windings the original walls use, kept exactly
-        const side = (pA, pB, loA, hiA, hiB, loB) => [
-          [pA[0], pA[1], loA], [pA[0], pA[1], hiA],
-          [pB[0], pB[1], hiB], [pB[0], pB[1], loB]];
-        const cap = (pA, pB, loA, hiA, hiB, loB) => [
-          [pB[0], pB[1], loB], [pA[0], pA[1], loA],
-          [pA[0], pA[1], hiA], [pB[0], pB[1], hiB]];
+        const side = (aLo, aHi, bHi, bLo) => [aLo, aHi, bHi, bLo];
+        const cap = (aLo, aHi, bHi, bLo) => [bLo, aLo, aHi, bHi];
 
         let base = wallBase(px - 1, py);
         if (base !== null) {

@@ -1609,15 +1609,18 @@ Vfs.boot("", "setup.html").then(function (booted) {
    * calls exactly what the buttons call, so the two stay in step, and it
    * carries the recentre that is otherwise only on the A/X button.
    */
-  // How far a corner colour may travel from its own pixel's. "smooth" is the
-  // plain bilinear reading of the picture: each pixel keeps its own colour at
-  // its middle and runs to the means where the pixels meet, so the surface is
-  // continuous in every direction with nothing lost from it. "soft" holds the
-  // corners back toward each pixel, which leaves a step at every boundary -
-  // the pixels stay visible as pixels. "off" leaves them exactly as drawn.
+  // How much of each pixel runs out into the colours it shares with its
+  // neighbours (terrain.js). "smooth" is all of it: every corner is the mean
+  // of the pixels meeting there and a quad is nothing but its corners, so the
+  // surface is continuous in every direction and no pixel keeps a colour of
+  // its own. "soft" gives only the outer half of each pixel to the blend and
+  // leaves a plateau of its own colour in the middle, so the boundaries are
+  // still crossed in a continuous slope - no step anywhere, on the face or
+  // the walls - but the pixels stay legible as pixels. "off" leaves them
+  // exactly as drawn.
   const COLOR_BLEND_LEVELS = [
     { name: "off", label: "off", softness: 0 },
-    { name: "soft", label: "soft", softness: 0.35 },
+    { name: "soft", label: "soft", softness: 0.5 },
     { name: "smooth", label: "smooth", softness: 1 },
   ];
   const colorBlendLevel = () =>
