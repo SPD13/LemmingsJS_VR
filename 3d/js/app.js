@@ -4225,7 +4225,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
     } else if (p.barTool === "detailok") {
       setVrDetail(false);
     } else if (p.barTool === "worlds") {
-      setVrCatalog(true);
+      if (session) askVrConfirm("Open the world catalog?", () => setVrCatalog(true));
+      else setVrCatalog(true);
     } else if (p.barTool === "catclose") {
       if (!library.locked) setVrCatalog(false);
     } else if (p.barTool === "worldpanel") {
@@ -5065,7 +5066,12 @@ Vfs.boot("", "setup.html").then(function (booted) {
     const data = Lemmix.LevelBuilder.parseLevel(await res.text());
     return Lemmix.LevelBuilder.build(data, lemmixStyles, { seed: level.id });
   });
-  document.getElementById("btn-library").addEventListener("click", () => library.toggle());
+  // opening the catalog is a way out of the level like the prev/next buttons -
+  // picking a world from it drops what is under way - so it asks the same way
+  document.getElementById("btn-library").addEventListener("click", () => {
+    if (library.isOpen || !session) { library.toggle(); return; }
+    askConfirm("Open the world catalog?", "open it", () => library.open());
+  });
   // the panel's load-replay half opens this picker: the file plays from the start
   const replayFile = document.getElementById("replay-file");
   if (replayFile) {
