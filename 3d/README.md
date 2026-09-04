@@ -257,7 +257,12 @@ not resume it between them.
 
 `setup.html` (the gear icon of the right panel; the page the 3D page
 sends you to by itself when nothing is installed yet) manages the two
-**asset modes** and the player's files.
+**asset modes** and the player's files. Its head carries the **Play**
+link to the game page, shown only once NeoLemmix, the styles package and
+at least one level pack are there - in the store in static mode, on the
+server otherwise (a panel bitmap, the styles index and the levels index
+are probed) - and, until then, what is missing. Next to it a "setup
+guide" link opens `setup.md`, the player's guide to the assets.
 
 - **Assets**: *server* - `neolemmix/` and `levels/` are folders on the web
   server, today's layout (the launcher, or the folders on disk with the

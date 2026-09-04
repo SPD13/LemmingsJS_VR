@@ -465,6 +465,53 @@
 
   // ---- the page's state ----
 
+  // ---- the Play link: NeoLemmix, the styles package and a level, in the mode in force ----
+
+  const levelCount = (index) => ((index && index.children) || []).reduce((n, c) => n + (c.count || 0), 0);
+  const fetchJson = async (path) => {
+    try {
+      const res = await fetch(ROOT + path + "?probe=" + Date.now(), { cache: "no-store" });
+      return res.ok ? await res.json() : null;
+    } catch (e) { return null; }
+  };
+  const fetchOk = async (path) => {
+    try { return (await fetch(ROOT + path + "?probe=" + Date.now(), { method: "HEAD", cache: "no-store" })).ok; }
+    catch (e) { return false; }
+  };
+
+  /**
+   * What the game page needs before it can play: {engine, styles, levels}
+   * as booleans - from the store in static mode (`units` and the index the
+   * store holds), from the server otherwise (a panel bitmap of the engine,
+   * the styles index and the levels index, fetched past the worker with
+   * ?probe like Vfs' own probes).
+   */
+  async function playState(units, index) {
+    if (Vfs.mode === "static") {
+      return { engine: !!units.engine, styles: !!units.styles, levels: levelCount(index) > 0 };
+    }
+    const [engine, styles, levels] = await Promise.all([
+      fetchOk("neolemmix/gfx/panel/empty_slot.png"),
+      fetchJson("neolemmix/styles/index.json").then((i) => !!(i && i.count)),
+      fetchJson(Vfs.INDEX_PATH).then((i) => levelCount(i) > 0),
+    ]);
+    return { engine, styles, levels };
+  }
+
+  /** The Play link when everything is there, else what is missing. */
+  function renderPlay(ready) {
+    const missing = [];
+    if (!ready.engine) missing.push("NeoLemmix");
+    if (!ready.styles) missing.push("the styles package");
+    if (!ready.levels) missing.push("a level pack");
+    $("play").hidden = missing.length > 0;
+    $("play-why").hidden = missing.length === 0;
+    $("play-why").textContent = missing.length
+      ? "to play, install " + missing.join(", ").replace(/, ([^,]*)$/, " and $1") +
+        (Vfs.mode === "static" ? " below" : " on the server")
+      : "";
+  }
+
   async function unitsById() {
     const out = {};
     for (const u of await Vfs.getAll("units")) out[u.id] = u;
@@ -511,6 +558,7 @@
     $("storage").textContent = "storage used by this site: " + fmtMB(est.usage) +
       (est.quota ? " of " + fmtMB(est.quota) + " available" : "") +
       (est.persisted === true ? " · persistent" : est.persisted === false ? " · not marked persistent (the browser may reclaim it)" : "");
+    renderPlay(await playState(units, index));
     setButtons();
   }
 
@@ -637,6 +685,7 @@
       await Vfs.setMode(next);
       renderMode();
       say("msg-mode", "the game page now plays in " + next + " mode");
+      await refresh();
     });
     $("version").textContent = "v" + (Vfs.pageVersion() || "?");
     Vfs.checkVersion(ROOT).then((v) => {

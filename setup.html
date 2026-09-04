@@ -35,6 +35,15 @@
 
   #page { max-width: 880px; margin: 0 auto; padding: 18px 20px 40px; box-sizing: border-box; }
   #head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  #play-slot { display: flex; align-items: center; gap: 10px; flex: none; }
+  /* the Play link: index.html's green, as a button; shown once NeoLemmix, the
+     styles package and a level pack are all there (setup.js renderPlay) */
+  #play {
+    font-size: 12px; letter-spacing: 0.1em; color: #10141c; background: #6fce7e;
+    border: 1px solid #6fce7e; border-radius: 4px; padding: 4px 14px; white-space: nowrap;
+  }
+  #play:hover { background: #8ee09b; color: #10141c; }
+  #play[hidden], #play-why[hidden] { display: none; }
   .card {
     background: rgba(10, 14, 22, 0.82); border: 1px solid #2a3446; border-radius: 6px;
     padding: 12px 14px; margin-bottom: 12px;
@@ -89,7 +98,11 @@
 <div id="page">
   <div id="head">
     <h1>LEMMIX JS+VR — SETUP <span id="version" class="dim"></span></h1>
-    <a id="back" href="index.html">‹ 3D view</a>
+    <span id="play-slot">
+      <a id="guide" href="setup.md" title="what to download, where, and how to install it">setup guide</a>
+      <span id="play-why" class="dim" hidden></span>
+      <a id="play" href="index.html" hidden>▶ PLAY</a>
+    </span>
   </div>
   <div id="version-warning" class="card notice" hidden></div>
 
