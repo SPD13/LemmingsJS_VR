@@ -362,7 +362,10 @@ board - where the desktop's 3D and 2D views start too.
   any of these icons (or a window's close) for a moment and a label says
   what it does. The bar starts in
   the room, unlocked: just below the board, centred on the part of the level
-  in front of you, and a recenter (or a level change) puts it back there.
+  in front of you and a few centimetres nearer than the board's frontmost
+  face, so the whole board - the pieces standing proud of the slab, the
+  objects on it - is behind the bar at whatever the board is zoomed to; a
+  recenter (or a level change) puts it back there.
   Where you leave it is remembered (in localStorage): carried somewhere
   else, it comes back at that same offset from the board on the next level,
   recenter or session; locked to your head, it starts there next time; the
