@@ -1,48 +1,12 @@
-# Lemmings - Lemmings / Oh no! More Lemmings
+# Lemmix JS+VR
 
-Lemmings reimplementation written in HTML5 / JavaScript
-
-## Play Online
-
-- Browser: https://lemmingsjs.oklemenz.de
-- Keyboard / Mouse Controls
-
-## Play Mobile
-
-- Browser: https://lemmingsjs.oklemenz.de
-  - Use Landscape Mode (Single Tab, Disable Landscape Tab Bar in Browser Settings)
-- Add to Home Screen to start as Fullscreen App
-- Touch Controls (tap/drag area on screen):
-
-## Play GitHub Version
-
-- Browser: https://oklemenz.github.io/LemmingsJS
-
-## Play Locally
-
-- Install [Node.js](https://nodejs.org)
-- Clone: `https://github.com/oklemenz/LemmingsJS.git`
-- Terminal:
-  - `npm install`
-  - `npm start`
-- Browser: `localhost:8080`
-
-## Options
-
-Url parameters are leveraged to save game state automatically (shortcut in brackets):
-
-- `version (v)`:
-  - 1: Lemmings (default)
-  - 2: Oh no! More Lemmings 
-- `difficulty (d)`: Difficulty 1-5 (default: 1)
-- `level (l)`: Level 1-30 (default: 1)
-- `speed (s)`: Control execution speed >0-10 (default: 1)
-- `cheat (c)`: Enable cheat mode (99 for all actions) (default: false)
-
-## Versions
-
-- Lemmings: https://lemmingsjs.oklemenz.de?version=0
-- Oh no! More Lemmings: https://lemmingsjs.oklemenz.de?version=1
+> **This is a fork of [LemmingsJS](https://github.com/oklemenz/LemmingsJS)**,
+> the Lemmings reimplementation in HTML5 / JavaScript, adding a **3D view**,
+> **VR support** (WebXR) and **Lemmix engine compatibility** - the
+> NeoLemmix level packs and styles play here. The game is playable at
+> **https://lemmix.spd13.us**. It ships no game data: see
+> [`setup.md`](setup.md) for what to download, where, and how to install it,
+> the original games' own files included.
 
 ## Levels and assets
 
@@ -134,4 +98,9 @@ Electron, over plain HTTP.
 
 ## Credits
 
-- https://github.com/tomsoftware
+- https://github.com/oklemenz/LemmingsJS - the LemmingsJS engine this
+  repository forks: the DOS games' reimplementation, the 2D page
+- https://github.com/tomsoftware - the original Lemmings.js the engine
+  descends from
+- https://www.neolemmix.com - NeoLemmix, whose engine the Lemmix code
+  follows, and whose styles, level packs and music the game plays
