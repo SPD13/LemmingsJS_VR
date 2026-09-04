@@ -155,7 +155,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   drag), the grips (drag, scale) and the bar's buttons stay fixed. "export"
   saves both tabs' bindings as a JSON file (`lemmings-3d-controls.json`)
   and "import" loads one in their place, skipping any entry it does not
-  know and saying how many it took
+  know and saying how many it took; a file with no controller bindings in it
+  (or none for the keyboard) leaves that half at the default rather than
+  unbound, and a browser that has never been configured starts on the
+  traditional layout with the default controllers
 - the prev, restart and next icons ask before throwing away a level in progress —
   cancel with the button, `Escape`, or a click off the dialog; `Enter` takes
   it. The `,` and `.` keys still jump straight there, since a shortcut that

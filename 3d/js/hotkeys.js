@@ -324,12 +324,37 @@
             }
             // a table saved before the controllers were in it: theirs as they were
             if (!data.vr) this.applyVrPreset(false);
+            this.fillDefaults(false); // a half the table does not cover at all
             return;
           }
         } catch (e) { /* unreadable: start over */ }
       }
+      // nothing kept in this browser yet: the layouts as they ship, written
+      // out at once so the dialog, the exported file and - in server mode -
+      // the launcher's config file all see them
       this.applyPreset(DEFAULT_PRESET, false);
       this.applyVrPreset(false);
+      this.save();
+    }
+
+    /** Is anything bound on this half of the table: the controllers, or the keyboard. */
+    hasHalf(vr) {
+      for (const code of this.table.keys()) if (isVrCode(code) === !!vr) return true;
+      return false;
+    }
+
+    /**
+     * A half with nothing bound on it at all - a browser with no table yet, a
+     * file that carried only the keyboard's keys - filled with what ships:
+     * the traditional layout, the controllers of VR_PRESET. Returns the
+     * names of the halves it filled.
+     */
+    fillDefaults(save = true) {
+      const filled = [];
+      if (!this.hasHalf(false)) { this.applyPreset(DEFAULT_PRESET, false); filled.push("keyboard"); }
+      if (!this.hasHalf(true)) { this.applyVrPreset(false); filled.push("VR"); }
+      if (filled.length && save) this.save();
+      return filled;
     }
 
     save() {
@@ -371,8 +396,9 @@
     /**
      * A table from exportJSON's text, replacing this one. Entries that name
      * an unknown key or function, or put a function on an input that cannot
-     * take it, are skipped. Returns {loaded, skipped}; throws on a text that
-     * is not a controls file at all.
+     * take it, are skipped; a half the file leaves empty (an older file with
+     * no controllers in it) keeps what ships. Returns {loaded, skipped,
+     * filled}; throws on a text that is not a controls file at all.
      */
     importJSON(text) {
       let data;
@@ -390,9 +416,11 @@
         next.set(code, { action: b.action, mod: b.mod == null ? defaultMod(b.action) : b.mod });
       }
       this.table = next;
+      const loaded = next.size;
+      const filled = this.fillDefaults(false); // a file that left a half empty
       this.save();
       this._changed();
-      return { loaded: next.size, skipped };
+      return { loaded, skipped, filled };
     }
 
     /** Give `code` a function (null clears it). */
@@ -717,7 +745,8 @@
         this.selected = null;
         this.refresh();
         this._status((name ? name + ": " : "") + r.loaded + " binding" + (r.loaded === 1 ? "" : "s") + " loaded" +
-          (r.skipped ? ", " + r.skipped + " skipped (unknown key or function)" : ""));
+          (r.skipped ? ", " + r.skipped + " skipped (unknown key or function)" : "") +
+          (r.filled && r.filled.length ? ", " + r.filled.join(" and ") + " left at the default" : ""));
         return r;
       } catch (e) {
         this._status((name ? name + ": " : "") + (e.message || e), true);

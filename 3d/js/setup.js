@@ -725,7 +725,8 @@
   function importControls(text, name) {
     try {
       const r = controls().importJSON(text);
-      say("msg-controls", name + ": " + r.loaded + " bindings loaded" + (r.skipped ? ", " + r.skipped + " skipped" : "") + landed());
+      say("msg-controls", name + ": " + r.loaded + " bindings loaded" + (r.skipped ? ", " + r.skipped + " skipped" : "") +
+        (r.filled && r.filled.length ? ", " + r.filled.join(" and ") + " left at the default" : "") + landed());
     } catch (e) { say("msg-controls", name + ": " + e.message, true); }
   }
 

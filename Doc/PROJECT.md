@@ -252,7 +252,13 @@ VR tab edits them, offering a stick only the stick functions. `exportJSON`
 / `importJSON` carry the whole table as a file (`{format:
 "lemmings-3d-controls", version, keys}`), an import replacing the table and
 skipping what it cannot place; the dialog's export and import buttons are
-these through a download and a file picker.
+these through a download and a file picker. A browser with nothing kept yet
+starts on the traditional layout and the default controllers and writes them
+out at once, so the exported file and the launcher's `config/` copy hold
+them too; a half of the table nothing is bound on - a file that carried only
+the keyboard's keys, a stored table from before the controllers were in it -
+is filled the same way (`fillDefaults`), and `ConfigStore.apply` marks a
+pulled file `vr` only when it really names controller inputs.
 
 **The cursor** (`cursor.js`) is NeoLemmix's whenever its pictures are
 installed (`neolemmix/gfx/cursor`, with the 32 px twins of `cursor-hr` for
