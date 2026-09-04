@@ -34,6 +34,9 @@ const SPRITE_SHADE_BOTTOM = 0.5;
  */
 const SPRITE_SMOOTH_PULL = 0.35;   // how far a corner slides, in pixels
 const SPRITE_SMOOTH_BEVEL = 0.4;   // how much of its depth the rim gives up
+// What a column keeps of its depth where the next slice has nothing there:
+// enough to close the shape off rather than end it in a square wall.
+const SPRITE_BLEND_PINCH = 0.15;
 
 /** An explosion particle, in game pixels (see ParticleCloud.updateScale). */
 const PARTICLE_SIZE = 2.2;
@@ -173,93 +176,168 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
 }
 
 /**
- * The same relief, with the pixels rounded off in all three directions.
+ * A frame split into the body of the thing and whatever floats loose of it.
  *
- * Two things give a stack of extruded pixels away. Across the sprite, the
- * outline is a staircase; through it, every block is cut square at the front
- * and the back. So each corner of the outline slides along its own diagonal -
- * toward the lone pixel that owns a convex corner, and into the lone gap of a
- * concave one - which turns a staircase into a bevel and leaves straight runs
- * exactly where they were. A corner with four pixels round it, or two side by
- * side, is not a corner of anything and does not move; that is what keeps a
- * flat edge flat instead of eroding the whole silhouette inward.
+ * The surfaces are drawn as a stack of slices, and neighbouring slices are
+ * blended into one another so the stack reads as one body rather than as
+ * layers. That blend has to know what may be joined to what. Water and lava
+ * animations carry spray: a pixel or two of foam thrown clear of the surface,
+ * and in almost every tileset a droplet in one frame sits exactly where the
+ * water is in the next. Blending on distance alone would weld it to the
+ * surface, because the distance is nothing.
  *
- * Through the sprite, a pixel on the rim is made thinner than the ones behind
- * it and the thickness is averaged at the corners, so the edge rolls off
- * instead of ending in a square wall. Corner positions are shared between
- * neighbouring pixels, so the surface stays closed however far it is pulled.
+ * So the parts are told apart by connectivity instead, which is exact. The
+ * largest run of touching pixels is the body; everything else is loose, is
+ * never blended into anything, and is built from its own pixels only, so no
+ * surface can reach from one to the other however close they sit.
  */
-function buildSmoothSpriteGeometry(isSolidRaw, w, h, depth) {
-  const isSolid = (x, y) => x >= 0 && x < w && y >= 0 && y < h && isSolidRaw(x, y);
-  const half = depth / 2;
-  // a pixel with a gap beside it is on the rim, and gives up some of its depth
-  const halfThickAt = (x, y) => {
-    if (!isSolid(x, y)) return null;
-    const rim = !isSolid(x - 1, y) || !isSolid(x + 1, y) ||
-      !isSolid(x, y - 1) || !isSolid(x, y + 1);
-    return rim ? half * (1 - SPRITE_SMOOTH_BEVEL) : half;
-  };
+function spriteBodyParts(mask, w, h) {
+  const label = new Int32Array(w * h).fill(-1);
+  const sizes = [];
+  const stack = [];
+  for (let seed = 0; seed < w * h; seed++) {
+    if (!mask[seed] || label[seed] >= 0) continue;
+    const id = sizes.length;
+    let n = 0;
+    label[seed] = id;
+    stack.push(seed);
+    while (stack.length) {
+      const i = stack.pop();
+      n++;
+      const x = i % w, y = (i / w) | 0;
+      // touching at a corner counts as joined, as it does on screen
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          const j = ny * w + nx;
+          if (mask[j] && label[j] < 0) { label[j] = id; stack.push(j); }
+        }
+      }
+    }
+    sizes.push(n);
+  }
+  if (!sizes.length) return null;
+  let big = 0;
+  for (let i = 1; i < sizes.length; i++) if (sizes[i] > sizes[big]) big = i;
+  const body = new Uint8Array(w * h);
+  const loose = new Uint8Array(w * h);
+  let looseCount = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (label[i] < 0) continue;
+    if (label[i] === big) body[i] = 1;
+    else { loose[i] = 1; looseCount++; }
+  }
+  return { body, loose: looseCount ? loose : null, parts: sizes.length, looseCount };
+}
 
-  // every corner of the pixel grid, worked out once and shared by the (up to
-  // four) pixels that meet there - which is what keeps the surface closed
-  const corners = new Array((w + 1) * (h + 1));
-  for (let y = 0; y <= h; y++) {
-    for (let x = 0; x <= w; x++) {
+/**
+ * One slice of a surface, rounded off in all three directions and blended
+ * into the slices either side of it.
+ *
+ * Across the slice, the outline's corners slide along their diagonals: toward
+ * the lone pixel that owns a convex corner, and into the lone gap of a
+ * concave one. That turns a staircase into a bevel. A corner with four pixels
+ * round it, or two side by side, is not the corner of anything and does not
+ * move, which is what keeps a straight edge straight instead of eroding the
+ * whole silhouette inward.
+ *
+ * Through the slice, how far a column reaches toward each face is asked of
+ * the neighbouring slice rather than fixed. Where that slice has the same
+ * pixel the column runs the full depth and the two meet flush, so the stack
+ * is continuous and no groove opens between them. Where it does not, the
+ * column closes off short of the face instead of ending in a square wall.
+ * At the front and back of the whole stack there is no neighbour to ask, so
+ * the rim rolls off there and the stack is rounded rather than cut.
+ *
+ * `prevAt` and `nextAt` read the body of the slices in front and behind, in
+ * this frame's own pixel grid; either is null at the ends of the stack. Loose
+ * parts are passed separately and never blended: they keep a rim on both
+ * faces and are built from their own pixels, so nothing can join them to the
+ * body they float over.
+ */
+function buildBlendedSpriteGeometry(body, loose, prevAt, nextAt, w, h, depth) {
+  const half = depth / 2;
+  const at = (m, x, y) => (x >= 0 && x < w && y >= 0 && y < h && m[y * w + x] !== 0);
+  const backQuads = [], wallQuads = [], frontQuads = [];
+
+  // a pixel with a gap beside it is on the rim, and gives up some of its depth
+  const rimOf = (mask) => (x, y) => (
+    !at(mask, x - 1, y) || !at(mask, x + 1, y) ||
+    !at(mask, x, y - 1) || !at(mask, x, y + 1)) ? 1 - SPRITE_SMOOTH_BEVEL : 1;
+
+  const emit = (mask, frontFactor, backFactor) => {
+    const isSolid = (x, y) => at(mask, x, y);
+    // every corner of the grid, worked out once and shared by the (up to
+    // four) pixels meeting there - which is what keeps the surface closed
+    const corners = new Array((w + 1) * (h + 1));
+    const cornerAt = (x, y) => {
+      const slot = y * (w + 1) + x;
+      let c = corners[slot];
+      if (c) return c;
       const a = isSolid(x - 1, y - 1), b = isSolid(x, y - 1);
-      const c = isSolid(x - 1, y), d = isSolid(x, y);
-      const n = (a ? 1 : 0) + (b ? 1 : 0) + (c ? 1 : 0) + (d ? 1 : 0);
+      const cc = isSolid(x - 1, y), d = isSolid(x, y);
+      const n = (a ? 1 : 0) + (b ? 1 : 0) + (cc ? 1 : 0) + (d ? 1 : 0);
       let dx = 0, dy = 0;
       if (n === 1 || n === 3) {
         // toward the odd one out: the single pixel, or the single gap
-        const odd = n === 1 ? [a, b, c, d] : [!a, !b, !c, !d];
-        if (odd[0]) { dx = -1; dy = -1; }
-        else if (odd[1]) { dx = 1; dy = -1; }
-        else if (odd[2]) { dx = -1; dy = 1; }
-        else { dx = 1; dy = 1; }
+        const odd = n === 1 ? [a, b, cc, d] : [!a, !b, !cc, !d];
+        dx = (odd[0] || odd[2]) ? -1 : 1;
+        dy = (odd[0] || odd[1]) ? -1 : 1;
       }
-      let sum = 0, count = 0;
+      let fs = 0, bs = 0, k = 0;
       for (const [px, py] of [[x - 1, y - 1], [x, y - 1], [x - 1, y], [x, y]]) {
-        const t = halfThickAt(px, py);
-        if (t !== null) { sum += t; count++; }
+        if (!isSolid(px, py)) continue;
+        fs += frontFactor(px, py); bs += backFactor(px, py); k++;
       }
-      const t = count ? sum / count : half;
-      corners[y * (w + 1) + x] = {
+      const f = k ? fs / k : 1, bk = k ? bs / k : 1;
+      c = {
         x: x + dx * SPRITE_SMOOTH_PULL, y: y + dy * SPRITE_SMOOTH_PULL,
-        front: half + t, back: half - t,
+        front: half + half * f, back: half - half * bk,
       };
+      corners[slot] = c;
+      return c;
+    };
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!isSolid(x, y)) continue;
+        const c00 = cornerAt(x, y), c10 = cornerAt(x + 1, y);
+        const c11 = cornerAt(x + 1, y + 1), c01 = cornerAt(x, y + 1);
+        const u0 = x / w, u1 = (x + 1) / w, v0 = y / h, v1 = (y + 1) / h;
+        const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
+        const face = (key) => [[c00.x, c00.y, c00[key]], [c10.x, c10.y, c10[key]],
+                               [c11.x, c11.y, c11[key]], [c01.x, c01.y, c01[key]]];
+        frontQuads.push({ p: face("front"), uv, shade: SPRITE_SHADE_FRONT });
+        backQuads.push({ p: face("back"), uv, shade: SPRITE_SHADE_BACK });
+
+        // the rim, wherever the shape stops. It samples the pixel's own centre:
+        // a texel-boundary UV would pick up the gap next to it, which is blank
+        const uMid = (x + 0.5) / w, vMid = (y + 0.5) / h;
+        const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
+        const wall = (a, b, shade) => wallQuads.push({
+          p: [[a.x, a.y, a.back], [a.x, a.y, a.front], [b.x, b.y, b.front], [b.x, b.y, b.back]],
+          uv: wallUv, shade,
+        });
+        if (!isSolid(x - 1, y)) wall(c00, c01, SPRITE_SHADE_LEFT);
+        if (!isSolid(x + 1, y)) wall(c11, c10, SPRITE_SHADE_RIGHT);
+        if (!isSolid(x, y - 1)) wall(c10, c00, SPRITE_SHADE_TOP);
+        if (!isSolid(x, y + 1)) wall(c01, c11, SPRITE_SHADE_BOTTOM);
+      }
     }
-  }
-  const cornerAt = (x, y) => corners[y * (w + 1) + x];
+  };
 
-  // back -> walls -> fronts, the order the stepped builder emits in
-  const backQuads = [], wallQuads = [], frontQuads = [];
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (!isSolid(x, y)) continue;
-      const c00 = cornerAt(x, y), c10 = cornerAt(x + 1, y);
-      const c11 = cornerAt(x + 1, y + 1), c01 = cornerAt(x, y + 1);
-      const u0 = x / w, u1 = (x + 1) / w, v0 = y / h, v1 = (y + 1) / h;
-      const uv = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-      const face = (key) => [[c00.x, c00.y, c00[key]], [c10.x, c10.y, c10[key]],
-                             [c11.x, c11.y, c11[key]], [c01.x, c01.y, c01[key]]];
-      frontQuads.push({ p: face("front"), uv, shade: SPRITE_SHADE_FRONT });
-      backQuads.push({ p: face("back"), uv, shade: SPRITE_SHADE_BACK });
-
-      // the rim, wherever the sprite stops. It samples the pixel's own centre:
-      // a texel-boundary UV would pick up the gap next to it, which is blank
-      const uMid = (x + 0.5) / w, vMid = (y + 0.5) / h;
-      const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
-      const wall = (a, b, shade) => wallQuads.push({
-        p: [[a.x, a.y, a.back], [a.x, a.y, a.front], [b.x, b.y, b.front], [b.x, b.y, b.back]],
-        uv: wallUv, shade,
-      });
-      if (!isSolid(x - 1, y)) wall(c00, c01, SPRITE_SHADE_LEFT);
-      if (!isSolid(x + 1, y)) wall(c11, c10, SPRITE_SHADE_RIGHT);
-      if (!isSolid(x, y - 1)) wall(c10, c00, SPRITE_SHADE_TOP);
-      if (!isSolid(x, y + 1)) wall(c01, c11, SPRITE_SHADE_BOTTOM);
-    }
+  const bodyRim = rimOf(body);
+  emit(body,
+    prevAt ? (x, y) => (prevAt(x, y) ? 1 : SPRITE_BLEND_PINCH) : bodyRim,
+    nextAt ? (x, y) => (nextAt(x, y) ? 1 : SPRITE_BLEND_PINCH) : bodyRim);
+  if (loose) {
+    const looseRim = rimOf(loose);
+    emit(loose, looseRim, looseRim);
   }
 
+  // back -> walls -> fronts, so the geometry is also correct in painter's order
   const positions = [], colors = [], uvs = [], indices = [];
   for (const q of backQuads.concat(wallQuads, frontQuads)) {
     const base = positions.length / 3;
@@ -284,8 +362,14 @@ class SpriteGeometryCache {
   constructor(resources) {
     this.resources = resources;
     this.byFrame = new Map();
-    this.smoothByFrame = new Map();  // the same frames, pixels rounded off
     this.byMask = new Map();
+    // the surfaces drawn as a stack of slices: the body/loose split per frame,
+    // and one rounded, blended shape per (slice in front, this, slice behind).
+    // The slices only ever ask for consecutive frames, so there are as many of
+    // those as the animation has frames and every pool shares them.
+    this.partsByFrame = new Map();
+    this.blendedByKey = new Map();
+    this.frameIds = new Map();
     this.flatByFrame = new Map();   // the silhouettes of clear physics mode
     this.flatColor = new THREE.Color(0xffffff);
     this._emptyGeom = resources.track(new THREE.BufferGeometry());
@@ -359,23 +443,63 @@ class SpriteGeometryCache {
     return entry;
   }
 
+  /** A frame's body and whatever floats loose of it, worked out once. */
+  _partsFor(frame) {
+    let parts = this.partsByFrame.get(frame);
+    if (parts !== undefined) return parts;
+    parts = spriteBodyParts(frame.getMask(), frame.width, frame.height);
+    this.partsByFrame.set(frame, parts);
+    return parts;
+  }
+
+  _frameId(frame) {
+    if (!frame) return -1;
+    let id = this.frameIds.get(frame);
+    if (id === undefined) { id = this.frameIds.size; this.frameIds.set(frame, id); }
+    return id;
+  }
+
   /**
-   * The same frame with its pixels rounded off, for the surfaces drawn as a
-   * stack of slices. Only the geometry differs, so the texture and material
-   * are the ones the square-edged entry already owns.
+   * Reads a neighbouring slice's body in `frame`'s own pixel grid. Frames
+   * carry their own offsets and need not even be the same size, so the same
+   * point of the level is not the same pixel in both.
    */
-  forFrameSmooth(frame) {
-    let entry = this.smoothByFrame.get(frame);
+  _bodyReader(frame, other) {
+    if (!other) return null;
+    const parts = this._partsFor(other);
+    if (!parts) return null;
+    const ow = other.width, oh = other.height, body = parts.body;
+    const dx = Math.round((frame.offsetX || 0) - (other.offsetX || 0));
+    const dy = Math.round((frame.offsetY || 0) - (other.offsetY || 0));
+    return (x, y) => {
+      const ax = x + dx, ay = y + dy;
+      return ax >= 0 && ax < ow && ay >= 0 && ay < oh && body[ay * ow + ax] !== 0;
+    };
+  }
+
+  /**
+   * One slice of a surface, rounded off and blended into the slices either
+   * side of it. Pass null for a neighbour at the front or back of the stack.
+   * Only the geometry differs from the square-edged cut, so the texture and
+   * material are the ones that entry already owns.
+   */
+  forFrameBlended(prevFrame, frame, nextFrame) {
+    const key = this._frameId(prevFrame) + "/" + this._frameId(frame) +
+      "/" + this._frameId(nextFrame);
+    let entry = this.blendedByKey.get(key);
     if (entry) return entry;
     const flat = this.forFrame(frame);
-    const w = frame.width, h = frame.height;
-    const mask = frame.getMask();
-    let geometry = buildSmoothSpriteGeometry(
-      (x, y) => mask[y * w + x] !== 0, w, h, SPRITE_DEPTH);
+    const parts = this._partsFor(frame);
+    let geometry = null;
+    if (parts) {
+      geometry = buildBlendedSpriteGeometry(parts.body, parts.loose,
+        this._bodyReader(frame, prevFrame), this._bodyReader(frame, nextFrame),
+        frame.width, frame.height, SPRITE_DEPTH);
+    }
     if (geometry) this.resources.track(geometry);
     else geometry = this._emptyGeom;
     entry = { material: flat.material, geometry, w: flat.w, h: flat.h };
-    this.smoothByFrame.set(frame, entry);
+    this.blendedByKey.set(key, entry);
     return entry;
   }
 

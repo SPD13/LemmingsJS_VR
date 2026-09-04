@@ -2565,17 +2565,19 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // instead of sliding along as one extruded block
     const stacks = state.doors ? stackedObjectsFrom(level, profile) : [];
     const stackIndices = new Set(stacks.map((s) => s.index));
-    // with the corners rounded off (the "smooth terrain" switch) a slice
-    // wears the smoothed cut of the same frame; the texture is shared
-    const waveEntryFor = (frame) => (state.smoothTerrain
-      ? materialCache.forFrameSmooth(frame) : materialCache.forFrame(frame));
+    // with the corners rounded off (the "smooth terrain" switch) a slice wears
+    // the rounded cut of its frame, blended into the slices either side of it;
+    // the texture is shared with the square-edged cut
+    const waveEntryFor = (prev, frame, next) => (state.smoothTerrain
+      ? materialCache.forFrameBlended(prev || null, frame, next || null)
+      : materialCache.forFrame(frame));
     for (const stack of stacks) {
       stack.meshes = [];
       // built wearing the first frame rather than bare: an empty mesh carries
       // a default geometry and material that nothing owns, and would sit at
       // the origin until the first tick redressed it
       const first = stack.mapObject.animation.frames[0];
-      const entry = waveEntryFor(first);
+      const entry = waveEntryFor(null, first, null);
       for (let k = 0; k < stack.phases.length; k++) {
         const mesh = new THREE.Mesh(entry.geometry, entry.material);
         mesh.scale.y = stack.flipY ? -1 : 1;
@@ -2722,10 +2724,16 @@ Vfs.boot("", "setup.html").then(function (booted) {
         const waveTick = game.getGameTimer().getGameTicks();
         for (const stack of stacks) {
           const object = stack.mapObject;
+          // every slice's frame first: each one is blended into the slices in
+          // front of and behind it, so it has to know what they are showing
+          const shown = [];
           for (let k = 0; k < stack.meshes.length; k++) {
-            const frame = frameAtPhase(object, waveTick, stack.phases[k]);
+            shown.push(frameAtPhase(object, waveTick, stack.phases[k]));
+          }
+          for (let k = 0; k < stack.meshes.length; k++) {
+            const frame = shown[k];
             if (!frame) continue;
-            const entry = waveEntryFor(frame);
+            const entry = waveEntryFor(shown[k - 1], frame, shown[k + 1]);
             const mesh = stack.meshes[k];
             mesh.geometry = entry.geometry;
             mesh.material = game.clearPhysics

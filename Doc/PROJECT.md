@@ -207,21 +207,51 @@ water, so they are drawn through the depth of the slab rather than once at the
 plane objects sit on: the sprite is repeated every `SPRITE_DEPTH` from the
 front of the slab to the back, reusing the geometry each animation frame is
 already cached as. Stacking the same frame would only extrude it — one solid
-block of wave sliding along — so each slice runs the same animation a few
-frames apart, and at any moment they show different parts of the cycle and the
-surface churns. The offsets are drawn once from a generator seeded by the
-object's own index, never letting two neighbouring slices share one, so a
-reload and a replay churn the same way. A DOS animation is a function of the
-tick, so the offset is added to it; a Lemmix gadget carries its own counter,
-so it is wound on, the composite taken and the counter put back.
+block of wave sliding along — so each slice runs the animation one frame on
+from the slice in front of it, and at any moment they show consecutive parts
+of the cycle. Read down the slab it is a wave travelling back through it.
+Where that wave starts is seeded from the object's own index, so two pools are
+not in step and a reload and a replay churn the same way. A DOS animation is a
+function of the tick, so the offset is added to it; a Lemmix gadget carries
+its own counter, so it is wound on, the composite taken and the counter put
+back.
 
-With **smooth terrain** on, the slices wear a rounded cut of the same frames:
-the outline's corners slide as the terrain's do, and each slice's rim is made
-thinner than its middle, so the edge rolls off rather than ending in a square
-wall. The thinning is symmetric about the slice's midplane, so slices still
-abut and no gap opens between them. Only geometry is rebuilt — the rounded
-entry shares the square-edged one's texture — and only these surfaces use it:
-lemmings and ordinary objects stay square-edged.
+A step of one frame is also what makes the blend below affordable: the slices
+only ever ask for consecutive frames, so a pool needs as many blended shapes
+as the animation has frames and every pool in the level shares them.
+Scattered offsets would need one shape per combination — 512 against 25 for an
+eight-frame water, some 288 MB of geometry — and would blend shapes with
+nothing in common anyway.
+
+With **smooth terrain** on, the slices are rounded off and blended into one
+another so the stack reads as one body rather than as layers. Across a slice
+the outline's corners slide as the terrain's do. Through it, how far a column
+reaches toward each face is asked of the neighbouring slice: where that slice
+has the same pixel the column runs the full depth and the two meet flush, so
+nothing separates them; where it does not, the column closes off short of the
+face instead of ending in a square wall. At the front and back of the stack
+there is no neighbour to ask, so the rim rolls off there and the whole stack
+is rounded rather than cut.
+
+**The body and what floats loose of it.** That blend has to know what may be
+joined to what, because these animations carry spray: a pixel or two of foam
+thrown clear of the surface. Measured across every water and lava piece, 124
+have detached parts, and in 123 of them a droplet in one frame sits *exactly*
+where the water is in another. So a distance limit cannot help — the distance
+is nothing, and any threshold loose enough to blend the body would weld the
+droplet to it.
+
+Connectivity settles it instead, and exactly: a flood fill splits each frame
+into its largest run of touching pixels, the body, and everything else. Only
+bodies are blended, one slice's to the next. Loose parts keep a rim on both
+faces, are never joined to anything, and are built from their own pixels, so
+no surface can reach from a droplet to the body however close they sit. A part
+too big to be spray is left loose as well, which costs it the blend but is a
+safe floor rather than a wrong result.
+
+Only geometry is rebuilt — the blended entry shares the square-edged one's
+texture — and only these surfaces use it: lemmings and ordinary objects stay
+square-edged.
 
 Which objects are openings comes from the profile
 (`objects.byId[<id>] = {shape, depth}`), defaulting to entrances (object id 1)

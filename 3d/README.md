@@ -205,8 +205,11 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   are the surface of — as wide as the sprite, reaching down column by column
   to whatever ground stops it and as deep as the slab. Water and any stretch
   of lava or acid are drawn through that depth as well, as a stack of slices
-  of the wave sprite each running the animation at its own offset, so the
-  surface churns instead of sliding along as one block. Off, they all stay
+  of the wave sprite, each running the animation one frame on from the slice
+  in front of it, so the surface churns instead of sliding along as one
+  block. With "smooth terrain" on the slices are blended into one another and
+  the stack reads as one rippling body rather than as layers. Off, they all
+  stay
   the sprites the original draws and the
   terrain behind an opening is left uncarved. The carve happens as the level
   is built, so toggling this rebuilds the level rather than swapping in
@@ -473,13 +476,21 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   software-blitted pixels. Sprites are not flat cutouts: each animation
   frame's opaque pixels are greedy-meshed once into a `SPRITE_DEPTH`-deep
   relief with shaded edge walls (the plan's "characters get volume", §5.5)
-  and cached. A second, rounded cut of the same frames is built on demand for
-  the surfaces drawn as a stack of slices (`buildSmoothSpriteGeometry`): the
-  outline's corners slide along their diagonals and the rim gives up some of
-  its depth, so water and lava lose the staircase and the square edge at
-  once. It shares the square-edged entry's texture, so only geometry is
-  added. `HeadlessStage` satisfies the Stage contract for
-  `DisplayImage` without a canvas.
+  and cached. A second, rounded cut is built on demand for the surfaces drawn
+  as a stack of slices (`buildBlendedSpriteGeometry`). Across a slice the
+  outline's corners slide along their diagonals, losing the staircase. Through
+  it, how far a column reaches toward each face is asked of the neighbouring
+  slice, so where they carry the same pixel the two meet flush and the stack
+  reads as one body; only the front and back of the stack, having no
+  neighbour, keep a rounded rim. What may be joined to what is decided by a
+  flood fill (`spriteBodyParts`): the largest run of touching pixels is the
+  body and is blended, while spray thrown clear of it is never joined to
+  anything, which is the only thing that stops a droplet welding itself to
+  the water it floats over. The rounded cut shares the square-edged entry's
+  texture, so only geometry is added, and it is keyed by the three frames it
+  was built from, so every pool in a level shares the same handful of shapes.
+  `HeadlessStage` satisfies the Stage contract for `DisplayImage` without a
+  canvas.
 - `js/portals.js` — entrances and exits as real openings (plan §5.4). The
   entrance is a hatch lying flat overhead with two doors hinged along
   its left and right edges: the trapezoid in the artwork is un-projected back
