@@ -158,29 +158,54 @@ Two optional treatments sit on top:
   the sprite's artwork is on it, so there is nothing to keep legible), and the
   face meeting them agrees too, so a wall leaves the face in the colour the
   face ends on instead of breaking from it. Where surface blend is also on,
-  its donor colours become waypoints down the wall, so its bands turn into a
-  gradient. These quads carry their colour per vertex and are drawn by a
+  the wall is cut into the same bands with the same per-pixel jittered donor
+  picks as the textured path, so the grain survives; each band is a plateau
+  with a ramp to the next (at *smooth*, one gradient through the picks), and
+  a corner shares the mean of the two columns' picks so the grain is
+  continuous across them. These quads carry their colour per vertex and are drawn by a
   second, map-less material as another group of the same chunk geometry; like
   smooth terrain they need a quad per pixel, and cost about the same.
 
-  A wall is one flat colour down the whole depth of the extrusion, so a row of
-  them reads as lines running away from the viewer — worst on the surface the
+  A wall is stretched down the whole depth of the extrusion, so a row of them
+  reads as lines running away from the viewer — worst on the surface the
   lemmings walk along, which is nothing but wall seen end-on, where two
-  neighbouring pixels a shade apart become two stripes 16 pixels long. So a
-  wall takes its colour from a diffused reading of the picture: each pixel
-  pulled three quarters of the way toward the mean of the eight around it in x
-  and y, which on the dirt style takes the step between neighbouring
-  walking-surface pixels down by about seven tenths. The face is left alone —
-  the picture is read from it directly, and nothing stretches it.
+  neighbouring pixels a shade apart become two stripes 16 pixels long. Three
+  things keep that surface continuous. Along x, neighbouring walls share
+  their corner colours (the cap walls once laid their two colours out down z
+  instead of across x, which made every column one flat stripe). Down z, a
+  wall leaves the face in exactly the colour the face ends on and, at
+  *smooth*, four pixels in has run out into a *diffused* reading of the
+  picture — each pixel pulled three quarters of the way toward the mean of
+  the eight around it in x and y, which on the dirt style takes the step
+  between neighbouring walking-surface pixels down by about seven tenths —
+  and stays that to the base (or runs the same way back into the face of the
+  pixel it drops onto). The blur is smooth's alone: at *soft* the face keeps
+  its pixels, so the walls carry those same pixels straight down instead of
+  running off into a blur the face does not have.
+  And its shade is per corner rather than per face: the four wall shades
+  mixed by the way the outline faces at that corner, so a one-pixel step in
+  the outline no longer puts a dark side wall between two lighter caps, the
+  worst of the stripes. A long straight edge still gets its wall's own shade
+  in the middle and only rounds off at the ends. The face is left alone — the
+  picture is read from it directly, and nothing stretches it.
 
   It is a strength rather than a switch, cycled by its button in the 3D effects
-  drawer (`lem3d-color-blend`, `?colorblend=off|soft|smooth`). At *smooth* a
-  corner is the plain mean of the pixels meeting there, every quad sharing it
-  agrees and the surface is continuous — which over a whole sprite reads as
-  blur, since no pixel keeps a colour of its own. *soft* (the default) lets
-  each pixel keep most of its own, so an edge survives as a small step with a
-  gradient either side and the sprite stays legible. *off* leaves the pixels
-  as they were drawn.
+  drawer (`lem3d-color-blend`, `?colorblend=off|soft|smooth`): how much of
+  each pixel runs out into the colours it shares with its neighbours. At
+  *smooth* all of it does — a quad is nothing but its four corner means, so
+  the surface is continuous everywhere, which over a whole sprite reads as
+  blur since no pixel keeps a colour of its own. *soft* (the default) gives
+  only the outer half of each pixel to the blend and leaves a plateau of its
+  own colour in the middle: the face becomes a 3×3 grid of quads per pixel,
+  the plateau and a ring of ramps around it running to the corner means and,
+  along each edge, to the mean of the two pixels across it. The next pixel
+  ramps to the same colours from its side, so a boundary is crossed in one
+  continuous slope with no step in it, and the pixels stay legible as pixels.
+  The walls follow the face's edge exactly — cut into the same three strips
+  across, their tops carrying the corner means at the ends and the pixel's
+  own colour between — so the walking surface has the same gentle per-column
+  structure as the face above it rather than either the full blur or stripes.
+  *off* leaves the pixels as they were drawn.
 - **smooth relief**: slopes the relief between neighbouring heights by
   averaging the pixel heights meeting at each quad corner, staying crisp at
   depth-class boundaries and silhouettes. This is smoothing through the slab.
