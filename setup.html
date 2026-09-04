@@ -66,6 +66,9 @@
   .row.drop { border-color: #6fce7e; }
   .row.empty .lib-row-name { color: #8fa1bb; }
   .row .grow { flex: 1; min-width: 200px; }
+  .where { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 8px; border: 1px solid; text-transform: uppercase; letter-spacing: .04em; }
+  .where.server { color: #7fd6e8; border-color: #35707c; }
+  .where.browser { color: #c9b26a; border-color: #6a5b2c; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; }
   .dot.on { background: #6fce7e; color: #6fce7e; }
   .dot.off { background: #e0554a; color: #e0554a; }
@@ -164,6 +167,7 @@
 
   <div class="card" id="levels">
     <h2>Levels</h2>
+    <div id="levels-where" class="dim"></div>
     <div id="level-list"></div>
     <div class="btnrow">
       <button id="btn-get-packs" data-busy>get the Lemmings Plus packs</button>
@@ -182,10 +186,11 @@
     <div id="progress-label"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="config">
     <h2>Configuration</h2>
     <div class="dim"><span id="config-where">Your settings live in this browser too.</span> Download them to keep or move them; upload a file to bring them back.</div>
     <div class="row">
+      <span class="where browser">browser</span>
       <span class="lib-row-name">Controls <span class="dim">keyboard, mouse and VR controller bindings</span></span>
       <button id="btn-dl-controls">download</button>
       <button id="btn-ul-controls">upload…</button>
@@ -193,6 +198,7 @@
     </div>
     <div id="msg-controls" class="msg"></div>
     <div class="row">
+      <span class="where browser">browser</span>
       <span class="lib-row-name">Preferences <span class="dim">3D effects, default view, sound and music, the VR skills bar's place, the library's order</span></span>
       <button id="btn-dl-prefs">download</button>
       <button id="btn-ul-prefs">upload…</button>
@@ -200,6 +206,7 @@
     </div>
     <div id="msg-prefs" class="msg"></div>
     <div class="row">
+      <span class="where browser">browser</span>
       <span class="lib-row-name">Progress <span class="dim">the levels cleared, best times, most lemmings saved, talismans</span></span>
       <button id="btn-dl-progress">download</button>
       <button id="btn-ul-progress">upload…</button>

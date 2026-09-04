@@ -42,6 +42,39 @@ const MIME = {
 // the configuration files the game keeps on the server (config/README.md)
 const CONFIG_FILE_RE = /^\/config\/lemmings-3d-(controls|preferences|progress)\.json$/;
 
+// the level directories the setup page writes in server mode: a name
+// without slashes or a leading dot, then any path below it; files up to
+// MAX_UPLOAD bytes each
+const LEVEL_DIR_RE = /^\/levels\/([^\/.][^\/]*)\/?$/;
+const LEVEL_FILE_RE = /^\/levels\/([^\/.][^\/]*\/.+[^\/])$/;
+const MAX_UPLOAD = 200e6;
+
+/** Every folder under `levelsRoot`: [{dir, files, bytes, mtime}], the files counted through the folder. */
+function levelDirs(levelsRoot) {
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(levelsRoot); } catch (e) { return out; }
+  for (const dir of names.sort()) {
+    if (dir.startsWith(".")) continue;
+    const full = path.join(levelsRoot, dir);
+    let stat;
+    try { stat = fs.statSync(full); } catch (e) { continue; }
+    if (!stat.isDirectory()) continue;
+    let files = 0, bytes = 0;
+    const walk = (d) => {
+      for (const name of fs.readdirSync(d)) {
+        const p = path.join(d, name);
+        const st = fs.statSync(p);
+        if (st.isDirectory()) walk(p);
+        else { files++; bytes += st.size; }
+      }
+    };
+    try { walk(full); } catch (e) { /* unreadable: counted so far */ }
+    out.push({ dir, files, bytes, mtime: stat.mtimeMs });
+  }
+  return out;
+}
+
 /**
  * Read a request's body as JSON (at most 1 MB), hand its pretty-printed
  * text to `write`, and answer {"ok":true} - or 400 when it is not JSON.
@@ -88,6 +121,52 @@ function createStaticServer(root, port, tls = null) {
             fs.mkdirSync(path.dirname(savePath), { recursive: true });
             fs.writeFileSync(savePath, json);
           });
+          return;
+        }
+
+        // the level directories on disk, for the setup page in server mode:
+        // [{dir, files, bytes, mtime}] for every folder under levels/
+        if (req.method === "GET" && /^\/levels\/dirs\.json$/.test(urlPath)) {
+          const json = JSON.stringify(levelDirs(path.join(absRoot, "levels")));
+          res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
+          res.end(json);
+          return;
+        }
+
+        // the setup page installs a level pack on the server: one PUT per
+        // file under levels/<dir>/, and DELETE levels/<dir> removes a
+        // directory. Nothing above levels/ is reachable, and no dot names.
+        const levelFile = req.method === "PUT" && LEVEL_FILE_RE.exec(urlPath);
+        if (levelFile) {
+          const savePath = path.normalize(path.join(absRoot, "levels", levelFile[1]));
+          if (!savePath.startsWith(path.join(absRoot, "levels") + path.sep) || /(^|\/)\.\.?(\/|$)/.test(levelFile[1])) {
+            res.writeHead(403);
+            res.end("forbidden");
+            return;
+          }
+          fs.mkdirSync(path.dirname(savePath), { recursive: true });
+          let size = 0;
+          const out = fs.createWriteStream(savePath);
+          req.on("data", (chunk) => { size += chunk.length; if (size > MAX_UPLOAD) req.destroy(); });
+          req.pipe(out);
+          out.on("finish", () => {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end('{"ok":true}');
+          });
+          out.on("error", () => { res.writeHead(500); res.end("not written"); });
+          return;
+        }
+        const levelDir = req.method === "DELETE" && LEVEL_DIR_RE.exec(urlPath);
+        if (levelDir) {
+          const dir = path.join(absRoot, "levels", levelDir[1]);
+          if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+            res.writeHead(404);
+            res.end("no such directory");
+            return;
+          }
+          fs.rmSync(dir, { recursive: true, force: true });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end('{"ok":true}');
           return;
         }
 

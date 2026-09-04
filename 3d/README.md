@@ -297,7 +297,13 @@ guide" link opens `setup.md`, the player's guide to the assets.
   keeps that layout, which the index collapses. After every change the page
   rebuilds `levels/index.json` and `neolemmix/styles/index.json` in the
   store with the same generators the launcher uses (`tools/levels-index.js`,
-  `tools/styles-index.js`, loaded as plain scripts here).
+  `tools/styles-index.js`, loaded as plain scripts here). In server mode
+  the section is the server's `levels/` folder instead: the launcher lists
+  its directories, takes a pack file by file (`PUT levels/<dir>/<file>`)
+  and removes one (`DELETE levels/<dir>`), and builds the index live; a
+  plain web server lists what its index names, read-only. A mark before
+  each directory - and before each Configuration row - says which side it
+  is on, *server* or *browser*.
 - **Configuration**: download / upload of three JSON files - the controls
   (`lemmings-3d-controls.json`, the hotkey dialog's own format), the
   preferences (`lemmings-3d-preferences.json`: every `lem3d-*` setting the

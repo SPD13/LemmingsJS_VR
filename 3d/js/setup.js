@@ -130,7 +130,7 @@
    * fflate and writes every BATCH entries, so the package never sits in
    * memory whole. Returns {files, bytes}.
    */
-  async function unpackZip(file, map, label) {
+  async function unpackZip(file, map, label, put = browserLevels.put) {
     const unzipper = new fflate.Unzip();
     unzipper.register(fflate.UnzipInflate);
     let ready = [];
@@ -158,7 +158,7 @@
       if (!ready.length) return;
       const batch = ready;
       ready = [];
-      await Vfs.putFiles(batch, null);
+      await put(batch);
     };
     const reader = file.stream().getReader();
     let read = 0;
@@ -234,6 +234,80 @@
     return { dirs: [dir], map: (n) => ({ path: "levels/" + dir + "/" + n, unit: "levels/" + dir }) };
   }
 
+  // ---- where the levels go: this browser's store, or the server's levels/ folder ----
+
+  /** The browser's store (static mode): what the service worker serves. */
+  const browserLevels = {
+    where: "browser",
+    writable: true,
+    async dirs() {
+      const units = await unitsById();
+      return (await Vfs.levelDirs()).map((dir) => {
+        const u = units["levels/" + dir];
+        return { dir, files: u ? u.files : null, bytes: u ? u.bytes : null, source: u ? u.source : "", installedAt: u ? u.installedAt : null };
+      });
+    },
+    async index() { try { return JSON.parse(await Vfs.readText(Vfs.INDEX_PATH)); } catch (e) { return null; } },
+    persist: () => Vfs.persist(),
+    put: (batch) => Vfs.putFiles(batch, null),
+    async deleteDir(dir) {
+      await Vfs.deleteUnit("levels/" + dir);
+      await Vfs.deletePrefix("levels/" + dir + "/"); // whatever else landed there
+    },
+    record: (dir, source) => recordLevelDir(dir, source),
+    changed: () => rebuildIndexes(),
+  };
+
+  /**
+   * The server's levels/ folder (server mode): the launcher lists it,
+   * takes a pack file by file and removes a directory (launcher/README.md).
+   * A plain web server answers none of that: its index names the
+   * directories, read-only.
+   */
+  const serverLevels = {
+    where: "server",
+    writable: false, // until dirs.json answers
+    async dirs() {
+      const list = await fetchJson("levels/dirs.json");
+      this.writable = Array.isArray(list);
+      if (list) return list.map((d) => ({ dir: d.dir, files: d.files, bytes: d.bytes, source: "", installedAt: d.mtime }));
+      const index = await this.index();
+      const dirs = Array.from(new Set(((index && index.children) || []).map((n) => n.path.split("/")[0])));
+      return dirs.map((dir) => ({ dir, files: null, bytes: null, source: "", installedAt: null }));
+    },
+    index: () => fetchJson(Vfs.INDEX_PATH),
+    persist: async () => {},
+    async put(batch) {
+      const queue = batch.slice();
+      const worker = async () => {
+        for (;;) {
+          const e = queue.shift();
+          if (!e) return;
+          const res = await fetch(ROOT + e.path.split("/").map(encodeURIComponent).join("/"), { method: "PUT", body: e.blob });
+          if (!res.ok) throw new Error("the server answered " + res.status + " for " + e.path);
+        }
+      };
+      await Promise.all(Array.from({ length: 6 }, worker));
+    },
+    async deleteDir(dir) {
+      const res = await fetch(ROOT + "levels/" + encodeURIComponent(dir), { method: "DELETE" });
+      if (!res.ok && res.status !== 404) throw new Error("the server answered " + res.status);
+    },
+    record: async () => {},
+    // the launcher builds levels/index.json live; only the classic scan cache is stale
+    async changed() { try { localStorage.removeItem(SCAN_CACHE_KEY); } catch (e) {} },
+  };
+
+  /** The store the Levels section works on, in the mode in force. */
+  const levels = () => Vfs.mode === "server" ? serverLevels : browserLevels;
+
+  /** False, with a message, when the server in force takes no installs. */
+  function levelsWritable() {
+    if (levels().writable) return true;
+    say("msg-levels", "this server does not take level installs (only the launcher does)", true);
+    return false;
+  }
+
   // ---- installs ----
 
   async function installZip(file, expected) {
@@ -273,7 +347,7 @@
     }
     // the level directories NeoLemmix's zip carries replace their namesakes
     const dirs = kind === "engine" ? levelDirsIn(names.map((e) => e.name)) : [];
-    if (dirs.length && !(await confirmReplaceDirs(dirs))) return;
+    if (dirs.length && !(await confirmReplaceDirs(dirs, browserLevels))) return;
     await Vfs.persist();
     progress("removing the previous " + label, null);
     if (units[kind]) await Vfs.deleteUnit(kind);
@@ -288,8 +362,8 @@
 
   const levelDirsIn = (list) => Array.from(new Set(list.filter((n) => n.startsWith("levels/") && n.split("/").length > 2).map((n) => n.split("/")[1])));
 
-  async function confirmReplaceDirs(dirs) {
-    const have = new Set(await Vfs.levelDirs());
+  async function confirmReplaceDirs(dirs, store = levels()) {
+    const have = new Set((await store.dirs()).map((d) => d.dir));
     const clash = dirs.filter((d) => have.has(d));
     if (!clash.length) return true;
     return askConfirm("Replace " + (clash.length === 1 ? "the level directory " + clash[0] : clash.length + " level directories") + "?",
@@ -305,14 +379,16 @@
   }
 
   async function installLevelZip(file, names) {
+    const store = levels();
+    if (!levelsWritable()) return;
     const { dirs, map } = levelZipMap(names, file.name);
     if (!(await confirmReplaceDirs(dirs))) return;
-    await Vfs.persist();
-    for (const d of dirs) await Vfs.deleteUnit("levels/" + d);
-    const { files, bytes } = await unpackZip(file, map, "unpacking " + file.name);
-    for (const d of dirs) await recordLevelDir(d, file.name);
-    await rebuildIndexes();
-    say("msg-levels", dirs.join(", ") + " installed: " + files + " files, " + fmtMB(bytes));
+    await store.persist();
+    for (const d of dirs) await store.deleteDir(d);
+    const { files, bytes } = await unpackZip(file, map, "unpacking " + file.name, store.put);
+    for (const d of dirs) await store.record(d, file.name);
+    await store.changed();
+    say("msg-levels", dirs.join(", ") + " installed on the " + store.where + ": " + files + " files, " + fmtMB(bytes));
   }
 
   /** A folder picked with the directory input: levels/<its name>/... */
@@ -321,24 +397,26 @@
     const files = Array.from(fileList).filter((f) => f.webkitRelativePath && !/(^|\/)\./.test(f.webkitRelativePath));
     const dirs = Array.from(new Set(files.map((f) => f.webkitRelativePath.split("/")[0])));
     if (!dirs.length) { say("msg-levels", "nothing to install in that folder", true); return; }
+    const store = levels();
+    if (!levelsWritable()) return;
     try {
       if (!(await confirmReplaceDirs(dirs))) return;
-      await Vfs.persist();
-      for (const d of dirs) await Vfs.deleteUnit("levels/" + d);
+      await store.persist();
+      for (const d of dirs) await store.deleteDir(d);
       progress("storing " + dirs.join(", "), 0);
       let done = 0, bytes = 0;
       for (let i = 0; i < files.length; i += BATCH) {
         const batch = files.slice(i, i + BATCH).map((f) => ({
           path: "levels/" + f.webkitRelativePath, unit: "levels/" + f.webkitRelativePath.split("/")[0], blob: f,
         }));
-        await Vfs.putFiles(batch, null);
+        await store.put(batch);
         done += batch.length;
         bytes += batch.reduce((n, e) => n + e.blob.size, 0);
         progress("storing " + dirs.join(", ") + " — " + done + " of " + files.length + " files", done / files.length);
       }
-      for (const d of dirs) await recordLevelDir(d, "folder upload");
-      await rebuildIndexes();
-      say("msg-levels", dirs.join(", ") + " installed: " + done + " files, " + fmtMB(bytes));
+      for (const d of dirs) await store.record(d, "folder upload");
+      await store.changed();
+      say("msg-levels", dirs.join(", ") + " installed on the " + store.where + ": " + done + " files, " + fmtMB(bytes));
     } catch (e) {
       say("msg-levels", "install failed: " + (e && e.message ? e.message : e), true);
       console.error(e);
@@ -352,13 +430,15 @@
   async function installClassic() {
     if (busy) return;
     say("msg-levels", "");
+    const store = levels();
+    if (!levelsWritable()) return;
     try {
       if (!(await confirmReplaceDirs(GITHUB.dirs))) return;
       progress("listing " + GITHUB.repo, null);
       const paths = await classicFileList();
       if (!paths.length) throw new Error("no files listed for " + GITHUB.dirs.join(", "));
-      await Vfs.persist();
-      for (const d of GITHUB.dirs) await Vfs.deleteUnit("levels/" + d);
+      await store.persist();
+      for (const d of GITHUB.dirs) await store.deleteDir(d);
       let done = 0, bytes = 0;
       const entries = [];
       const queue = paths.slice();
@@ -376,10 +456,11 @@
         }
       };
       await Promise.all(Array.from({ length: GITHUB.parallel }, worker));
-      await Vfs.putFiles(entries, null);
-      for (const d of GITHUB.dirs) await recordLevelDir(d, "github.com/" + GITHUB.repo);
-      await rebuildIndexes();
-      say("msg-levels", GITHUB.dirs.join(", ") + " installed: " + done + " files, " + fmtMB(bytes));
+      progress("storing " + GITHUB.dirs.join(", ") + " on the " + store.where, null);
+      await store.put(entries);
+      for (const d of GITHUB.dirs) await store.record(d, "github.com/" + GITHUB.repo);
+      await store.changed();
+      say("msg-levels", GITHUB.dirs.join(", ") + " installed on the " + store.where + ": " + done + " files, " + fmtMB(bytes));
     } catch (e) {
       say("msg-levels", "download failed: " + (e && e.message ? e.message : e), true);
       console.error(e);
@@ -409,14 +490,16 @@
 
   async function deleteLevelDir(dir) {
     if (busy) return;
-    const ok = await askConfirm("Delete " + dir + "?", "delete", "Its levels leave this browser's storage; your progress on them stays.");
+    const store = levels();
+    if (!levelsWritable()) return;
+    const ok = await askConfirm("Delete " + dir + "?", "delete",
+      "Its levels leave " + (store.where === "server" ? "the server's levels/ folder" : "this browser's storage") + "; your progress on them stays.");
     if (!ok) return;
     try {
       progress("deleting " + dir, null);
-      await Vfs.deleteUnit("levels/" + dir);
-      await Vfs.deletePrefix("levels/" + dir + "/"); // whatever else landed there
-      await rebuildIndexes();
-      say("msg-levels", dir + " deleted");
+      await store.deleteDir(dir);
+      await store.changed();
+      say("msg-levels", dir + " deleted from the " + store.where);
     } catch (e) {
       say("msg-levels", "delete failed: " + e.message, true);
     } finally {
@@ -522,28 +605,34 @@
         : "not installed";
       $("btn-zip-" + kind).textContent = u ? "re-install zip…" : "install zip…";
     }
-    // the level directories, named by the index when it knows them
-    let index = null;
-    try { index = JSON.parse(await Vfs.readText(Vfs.INDEX_PATH)); } catch (e) {}
+    // the level directories of the store in force, named by its index when it knows them
+    const store = levels();
+    const dirs = await store.dirs();
+    const index = await store.index();
     const nodes = new Map();
     for (const n of (index && index.children) || []) nodes.set(n.path.split("/")[0], n);
-    const dirs = await Vfs.levelDirs();
+    $("levels-where").textContent = store.where === "server"
+      ? (store.writable
+        ? "In server mode this is the server's levels/ folder: installs land there and delete removes from it."
+        : "In server mode this is the server's levels/ folder, as its index names it; this server takes no installs (only the launcher does).")
+      : "In static mode this is this browser's storage: installs land here.";
     const list = $("level-list");
     list.innerHTML = "";
     if (!dirs.length) list.innerHTML = '<div class="empty">no level directory installed</div>';
-    for (const dir of dirs) {
-      const u = units["levels/" + dir];
-      const node = nodes.get(dir);
+    for (const d of dirs) {
+      const node = nodes.get(d.dir);
       const row = document.createElement("div");
       row.className = "row" + (node ? "" : " empty");
       const engine = node ? node.engine : "";
+      const about = [d.bytes != null ? fmtMB(d.bytes) : "", d.files != null ? d.files + " files" : "", d.source].filter(Boolean).join(" · ");
       row.innerHTML =
-        '<span class="lib-row-name">' + escapeHtml(node ? node.name : dir) + (node && node.name !== dir ? ' <span class="dim">' + escapeHtml(dir) + "</span>" : "") + "</span>" +
+        '<span class="where ' + store.where + '">' + store.where + "</span>" +
+        '<span class="lib-row-name">' + escapeHtml(node ? node.name : d.dir) + (node && node.name !== d.dir ? ' <span class="dim">' + escapeHtml(d.dir) + "</span>" : "") + "</span>" +
         (engine ? '<span class="lib-badge ' + engine + '">' + engine + "</span>" : '<span class="lib-badge none">no levels found</span>') +
         '<span class="lib-count">' + (node ? node.count + " levels" : "") + "</span>" +
-        '<span class="dim">' + (u ? fmtMB(u.bytes) + " · " + escapeHtml(u.source) : "") + "</span>" +
-        '<button data-busy data-del="' + escapeHtml(dir) + '" title="delete this directory">delete</button>';
-      row.querySelector("button").addEventListener("click", () => deleteLevelDir(dir));
+        '<span class="dim">' + escapeHtml(about) + "</span>" +
+        (store.writable ? '<button data-busy data-del="' + escapeHtml(d.dir) + '" title="delete this directory">delete</button>' : "");
+      if (store.writable) row.querySelector("button").addEventListener("click", () => deleteLevelDir(d.dir));
       list.appendChild(row);
     }
     // storage
@@ -674,7 +763,7 @@
     for (const item of items) {
       const div = document.createElement("div");
       div.innerHTML = escapeHtml(item).replace(/(https?:\/\/[^\s<)]+)/g, (u) =>
-        '<a href="' + u + '" target="_blank" rel="noopener">' + u.replace(/^https?:\/\/(www\.)?/, "") + "</a>");
+          '<a href="' + u + '" target="_blank" rel="noopener">' + u.replace(/^https?:\/\/(www\.)?/, "") + "</a>");
       box.appendChild(div);
     }
   }
@@ -699,6 +788,10 @@
     const syncConfig = async () => {
       hotkeys = null; // read again from what the sync leaves
       await ConfigStore.sync(Vfs.mode, ROOT);
+      for (const el of document.querySelectorAll("#config .where")) {
+        el.className = "where " + (ConfigStore.active ? "server" : "browser");
+        el.textContent = ConfigStore.active ? "server" : "browser";
+      }
       $("config-where").textContent = ConfigStore.active
         ? "In server mode they are kept on the server too, in its config/ folder, and take precedence over this browser's copy: the downloads are those files and the uploads change them."
         : Vfs.mode === "server"
