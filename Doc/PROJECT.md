@@ -139,14 +139,22 @@ Two optional treatments sit on top:
   highlights.
 - **surface blend**: an extruded side wall repeats its surface pixel's one
   colour down the whole depth, which turns a shaded sprite into a monolithic
-  cliff wherever an edge is exposed. Tagged pieces instead cut the wall into
-  four bands and draw the colours the pixel's own colour region *touches* —
+  cliff wherever an edge is exposed. Every piece is spared that unless it is
+  tagged out — pieces opt out, not in, as they do of the 3D shade and the
+  colour blend, so a profile file carries only the `false` entries. It has no
+  master switch of its own. The wall is cut into
+  four bands instead, drawing the colours the pixel's own colour region *touches* —
   adjacency, not the sprite's whole palette, so a dark green may take the light
   green five pixels away that borders it but not a brown at the far end that
   borders nothing of it. The frontmost band keeps the surface pixel, so the lip
   still matches the front face. Colours come from ordinary level pixels carrying
   them, so clear-physics mode greys the bands along with everything else.
-- **colour blend**: the tagged pieces' pixels stop meeting at a hard edge.
+- **colour blend**: the terrain's pixels stop meeting at a hard edge. Every
+  piece takes it unless it is tagged out — pieces opt out, not in, as they do
+  of the 3D shade, since a sprite reading as a surface rather than as the grid
+  it was drawn on is wanted almost everywhere and a tag is better spent on the
+  exceptions than on the rule; a profile file therefore carries only the
+  `false` entries. The master switch answers for the cost.
   Every face corner takes the mean of the pixels of its class meeting there,
   and a wall runs from its own pixel's colour at the top to the colour of the
   pixel it drops onto at the base — x, y and z. A silhouette keeps one colour
@@ -206,6 +214,39 @@ Two optional treatments sit on top:
   own colour between — so the walking surface has the same gentle per-column
   structure as the face above it rather than either the full blur or stripes.
   *off* leaves the pixels as they were drawn.
+
+  The switch covers the animated surfaces too — water, lava, acid — with no
+  tag of its own: those are the only sprites drawn as scenery rather than as
+  things standing in it, so they are in whenever it is on. They cannot be
+  built the same way: their faces are greedy rectangles wearing a texture,
+  and their stack is redressed every tick out of a cache of shapes shared
+  between pools, so there is no per-pixel quad to hang corner colours on. The
+  same profile is written into the texture instead and read back out by the
+  sampler (`bridge.js` buildBlendedFrameRgba): each pixel is drawn four texels
+  across, every sub-texel holding the colour the terrain's grid would put at
+  that point of it, and the texture is filtered linearly rather than nearest.
+  Only opaque pixels are averaged, as only pixels of the same class are in the
+  terrain; the transparent ones along the rim are filled with the mean of the
+  opaque pixels beside them, which is the colour the rim was heading for
+  anyway and is what keeps the sampler from bleeding the black they are stored
+  as into the edge. Alpha is not blended, so the silhouette is where it was.
+  One material per frame per strength, so the strengths are built once each
+  and cycling between them costs nothing.
+
+  The face was the easy half. A slice's *rim* — which is what the top of a
+  pool is, seen end-on, and so the biggest flat of it — used to read the
+  picture at the pixel's own middle, one point for the whole quad: with a
+  square-edged texture that is the only safe place to read, since a corner is
+  a texel boundary with nothing but the gap on the other side of it. One flat
+  colour per pixel is exactly the facet the blend is meant to dissolve, so the
+  ends now read just inside the corners they stand on instead
+  (SPRITE_WALL_UV_INSET, `bridge.js`). Near enough to the boundary that a
+  linearly filtered blended texture gives almost the whole corner colour, so
+  the rim leaves the face in the colour the face ends on and two rims meeting
+  at a corner agree on it — the terrain's rule for the same seam. Far enough
+  inside that nearest filtering still rounds to the pixel itself, so with the
+  blend off nothing about the square-edged look changes, and one geometry
+  still serves both.
 - **smooth relief**: slopes the relief between neighbouring heights by
   averaging the pixel heights meeting at each quad corner, staying crisp at
   depth-class boundaries and silhouettes. This is smoothing through the slab.

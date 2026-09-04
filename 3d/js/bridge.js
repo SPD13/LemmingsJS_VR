@@ -34,6 +34,20 @@ const SPRITE_SHADE_BOTTOM = 0.5;
  */
 const SPRITE_SMOOTH_PULL = 0.35;   // how far a corner slides, in pixels
 const SPRITE_SMOOTH_BEVEL = 0.4;   // how much of its depth the rim gives up
+/**
+ * How far inside its own pixel a wall reads the picture, in pixels.
+ *
+ * A wall's ends sample the pixel's corners rather than its middle, so that the
+ * rim leaves the face in the colour the face ends on and two walls meeting at
+ * a corner agree on it - which is what stops the top of a surface, which is
+ * nothing but rim seen end-on, reading as one flat facet per pixel. The
+ * corners themselves are texel boundaries and there is nothing but the gap on
+ * the other side of them, so the ends stop just short: near enough for the
+ * linear filtering of a colour-blended texture to give almost the whole corner
+ * colour, and far enough inside that nearest filtering still rounds to the
+ * pixel itself, leaving the square-edged texture exactly as it was.
+ */
+const SPRITE_WALL_UV_INSET = 0.05;
 // What a column keeps of its depth where the next slice has nothing there:
 // enough to close the shape off rather than end it in a square wall.
 const SPRITE_BLEND_PINCH = 0.15;
@@ -128,7 +142,9 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
         let run = 1;
         while (y + run < h && isSolid(x, y + run) && !isSolid(x + dir, y + run)) run++;
         const wx = dir === -1 ? x : x + 1;
-        const u = (x + 0.5) / w, va = y / h, vb = (y + run) / h;
+        const IN = SPRITE_WALL_UV_INSET;
+        const u = (x + (dir === -1 ? IN : 1 - IN)) / w;
+        const va = (y + IN) / h, vb = (y + run - IN) / h;
         pushTo(wallQuads)(
           [[wx, y, 0], [wx, y, depth], [wx, y + run, depth], [wx, y + run, 0]],
           [[u, va], [u, va], [u, vb], [u, vb]],
@@ -145,7 +161,9 @@ function buildExtrudedSpriteGeometry(isSolidRaw, w, h, depth) {
         let run = 1;
         while (x + run < w && isSolid(x + run, y) && !isSolid(x + run, y + dir)) run++;
         const wy = dir === -1 ? y : y + 1;
-        const v = (y + 0.5) / h, ua = x / w, ub = (x + run) / w;
+        const IN = SPRITE_WALL_UV_INSET;
+        const v = (y + (dir === -1 ? IN : 1 - IN)) / h;
+        const ua = (x + IN) / w, ub = (x + run - IN) / w;
         pushTo(wallQuads)(
           [[x, wy, 0], [x + run, wy, 0], [x + run, wy, depth], [x, wy, depth]],
           [[ua, v], [ub, v], [ub, v], [ua, v]],
@@ -312,18 +330,22 @@ function buildBlendedSpriteGeometry(body, loose, prevAt, nextAt, w, h, depth) {
         frontQuads.push({ p: face("front"), uv, shade: SPRITE_SHADE_FRONT });
         backQuads.push({ p: face("back"), uv, shade: SPRITE_SHADE_BACK });
 
-        // the rim, wherever the shape stops. It samples the pixel's own centre:
-        // a texel-boundary UV would pick up the gap next to it, which is blank
-        const uMid = (x + 0.5) / w, vMid = (y + 0.5) / h;
-        const wallUv = [[uMid, vMid], [uMid, vMid], [uMid, vMid], [uMid, vMid]];
-        const wall = (a, b, shade) => wallQuads.push({
+        // the rim, wherever the shape stops. Each end reads the picture just
+        // inside the pixel's corner it stands on (SPRITE_WALL_UV_INSET), so
+        // the rim runs between the same colours the face is running to and
+        // the surface's top - which is nothing but rim seen end-on - carries
+        // the blend along it instead of a flat facet per pixel
+        const IN = SPRITE_WALL_UV_INSET;
+        const uvAt = (right, down) => [(x + (right ? 1 - IN : IN)) / w,
+                                       (y + (down ? 1 - IN : IN)) / h];
+        const wall = (a, b, shade, uvA, uvB) => wallQuads.push({
           p: [[a.x, a.y, a.back], [a.x, a.y, a.front], [b.x, b.y, b.front], [b.x, b.y, b.back]],
-          uv: wallUv, shade,
+          uv: [uvA, uvA, uvB, uvB], shade,
         });
-        if (!isSolid(x - 1, y)) wall(c00, c01, SPRITE_SHADE_LEFT);
-        if (!isSolid(x + 1, y)) wall(c11, c10, SPRITE_SHADE_RIGHT);
-        if (!isSolid(x, y - 1)) wall(c10, c00, SPRITE_SHADE_TOP);
-        if (!isSolid(x, y + 1)) wall(c01, c11, SPRITE_SHADE_BOTTOM);
+        if (!isSolid(x - 1, y)) wall(c00, c01, SPRITE_SHADE_LEFT, uvAt(0, 0), uvAt(0, 1));
+        if (!isSolid(x + 1, y)) wall(c11, c10, SPRITE_SHADE_RIGHT, uvAt(1, 1), uvAt(1, 0));
+        if (!isSolid(x, y - 1)) wall(c10, c00, SPRITE_SHADE_TOP, uvAt(1, 0), uvAt(0, 0));
+        if (!isSolid(x, y + 1)) wall(c01, c11, SPRITE_SHADE_BOTTOM, uvAt(0, 1), uvAt(1, 1));
       }
     }
   };
@@ -357,6 +379,115 @@ function buildBlendedSpriteGeometry(body, loose, prevAt, nextAt, w, h, depth) {
   return geom;
 }
 
+/**
+ * Colour blend for the surfaces drawn from sprite frames - water, lava, acid -
+ * baked into their texture.
+ *
+ * The terrain does this in geometry (terrain.js _buildChunkGeometrySmooth): a
+ * quad per pixel whose corners carry the mean of the pixels meeting there, so
+ * neighbouring pixels share an edge colour and the grid the sprite was drawn
+ * on stops reading as a grid. A wave slice cannot be built that way - its
+ * faces are greedy rectangles wearing a texture, and its stack is redressed
+ * every tick from a cache of shapes shared between pools - so the same colour
+ * profile is written into the texture instead and read back out by the
+ * sampler. Each pixel is drawn FRAME_BLEND_SCALE texels across, every sub-texel
+ * holding the colour the terrain's grid would put at that point of the pixel,
+ * and the texture is filtered linearly rather than nearest.
+ *
+ * `softness` is the strength the terrain takes, 0..1, off the same switch. At
+ * 1 a pixel is the plain bilinear of its four corner means and its own colour
+ * survives only through them; below that it keeps a plateau of its own colour
+ * in the middle and runs out to the shared colours over its outer `softness`,
+ * so a boundary is still crossed in a continuous slope with no step in it.
+ *
+ * Only opaque pixels are averaged, as only pixels of the same class are in the
+ * terrain: a transparent neighbour has no colour to lend, just the black it is
+ * stored as. That leaves the silhouette, where the sampler goes on
+ * interpolating into the transparent texels whatever the averaging did, so
+ * those are filled with the mean of the opaque pixels beside them - which is
+ * the colour the rim was heading for anyway, and keeps the edge from bleeding
+ * dark. Alpha is not blended: a sub-texel is as opaque as the pixel it came
+ * from, so the cut stays where it was.
+ */
+const FRAME_BLEND_SCALE = 4;
+
+function buildBlendedFrameRgba(rgba, w, h, softness) {
+  const S = FRAME_BLEND_SCALE;
+  const opaque = (x, y) => x >= 0 && x < w && y >= 0 && y < h && rgba[(y * w + x) * 4 + 3] !== 0;
+  const rgbAt = (x, y) => {
+    const o = (y * w + x) * 4;
+    return [rgba[o], rgba[o + 1], rgba[o + 2]];
+  };
+  /** The mean of whichever of these pixels are opaque, or null for none. */
+  const meanOf = (pts) => {
+    let r = 0, g = 0, b = 0, n = 0;
+    for (const [px, py] of pts) {
+      if (!opaque(px, py)) continue;
+      const c = rgbAt(px, py);
+      r += c[0]; g += c[1]; b += c[2]; n++;
+    }
+    return n ? [r / n, g / n, b / n] : null;
+  };
+  // the (up to four) pixels meeting at a grid corner, and the two across an edge
+  const cornerMean = (x, y) => meanOf([[x - 1, y - 1], [x, y - 1], [x - 1, y], [x, y]]);
+  const edgeMean = (x, y, nx, ny) => meanOf([[x, y], [nx, ny]]);
+  const NEIGHBOURS = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]];
+
+  const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t,
+                              a[2] + (b[2] - a[2]) * t];
+  const out = new Uint8Array(w * S * h * S * 4);
+  const put = (x, y, i, j, c, a) => {
+    const o = (((y * S + j) * w * S) + x * S + i) * 4;
+    out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = a;
+  };
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!opaque(x, y)) {
+        // the rim's outside: the colour the pixels beside it are heading for
+        const fill = meanOf(NEIGHBOURS.map(([dx, dy]) => [x + dx, y + dy])) || [0, 0, 0];
+        for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) put(x, y, i, j, fill, 0);
+        continue;
+      }
+      const own = rgbAt(x, y);
+      const cc = [cornerMean(x, y) || own, cornerMean(x + 1, y) || own,
+                  cornerMean(x + 1, y + 1) || own, cornerMean(x, y + 1) || own];
+      let stops, grid;
+      if (softness >= 1) {
+        stops = [0, 1];
+        grid = [[cc[0], cc[1]], [cc[3], cc[2]]];
+      } else {
+        // up, right, down, left - the same ring the terrain lays out
+        const em = [edgeMean(x, y, x, y - 1) || own, edgeMean(x, y, x + 1, y) || own,
+                    edgeMean(x, y, x, y + 1) || own, edgeMean(x, y, x - 1, y) || own];
+        stops = [0, softness / 2, 1 - softness / 2, 1];
+        grid = [
+          [cc[0], em[0], em[0], cc[1]],
+          [em[3], own, own, em[1]],
+          [em[3], own, own, em[1]],
+          [cc[3], em[2], em[2], cc[2]],
+        ];
+      }
+      const cell = (t) => {
+        let k = 0;
+        while (k < stops.length - 2 && t > stops[k + 1]) k++;
+        const a = stops[k], b = stops[k + 1];
+        return [k, b > a ? (t - a) / (b - a) : 0];
+      };
+      for (let j = 0; j < S; j++) {
+        const [jv, fv] = cell((j + 0.5) / S);
+        for (let i = 0; i < S; i++) {
+          const [iu, fu] = cell((i + 0.5) / S);
+          put(x, y, i, j, lerp3(
+            lerp3(grid[jv][iu], grid[jv][iu + 1], fu),
+            lerp3(grid[jv + 1][iu], grid[jv + 1][iu + 1], fu), fv), 255);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 /** Builds (and caches) voxel geometry + material for a game Frame or Mask. */
 class SpriteGeometryCache {
   constructor(resources) {
@@ -372,7 +503,17 @@ class SpriteGeometryCache {
     this.frameIds = new Map();
     this.flatByFrame = new Map();   // the silhouettes of clear physics mode
     this.flatColor = new THREE.Color(0xffffff);
+    // the colour blend of the surfaces: the switch's strength, and one
+    // material per frame per strength (so a change of strength keeps what it
+    // built last time and a change back costs nothing)
+    this.blendSoftness = 0;
+    this.softByFrame = new Map();
     this._emptyGeom = resources.track(new THREE.BufferGeometry());
+  }
+
+  /** The colour blend the surfaces are drawn with from now on, 0 = off. */
+  setColorBlend(softness) {
+    this.blendSoftness = Math.max(0, Math.min(1, softness || 0));
   }
 
   /**
@@ -427,10 +568,8 @@ class SpriteGeometryCache {
     return { material, geometry, w, h };
   }
 
-  /** Frame: Uint32 RGBA pixels + 0/1 transparency mask. */
-  forFrame(frame) {
-    let entry = this.byFrame.get(frame);
-    if (entry) return entry;
+  /** A frame's pixels as RGBA, its mask written into the alpha. */
+  _rgbaOf(frame) {
     const w = frame.width, h = frame.height;
     const buf = frame.getBuffer();
     const src = new Uint8Array(buf.buffer, buf.byteOffset, w * h * 4);
@@ -438,9 +577,52 @@ class SpriteGeometryCache {
     const rgba = new Uint8Array(w * h * 4);
     rgba.set(src);
     for (let i = 0; i < w * h; i++) rgba[i * 4 + 3] = mask[i] ? 255 : 0;
-    entry = this._makeEntry(rgba, (x, y) => mask[y * w + x] !== 0, w, h);
+    return rgba;
+  }
+
+  /** Frame: Uint32 RGBA pixels + 0/1 transparency mask. */
+  forFrame(frame) {
+    let entry = this.byFrame.get(frame);
+    if (entry) return entry;
+    const w = frame.width, h = frame.height;
+    const mask = frame.getMask();
+    entry = this._makeEntry(this._rgbaOf(frame), (x, y) => mask[y * w + x] !== 0, w, h);
     this.byFrame.set(frame, entry);
     return entry;
+  }
+
+  /**
+   * The material for one slice of a surface - water, lava, acid - with the
+   * colour blend baked into its texture at the strength the switch is on
+   * (buildBlendedFrameRgba). Off, this is the frame's ordinary material, so
+   * the slices go on sharing it with everything else drawn from that frame.
+   *
+   * The alpha test is loosened along with the filtering. A quad only ever
+   * spans its own pixels' texels, so the alpha it samples never falls below
+   * a half - the value at a texel boundary with nothing on the other side -
+   * and a test at a half would shave a hairline off every silhouette.
+   */
+  surfaceMaterialFor(frame) {
+    const softness = this.blendSoftness;
+    if (!(softness > 0)) return this.forFrame(frame).material;
+    let byStrength = this.softByFrame.get(frame);
+    if (!byStrength) { byStrength = new Map(); this.softByFrame.set(frame, byStrength); }
+    let material = byStrength.get(softness);
+    if (material) return material;
+    const w = frame.width, h = frame.height;
+    const blended = buildBlendedFrameRgba(this._rgbaOf(frame), w, h, softness);
+    const S = FRAME_BLEND_SCALE;
+    const texture = this.resources.track(
+      new THREE.DataTexture(blended, w * S, h * S, THREE.RGBAFormat));
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    material = this.resources.track(new THREE.MeshBasicMaterial({
+      map: texture, vertexColors: true, alphaTest: 0.25, side: THREE.DoubleSide,
+    }));
+    byStrength.set(softness, material);
+    return material;
   }
 
   /** A frame's body and whatever floats loose of it, worked out once. */

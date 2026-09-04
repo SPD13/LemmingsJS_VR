@@ -481,16 +481,20 @@ Vfs.boot("").then(function (booted) {
     const profile = files.get(g.url);
     const tagged = Object.keys(profile.terrain.byId).length;
     const shaded = Object.keys(profile.emboss.byId).length;
-    const blended = Object.keys(profile.blend.byId).length;
-    const coloured = Object.keys(profile.colorBlend.byId).length;
+    const unblended = Object.keys(profile.blend.byId)
+      .filter((k) => profile.blend.byId[k] === false).length;
+    // the colour blend is on unless a piece is tagged out, so what the file
+    // holds is the exceptions
+    const uncoloured = Object.keys(profile.colorBlend.byId)
+      .filter((k) => profile.colorBlend.byId[k] === false).length;
     dom.status.textContent = "";
     const b = document.createElement("b");
     b.textContent = ProfileStore.fileName(g.url);
     dom.status.append("profile: ", b, " · " + (files.exists(g.url) ? "on disk" : "no file yet") +
       " · " + tagged + " class tag" + (tagged === 1 ? "" : "s") +
       (shaded ? ", " + shaded + " shade setting" + (shaded === 1 ? "" : "s") : "") +
-      (blended ? ", " + blended + " surface blend" : "") +
-      (coloured ? ", " + coloured + " colour blend" : "") +
+      (unblended ? ", " + unblended + " out of the surface blend" : "") +
+      (uncoloured ? ", " + uncoloured + " out of the colour blend" : "") +
       (files.isDirty(g.url) ? " · unsaved changes" : ""));
     dom.save.disabled = !files.isDirty(g.url);
     dom.reset.disabled = !tagged && !shaded && !blended && !coloured;

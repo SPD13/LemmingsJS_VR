@@ -238,10 +238,22 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   off instead of ending in a square wall, and the pool reads as a surface
   rather than as a heap of cubes. Lemmings and ordinary objects are left
   square-edged - the switch is about the scenery.
+- "colour blend" stops neighbouring pixels meeting at a hard edge: every face
+  corner takes the mean of the pixels meeting there, and the extruded sides
+  run the same way. It is a strength rather than a switch — press for *soft*
+  (the default: the outer half of each pixel given to the blend, a plateau of
+  its own colour left in the middle), *smooth* (all of it, which reads as a
+  blur), then *off*. It covers everything the switch reaches: every terrain
+  piece except those tagged out of it in the piece editor or the galleries
+  page (pieces opt out, not in, as they do of the 3D shade), and all of the
+  water, lava and acid, which have no tag of their own since a surface is
+  scenery rather than a thing standing in it.
 - "3D skills bar" extrudes the skill panel's artwork and counters off the
   panel, so they read as embossed; off, the bar is the flat original (a
   hovered button still rises, since that is how the bar answers the pointer).
-- `e` enters edit mode and toggles the piece editor (pauses the sim): click a terrain piece to
+- the pencil icon of the right panel, the piece-editor key (`J` by default) or
+  `?edit=1` enters edit mode and opens the piece editor (which pauses the sim):
+  click a terrain piece to
   select it — every placement of that piece id highlights — then pick a depth
   class (or `c` to cycle, `auto` to revert to flag defaults); the diorama
   re-meshes live. The click goes by what is under the pointer *in the
@@ -269,7 +281,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   selected piece's file). "save" posts every changed file to the launcher,
   "export JSON" downloads them all for `profiles/`. "galleries" (or "this
   piece in its gallery") opens the sprite galleries page; leaving for it
-  with unsaved tags asks first, since they only live in this page.
+  with unsaved tags asks first, since they only live in this page. "help" opens
+  the tagging guide (`tagging.md` at the repo root) on GitHub in a new tab.
 - `galleries.html` is the sprite galleries page, web only: down the left a
   tree of every gallery — the classic games, a directory per pack holding
   its tilesets; the NeoLemmix styles, a directory per author (the prefix of

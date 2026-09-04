@@ -174,10 +174,14 @@
       return D.embossInvertedFor(key, profile) ? true : "invert";
     },
 
-    /** Set a piece's surface blend: true (on), false (off). */
+    /**
+     * Set a piece's surface blend: false excludes it, true is the default and
+     * is written by dropping the entry, so a file carries the exceptions
+     * alone - the same shape as withColorBlend below.
+     */
     withBlend(profile, key, value) {
       const p = ProfileStore.normalize(profile);
-      if (value) p.blend.byId[key] = true;
+      if (value === false) p.blend.byId[key] = false;
       else delete p.blend.byId[key];
       return p;
     },
@@ -187,10 +191,15 @@
       return !D.surfaceBlendFor(key, profile);
     },
 
-    /** Set a piece's colour blend: true (on), false (off). */
+    /**
+     * Set a piece's colour blend: false excludes it, true is the default and
+     * is written by dropping the entry, so a file carries the exceptions
+     * alone. (An older file's redundant `true` is read the same way and is
+     * cleared the first time the piece is touched.)
+     */
     withColorBlend(profile, key, value) {
       const p = ProfileStore.normalize(profile);
-      if (value) p.colorBlend.byId[key] = true;
+      if (value === false) p.colorBlend.byId[key] = false;
       else delete p.colorBlend.byId[key];
       return p;
     },
