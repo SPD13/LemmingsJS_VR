@@ -9,6 +9,13 @@
  *             (the old ?type=1|2&group=N&level=N still name a classic level),
  *             ?speed=N, ?replay=<string from the 'r' key dump>
  *
+ * The level being played is also kept in the hash (#lemmings/0/3), which is
+ * what makes one a link you can send: the page writes it whenever a level is
+ * settled and reads it back when it opens, so copying the address while
+ * playing shares exactly what is on screen. Writing it drops the older
+ * ?level= addressing, since two names for the level in one address bar would
+ * disagree the moment the next level is played.
+ *
  * With no level in the URL the page opens on the world library, at the root
  * of levels/, and nothing plays until one is chosen there. A level named in
  * the URL loads straight away, as a headset's bookmark or a replay link needs.
@@ -51,6 +58,51 @@ Vfs.boot("", "setup.html").then(function (booted) {
 
   const params = new URLSearchParams(location.search);
 
+  /**
+   * The level in the address bar's hash - what makes a level a link you can
+   * send someone.
+   *
+   * It is written whenever a level is settled and read back when the page
+   * opens, so copying the address while playing is enough to share exactly
+   * what is on screen. The id is a path (see library.js), so each segment is
+   * encoded on its own: the slashes stay slashes and the link stays legible.
+   */
+  const levelHash = (id) =>
+    "#" + String(id).split("/").map(encodeURIComponent).join("/");
+
+  /** The level id a hash names, or null when there is none to read. */
+  function hashLevelId() {
+    const raw = location.hash.replace(/^#/, "");
+    if (!raw) return null;
+    try {
+      return raw.split("/").map(decodeURIComponent).join("/");
+    } catch (e) {
+      return null; // half a percent-escape: not a level id
+    }
+  }
+
+  /**
+   * Put the level in the hash, and drop the old query addressing with it.
+   *
+   * Both cannot be left in the address bar at once: `?level=` is read at
+   * boot, so a stale one would win over the hash the next level wrote and
+   * send the link somewhere else. Rewritten rather than pushed, so playing
+   * through a pack does not bury the page the player arrived from under a
+   * history entry per level. (replaceState fires no hashchange, so the
+   * listener below cannot see our own writes.)
+   */
+  function setLevelHash(id) {
+    if (!id) return;
+    const want = levelHash(id);
+    const url = new URL(location.href);
+    for (const key of ["level", "type", "group"]) url.searchParams.delete(key);
+    if (url.search === location.search && want === location.hash) return;
+    try {
+      history.replaceState(history.state, "", url.pathname + url.search + want);
+    } catch (e) {
+      location.hash = want; // a file:// page, say: the hash alone still works
+    }
+  }
   /**
    * A render setting: the URL first, then what was last toggled here.
    *
@@ -104,12 +156,14 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // "static" (this browser's storage, through the service worker)
     assets: booted.mode,
     // The level, by its id in the tree (see library.js). A bare number in
-    // ?level= is the old addressing, resolved with ?type= and ?group=.
-    levelId: /\//.test(params.get("level") || "") ? params.get("level") : null,
+    // ?level= is the old addressing, resolved with ?type= and ?group=; the
+    // hash is what the page writes itself, and what a shared link carries.
+    levelId: /\//.test(params.get("level") || "") ? params.get("level") : hashLevelId(),
     // whether the URL named a level at all: without one the page starts on
     // the world library and waits for a choice, rather than playing the
     // first level there is
-    asked: params.has("level") || params.has("type") || params.has("group"),
+    asked: params.has("level") || params.has("type") || params.has("group")
+      || !!hashLevelId(),
     legacy: {
       type: parseInt(params.get("type") || "1", 10),
       group: parseInt(params.get("group") || "0", 10),
@@ -2013,6 +2067,10 @@ Vfs.boot("", "setup.html").then(function (booted) {
     for (const link of document.querySelectorAll(".assets-switch")) {
       link.textContent = "switch to " + other;
       link.href = Vfs.link(location.href, other);
+      // resolved again on the way out: the level being played lives in the
+      // hash and changes as the player moves through a pack, so a link built
+      // once at boot would carry whichever level the page opened on
+      link.addEventListener("click", () => { link.href = Vfs.link(location.href, other); });
     }
     for (const el of document.querySelectorAll(".assets-switch-wrap")) el.hidden = other === "server" && !Vfs.health;
     // the release on the server against this page's: a newer one means the
@@ -3624,6 +3682,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
       state.level = where.level.index;
     }
     library.setCurrent(state.levelId);
+    setLevelHash(state.levelId); // the address bar now names what is playing
     return where;
   }
 
@@ -5254,6 +5313,15 @@ Vfs.boot("", "setup.html").then(function (booted) {
     if (library.isOpen || !session) { library.toggle(); return; }
     askConfirm("Open the world catalog?", "open it", () => library.open());
   });
+  // A hash typed or pasted into the address bar, or arrived at with the back
+  // button, plays that level. Only a real navigation gets here: the page's own
+  // writes go through replaceState, which fires no hashchange.
+  window.addEventListener("hashchange", () => {
+    const id = hashLevelId();
+    if (!id || id === state.levelId) return;
+    library.enter(id); // closes the catalog if it is up, then loads
+  });
+
   // the panel's load-replay half opens this picker: the file plays from the start
   const replayFile = document.getElementById("replay-file");
   if (replayFile) {

@@ -27,6 +27,16 @@ The page opens on the world library, at the root of `levels/`, and nothing
 plays until a level is chosen there; a level named in the URL loads straight
 away instead.
 
+Sharing a level: the level being played is kept in the address bar's hash
+(`#lemmings/0/3`), so copying the address while playing gives a link straight
+to it — open it and that level starts at once, with no trip through the world
+catalog. The page writes the hash itself whenever a level is settled, whether
+it was chosen in the catalog, stepped to with prev/next, or named in the link
+you arrived on, and pasting a different hash into a page already open loads
+that level too. Writing it drops the older `?level=` form from the address,
+since two names for the level in one address bar disagree as soon as the next
+level is played.
+
 URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `lemmings/0/3` or
 `LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Just_Walk!.nxlv`; the old
