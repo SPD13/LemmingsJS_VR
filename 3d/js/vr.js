@@ -28,6 +28,11 @@ const VR_PIXEL_SCALE = 0.0025; // meters per game pixel (1600px level -> 4m)
 const VR_GUI_WIDTH = 0.6;
 const VR_GUI_Y = -0.3;
 const VR_GUI_Z = -0.75;
+// The bar left in the room stands this much nearer the player than the
+// frontmost plane the board reaches (app.js barDefaultPlacement), so the
+// whole board - the pieces standing proud of the slab, the objects on it -
+// is behind the bar at the starting view instead of sharing its plane.
+const VR_BAR_FRONT = 0.03; // metres
 // The buttons stand off the panel by the one pixel they are modelled at, in
 // the headset as on a monitor. Multiplying it to force the parallax made them
 // look like blocks stuck to the bar rather than artwork pressed into it.

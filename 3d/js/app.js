@@ -1848,18 +1848,26 @@ Vfs.boot("", "setup.html").then(function (booted) {
     if (!session) return null;
     const level = session.level;
     dioramaRoot.updateMatrixWorld(true);
-    // the level's bottom edge, under the focus, on the terrain's front face
+    // the frontmost plane the board reaches: a relief piece's face with its
+    // per-pixel relief on top (depth.js DEPTH_BANDS), the objects' decals,
+    // the slab itself - so no part of the board is in front of the bar
+    const frontPx = Math.max(TERRAIN_DEPTH, OBJECT_DECAL_Z,
+      DEPTH_BANDS[DepthClass.RELIEF].front + RELIEF_MAX);
+    // the level's bottom edge, under the focus, on that plane
     const edge = dioramaRoot.localToWorld(
-      new THREE.Vector3(levelFocusX(level), 0, TERRAIN_DEPTH));
+      new THREE.Vector3(levelFocusX(level), 0, frontPx));
     const guiW = VR_GUI_WIDTH * panelWidthScale();
     const cv = session.gui.canvas;
     const barH = guiW * (cv.width ? cv.height / cv.width : 40 / 320);
     // the row of controls stands over the bar
     const above = VR_BAR_TOOL_SIZE * 1.55;
-    const centre = edge.clone();
-    centre.y -= 0.02 + above + barH / 2;
     const quat = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0), dioramaRoot.rotation.y);
+    const centre = edge.clone();
+    centre.y -= 0.02 + above + barH / 2;
+    // and a little nearer the player still, clear of the board whatever the
+    // board is zoomed to (the metres do not scale with it)
+    centre.add(new THREE.Vector3(0, 0, VR_BAR_FRONT).applyQuaternion(quat));
     const pos = centre.sub(new THREE.Vector3(0, VR_GUI_Y, VR_GUI_Z).applyQuaternion(quat));
     return { pos, quat };
   }
@@ -5136,6 +5144,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
     setReplayBadge, layoutGuiPanel, // for checks without a frame loop
     hotkeys, hotkeyDialog, runHotkey, // the key table, its dialog, a function by its binding
+    guiRoot, barDefaultPlacement, // the skills bar and where it sits by default, for checks without a headset
     get cursor() { return gameCursor; },
     // the headset's catalog, for checks without a headset: load(landing), items(), panel (its canvas texture)
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
