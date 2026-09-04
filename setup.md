@@ -61,6 +61,39 @@ Any other web server does the job too, with the indexes written by
 `node tools/levels-index.js` and `node tools/styles-index.js` (the launcher
 builds them live).
 
+### Which one to pick
+
+| | Static | Server (the launcher) |
+| --- | --- | --- |
+| Install | A few clicks on the setup page, nothing to run | Unzip two folders, and a machine has to run the launcher while you play |
+| Where the data lives | This browser's storage, on this device | Two folders on the machine's disk, easy to back up and to copy |
+| Per device | Every device installs its own copy, styles package included | One install serves every device on the local network |
+| Config, progress, controls | This browser's own, per device | Shared: the same files for every device |
+| If the browser's data is wiped | The install is lost, zips needed again | Nothing is lost |
+| Away from home | Works anywhere the page opens, offline included | Only on the launcher's network |
+| Piece editor, galleries | Cannot save the depth tagging | Saves it |
+
+The difference that shows up in play is the sharing. In server mode the
+controller bindings, the preferences and the progress are three files the
+server keeps (`config/`, see `config/README.md`); every page that opens the
+launcher's address reads them and writes them back as settings change. The
+levels and the assets are the same folders on the same disk. So the headset
+and the desktop are one installation: clear a level standing up in VR and
+the desktop shows it cleared, rebind a key at the desktop and the headset
+plays with that binding, install a level pack once and every device has it.
+In static mode each browser is its own island - the same zips installed
+again on each device, and progress that only moves by hand, through the
+Configuration section's download and upload.
+
+The sharing has one catch, which is that it is a single shared profile:
+there is no per-player separation, and two devices playing at once each
+write the whole file, so the last save wins. Playing one device at a time,
+which is the usual case, has nothing to notice.
+
+Both modes can live side by side - a launcher install at home and a static
+install in the headset for the road - as long as the progress is carried
+across by hand when it matters.
+
 The instructions below name the setup page's buttons for the static mode
 and the folder for the launcher.
 
