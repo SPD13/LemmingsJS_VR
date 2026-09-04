@@ -306,6 +306,8 @@ guide" link opens `setup.md`, the player's guide to the assets.
   (`lemmings-3d-progress.json`: the levels cleared with best time, most
   lemmings saved and clear count, and the NeoLemmix talismans; an upload
   merges, keeping the best of both and never dropping a clear).
+- **Credits**: the root README's own "Credits" section, fetched and shown
+  at the bottom, so the two never drift apart.
 - The notice at the top says it: everything installed here is in this
   browser's storage for this site address, and goes with the site's data
   when the browser clears it. The page asks for persistent storage and shows

@@ -67,6 +67,8 @@
   .msg.ok { color: #6fce7e; }
   .msg.err { color: #e07a6a; }
   .empty { color: #8fa1bb; padding: 6px 12px; }
+  #credits-list div { margin: 4px 0; }
+  #credits-list a { color: #7fd6e8; }
   #progress { margin-top: 10px; }
   #progress[hidden] { display: none; }
   #progress-track { height: 6px; background: #0b0f16; border: 1px solid #33405a; border-radius: 4px; overflow: hidden; }
@@ -193,6 +195,11 @@
       <input type="file" id="file-progress" accept=".json,application/json">
     </div>
     <div id="msg-progress" class="msg"></div>
+  </div>
+
+  <div class="card" id="credits">
+    <h2>Credits</h2>
+    <div id="credits-list" class="dim">…</div>
   </div>
 </div>
 
