@@ -591,18 +591,20 @@ class SpriteGeometryCache {
     return entry;
   }
 
-  /**
-   * The material for one slice of a surface - water, lava, acid - with the
-   * colour blend baked into its texture at the strength the switch is on
-   * (buildBlendedFrameRgba). Off, this is the frame's ordinary material, so
-   * the slices go on sharing it with everything else drawn from that frame.
+   /**
+   * The material for a frame drawn as part of the scenery - a slice of water,
+   * lava or acid, an opening's tunnel, the objects standing on the board -
+   * with the colour blend baked into its texture at the strength the switch
+   * is on (buildBlendedFrameRgba). Off, this is the frame's ordinary
+   * material, so those go on sharing it with everything else drawn from that
+   * frame.
    *
    * The alpha test is loosened along with the filtering. A quad only ever
    * spans its own pixels' texels, so the alpha it samples never falls below
    * a half - the value at a texel boundary with nothing on the other side -
    * and a test at a half would shave a hairline off every silhouette.
    */
-  surfaceMaterialFor(frame) {
+  blendedMaterialFor(frame) {
     const softness = this.blendSoftness;
     if (!(softness > 0)) return this.forFrame(frame).material;
     let byStrength = this.softByFrame.get(frame);
@@ -763,10 +765,17 @@ class SpriteCapture {
 
 /** Pool of voxel-sprite meshes fed from a SpriteCapture each game tick. */
 class BillboardPool {
-  constructor(parent, geometryCache) {
+  /**
+   * `blend` puts the pool's sprites through the colour blend
+   * (SpriteGeometryCache.blendedMaterialFor): true for the objects standing
+   * on the board, which are scenery and read better softened, false for the
+   * lemmings, which are what the eye is meant to pick out of it.
+   */
+  constructor(parent, geometryCache, blend) {
     this.group = new THREE.Group();
     parent.add(this.group);
     this.geometryCache = geometryCache;
+    this.blend = !!blend;
     this.pool = [];
     this.activeCount = 0;
     this.prevPositions = new Map();
@@ -799,7 +808,9 @@ class BillboardPool {
       const mesh = this._acquire(i);
       mesh.geometry = entry.geometry;
       // clear physics: the shape only, in the one colour
-      mesh.material = flat && item.frame ? this.geometryCache.flatMaterialFor(item.frame) : entry.material;
+      mesh.material = flat && item.frame ? this.geometryCache.flatMaterialFor(item.frame)
+        : (this.blend && item.frame) ? this.geometryCache.blendedMaterialFor(item.frame)
+        : entry.material;
       // geometry origin is the sprite's top-left corner
       const bx = item.x + src.offsetX;
       const by = item.y + src.offsetY + (item.flipY ? entry.h : 0);

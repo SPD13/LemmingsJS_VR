@@ -2212,8 +2212,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
   const renderColorBlendBtn = () => {
     const level = colorBlendLevel();
     hudIcons.colorBlend({ on: level.softness > 0, softness: level.softness });
-    colorBlendBtn.title = "colour blend (softens the edge between neighbouring pixels of the terrain, "
-      + "and of the water, lava and acid; pieces are tagged out of it in the piece editor): "
+    colorBlendBtn.title = "colour blend (softens the edge between neighbouring pixels of everything "
+      + "on the board bar the lemmings; terrain pieces are tagged out of it in the piece editor): "
       + level.label + " — press for " +
       COLOR_BLEND_LEVELS[(COLOR_BLEND_LEVELS.indexOf(level) + 1) % COLOR_BLEND_LEVELS.length].label;
   };
@@ -2641,15 +2641,17 @@ Vfs.boot("", "setup.html").then(function (booted) {
     worldGroup.add(ring);
 
     const materialCache = new SpriteMaterialCache(resources);
-    // the colour blend covers the surfaces too - water, lava, acid - off the
-    // same switch as the tagged terrain pieces, at the same strength
+    // the colour blend covers everything drawn on the board as scenery - the
+    // water, lava and acid, the openings, the objects standing on it - off
+    // the same switch as the terrain, at the same strength. The lemmings are
+    // left crisp: they are what the eye is meant to pick out of it.
     materialCache.setColorBlend(colorBlendLevel().softness);
 
     // openings: recessed geometry, textured with the object's current frame
     for (const portal of portals) {
       resources.track(portal.geometry);
       portal.mesh = new THREE.Mesh(portal.geometry,
-        materialCache.forFrame(portal.animation.frames[0]).material);
+        materialCache.blendedMaterialFor(portal.animation.frames[0]));
       portal.mesh.position.set(portal.originX, portal.originY, OBJECT_Z);
       worldGroup.add(portal.mesh);
 
@@ -2657,7 +2659,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
       // textured from the closed frame so they carry the door's own artwork
       if (portal.hatch) {
         const h = portal.hatch;
-        const material = materialCache.forFrame(portal.closedFrame).material;
+        const material = materialCache.blendedMaterialFor(portal.closedFrame);
         portal.flaps = [
           { sign: 1, x: h.leftX },
           { sign: -1, x: h.rightX },
@@ -2698,7 +2700,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // with the corners rounded off (the "smooth terrain" switch) a slice wears
     // the rounded cut of its frame, blended into the slices either side of it;
     // the texture is shared with the square-edged cut. Its colours come from
-    // surfaceMaterialFor, which is where the colour blend is applied - the
+    // blendedMaterialFor, which is where the colour blend is applied - the
     // shape is the same either way, only the texture on it changes.
     const waveEntryFor = (prev, frame, next) => (state.smoothTerrain
       ? materialCache.forFrameBlended(prev || null, frame, next || null)
@@ -2711,7 +2713,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
       const first = stack.mapObject.animation.frames[0];
       const entry = waveEntryFor(null, first, null);
       for (let k = 0; k < stack.phases.length; k++) {
-        const mesh = new THREE.Mesh(entry.geometry, materialCache.surfaceMaterialFor(first));
+        const mesh = new THREE.Mesh(entry.geometry, materialCache.blendedMaterialFor(first));
         mesh.scale.y = stack.flipY ? -1 : 1;
         mesh.position.set(stack.mapObject.x + first.offsetX,
           stack.mapObject.y + first.offsetY + (stack.flipY ? entry.h : 0),
@@ -2723,8 +2725,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
 
     let flatOn = false; // the 2D view on this level (session.setFlat)
     let portalsShown = true; // the openings as geometry; else as the original's sprites
-    const lemmingPool = new BillboardPool(worldGroup, materialCache);
-    const objectPool = new BillboardPool(worldGroup, materialCache);
+    const lemmingPool = new BillboardPool(worldGroup, materialCache, false);
+    const objectPool = new BillboardPool(worldGroup, materialCache, true);
     const particles = new ParticleCloud(worldGroup, LEMMING_Z + 1);
     const lemCapture = new SpriteCapture();
     const objCapture = new SpriteCapture();
@@ -2827,11 +2829,12 @@ Vfs.boot("", "setup.html").then(function (booted) {
           const shown = portal.hatch ? portal.animation.frames[0] : (frame || portal.animation.frames[0]);
           if (shown) {
             portal.mesh.material = game.clearPhysics
-              ? materialCache.flatMaterialFor(shown) : materialCache.forFrame(shown).material;
+              ? materialCache.flatMaterialFor(shown) : materialCache.blendedMaterialFor(shown);
           }
           if (portal.flaps) {
             const doorMaterial = game.clearPhysics
-              ? materialCache.flatMaterialFor(portal.closedFrame) : materialCache.forFrame(portal.closedFrame).material;
+              ? materialCache.flatMaterialFor(portal.closedFrame)
+              : materialCache.blendedMaterialFor(portal.closedFrame);
             for (const flap of portal.flaps) flap.mesh.material = doorMaterial;
           }
           if (!portal.flaps || !portal.openness) continue;
@@ -2870,7 +2873,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
             mesh.geometry = entry.geometry;
             mesh.material = game.clearPhysics
               ? materialCache.flatMaterialFor(frame)
-              : materialCache.surfaceMaterialFor(frame);
+              : materialCache.blendedMaterialFor(frame);
             // the frame carries its own offsets, as it does for a billboard
             mesh.scale.y = stack.flipY ? -1 : 1;
             mesh.position.set(object.x + frame.offsetX,
@@ -3106,9 +3109,10 @@ Vfs.boot("", "setup.html").then(function (booted) {
           buildColorBlendMap(level, pieceMap, session.profile,
             state.colorBlend !== "off", groundData),
           colorBlendLevel().softness);
-        // and the surfaces with it: the slices take their material afresh
-        // every time they are dressed, so they only need drawing again -
-        // whether the clock is running or not
+        // and everything drawn from a sprite with it - the surfaces, the
+        // openings, the objects - which take their material afresh every time
+        // they are dressed, so they only need drawing again, whether the
+        // clock is running or not
         materialCache.setColorBlend(colorBlendLevel().softness);
         syncScene(true);
       },

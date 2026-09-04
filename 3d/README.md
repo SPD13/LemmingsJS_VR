@@ -243,11 +243,14 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   run the same way. It is a strength rather than a switch — press for *soft*
   (the default: the outer half of each pixel given to the blend, a plateau of
   its own colour left in the middle), *smooth* (all of it, which reads as a
-  blur), then *off*. It covers everything the switch reaches: every terrain
-  piece except those tagged out of it in the piece editor or the galleries
-  page (pieces opt out, not in, as they do of the 3D shade), and all of the
-  water, lava and acid, which have no tag of their own since a surface is
-  scenery rather than a thing standing in it.
+  blur), then *off*. It covers everything on the board bar the lemmings: every
+  terrain piece except those tagged out of it in the piece editor or the
+  galleries page (pieces opt out, not in, as they do of the 3D shade), the
+  water, lava and acid, the entrances and exits — their tunnels and their
+  swinging doors — and every other object standing on the field. Only the
+  scenery, in other words. The lemmings keep their pixels: they are what the
+  eye has to pick out of it, and none of them has a tag of its own, since
+  none of them is a piece.
 - "3D skills bar" extrudes the skill panel's artwork and counters off the
   panel, so they read as embossed; off, the bar is the flat original (a
   hovered button still rises, since that is how the bar answers the pointer).
