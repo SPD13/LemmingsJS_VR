@@ -815,7 +815,7 @@ paused stays paused and two overlapping dialogs do not resume it between them.
 | where | what |
 |---|---|
 | URL | `#<id>` (the level being played, written by the page), `?level=<id>` (or the old `?type= ?group= ?level=`), `?speed= ?replay=` and the render switches `?emboss= ?smooth= ?smoothterrain= ?colorblend= ?doors= ?edit=` |
-| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-smooth-terrain` `lem3d-color-blend` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` |
+| localStorage | `lem3d-emboss` `lem3d-smooth` `lem3d-smooth-terrain` `lem3d-color-blend` `lem3d-doors` `lem3d-sound` `lem3d-volume` `lem3d-cleared` `lem3d-worlds-v4` `lem3d-lib-order` `lem3d-lib-path` `lem3d-recent` `lem3d-favorites` |
 
 The URL overrides both for one load. This matters more than it sounds: the
 switches are DOM buttons, invisible inside a session, and the headset is

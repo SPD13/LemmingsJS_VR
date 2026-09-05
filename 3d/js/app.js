@@ -672,6 +672,27 @@ Vfs.boot("", "setup.html").then(function (booted) {
       c.stroke();
     });
   };
+  // a five-pointed star, centred on (x, y) with the outer radius r
+  const starPath = (c, x, y, r) => {
+    c.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const d = i % 2 ? r * 0.45 : r;
+      c[i ? "lineTo" : "moveTo"](x + Math.cos(a) * d, y + Math.sin(a) * d);
+    }
+    c.closePath();
+  };
+  // the star: empty while the level is not a favorite, full and yellow
+  // while it is (the library's tiles wear the same one)
+  const favoriteIcon = (cx, st) => {
+    const on = st.on;
+    barToolIcon(cx, st.hovered, on ? (st.hovered ? "#4a4326" : "#2a2412") : (st.hovered ? "#33405a" : "#1c2432"),
+      on ? "#ffd866" : "#cdd6e4", (c) => {
+        starPath(c, 32, 33, 19);
+        if (on) { c.fillStyle = "#ffd866"; c.fill(); }
+        c.stroke();
+      });
+  };
   // the right panel's icons: a switch is green when on and grey when off,
   // a tool wears the plain colours
   const switchIcon = (cx, st, body) => {
@@ -783,6 +804,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     next: iconizeHudButton(document.getElementById("btn-next"), vrNextBtn.userData.draw, "next level"),
     pause: iconizeHudButton(hud.pauseBtn, vrPauseBtn.userData.draw, "pause / resume"),
     worlds: iconizeHudButton(document.getElementById("btn-library"), vrWorldsBtn.userData.draw, "world library"),
+    favorite: iconizeHudButton(document.getElementById("btn-favorite"), favoriteIcon, "mark this level as a favorite"),
     sound: iconizeHudButton(document.getElementById("btn-sound"), vrMuteBtn.userData.draw, "sound on / off"),
     view: iconizeHudButton(document.getElementById("btn-view"), resetViewIcon, "reset the view (Home)"),
     flat: iconizeHudButton(document.getElementById("btn-flat"), flatIcon, "the flat view of the original"),
@@ -999,6 +1021,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
   let vrCatalogScroll = 0;   // how far down it we are
   let vrCatalogHover = -1;
   let vrCatalogNote = "";
+  let vrCatalogFilter = null; // "recent" or "favorites": that list instead of a directory
 
   const vrCatalog = new THREE.Group();
   vrCatalog.visible = false;
@@ -1211,7 +1234,13 @@ Vfs.boot("", "setup.html").then(function (booted) {
         }
         cx.fillStyle = "#f0f3f8";
         cx.font = "bold 24px monospace";
-        cx.fillText(fit(it.label, tw), cell.x + 10, cell.y + 62);
+        cx.fillText(fit(it.label, tw - (it.favorite ? 30 : 0)), cell.x + 10, cell.y + 62);
+        if (it.favorite) {
+          // a favorite: a full yellow star at the end of the label's line
+          cx.fillStyle = "#ffd866";
+          starPath(cx, cell.x + cell.w - 22, cell.y + 54, 10);
+          cx.fill();
+        }
         cx.fillStyle = "#c3ccda";
         cx.font = "17px monospace";
         cx.fillText(fit(it.name, tw), cell.x + 10, cell.y + 84);
@@ -1256,8 +1285,36 @@ Vfs.boot("", "setup.html").then(function (booted) {
     });
   });
   vrCatalogClose.renderOrder = GUI_ORDER_MODAL_BTN;
+  // the two filters, left of the close: the levels played and the favorites
+  // (the library's own "recent" and "favorites"); lit while their list is up
+  const vrCatalogRecent = makeIconButton("vr-catrecent", vrCatalog, (cx, st) => {
+    const on = st.on;
+    barToolIcon(cx, st.hovered, on ? (st.hovered ? "#245232" : "#16281a") : (st.hovered ? "#33405a" : "#1c2432"),
+      on ? "#6fce7e" : "#cdd6e4", (c) => {
+        c.beginPath();
+        c.arc(32, 32, 19, 0, Math.PI * 2);
+        c.moveTo(32, 20); c.lineTo(32, 33); c.lineTo(41, 39);
+        c.stroke();
+      });
+  });
+  vrCatalogRecent.renderOrder = GUI_ORDER_MODAL_BTN;
+  const vrCatalogFav = makeIconButton("vr-catfav", vrCatalog, favoriteIcon);
+  vrCatalogFav.renderOrder = GUI_ORDER_MODAL_BTN;
+  const vrCatalogTools = [vrCatalogClose, vrCatalogRecent, vrCatalogFav];
 
   function paintVrCatalog() { vrCatalogPanel.userData.paint(); }
+
+  /** Which list the catalog is on (`null`: the directory); the buttons say so. */
+  function applyVrCatalogFilter(filter) {
+    vrCatalogFilter = filter;
+    setBarToolState(vrCatalogRecent, { on: filter === "recent" });
+    setBarToolState(vrCatalogFav, { on: filter === "favorites" });
+  }
+  /** A filter button pressed: its list, or - pressed again - the directory back. */
+  function setVrCatalogFilter(filter) {
+    applyVrCatalogFilter(vrCatalogFilter === filter ? null : filter);
+    loadVrCatalog();
+  }
 
   /**
    * What the beam is on inside the catalog window: a tile, or the scrollbar
@@ -1330,6 +1387,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     try {
       await library.tree();
       if (landing) {
+        applyVrCatalogFilter(null); // opens on the directory, not a list
         const hit = state.levelId && LevelTree.byId.get(state.levelId);
         if (hit) library.navigate(hit.node.path);
       }
@@ -1340,10 +1398,50 @@ Vfs.boot("", "setup.html").then(function (booted) {
       console.error(err);
       return;
     }
+    const items = [];
+    /** A level from anywhere in the tree as a tile, labelled with where it lives. */
+    const tileOf = (level, node, full) => {
+      const i = node.levels.indexOf(level);
+      const where = [];
+      if (full) for (let n = node.parent; n && n.parent; n = n.parent) where.unshift(n.name);
+      return {
+        kind: "level", levelId: level.id, playable: library.canLoad(node.engine),
+        label: where.concat(node.name + " " + (i + 1)).join(" › "),
+        name: library.levelName(level.id),
+        set: library.worldOf(level.id),
+        best: LevelProgress.best(level.id),
+        favorite: FavoriteLevels.has(level.id),
+        current: level.id === state.levelId,
+        thumb: null, thumbReq: false,
+      };
+    };
+    if (vrCatalogFilter) {
+      // the levels played, or the favorites: tiles from any pack, and a
+      // back row to the directory
+      const recent = vrCatalogFilter === "recent";
+      const hits = (recent ? RecentLevels.list() : FavoriteLevels.list())
+        .map((id) => LevelTree.byId.get(id)).filter(Boolean);
+      const classic = new Set(hits.map((h) => h.node).filter((n) => n.engine === "classic"));
+      if (classic.size) {
+        vrCatalogNote = "scanning levels…";
+        paintVrCatalog();
+        for (const n of classic) await library.ensureNames(n);
+      }
+      vrCatalogHeading = (recent ? "recently played" : "favorites") + " · " + hits.length +
+        (hits.length === 1 ? " level" : " levels");
+      items.push({ kind: "back", label: "‹ back" });
+      for (const hit of hits) items.push(tileOf(hit.level, hit.node, true));
+      vrCatalogNote = hits.length ? ""
+        : recent ? "no level played yet" : "no favorite yet - star a level to keep it here";
+      vrCatalogItems = items;
+      vrCatalogScroll = 0;
+      layoutVrCatalogList();
+      paintVrCatalog();
+      return;
+    }
     const chain = [];
     for (let n = node; n; n = n.parent) chain.unshift(n.name);
     vrCatalogHeading = chain.join(" › ");
-    const items = [];
     if (node.parent) items.push({ kind: "back", label: "‹ back" });
     if (node.levels && node.levels.length) {
       if (node.engine === "classic") {
@@ -1352,17 +1450,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
         await library.ensureNames(node); // classic names come from a scan
       }
       const playable = library.canLoad(node.engine);
-      node.levels.forEach((level, i) => {
-        items.push({
-          kind: "level", levelId: level.id, playable,
-          label: node.name + " " + (i + 1),
-          name: library.levelName(level.id),
-          set: library.worldOf(level.id),
-          best: LevelProgress.best(level.id),
-          current: level.id === state.levelId,
-          thumb: null, thumbReq: false,
-        });
-      });
+      for (const level of node.levels) items.push(tileOf(level, node, false));
       vrCatalogNote = playable ? "" : "needs the Lemmix engine";
     } else {
       for (const child of node.children || []) {
@@ -1406,6 +1494,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
     worlds: () => "world library: choose a level",
     mute: () => audio.enabled ? "sound off" : "sound on",
     catclose: () => "close the library",
+    catrecent: () => vrCatalogFilter === "recent" ? "back to the directories" : "the last levels played",
+    catfav: () => vrCatalogFilter === "favorites" ? "back to the directories" : "your favorite levels",
     setclose: () => "close the settings",
     detail: () => "the level's text",
   };
@@ -1891,7 +1981,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // locked (no level chosen yet), the catalog has no close: there is
     // nothing behind it to go back to
     vrCatalogClose.visible = show && !library.locked;
-    setBarToolState(vrCatalogClose, { hovered: false });
+    vrCatalogRecent.visible = vrCatalogFav.visible = show;
+    for (const b of vrCatalogTools) setBarToolState(b, { hovered: false });
     setVrCatalogHover(-1);
     if (show) { holdSim("vr-catalog"); loadVrCatalog(true); }
     else releaseSim("vr-catalog");
@@ -1904,11 +1995,15 @@ Vfs.boot("", "setup.html").then(function (booted) {
     vrCatalogPanel.scale.set(w, h, 1);
     vrCatalogPanel.position.set(0, VR_CATALOG_Y, VR_MODAL_Z);
     const size = VR_BAR_TOOL_SIZE;
-    const hot = vrCatalogClose.userData.state.hovered;
-    vrCatalogClose.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
-    vrCatalogClose.position.set(
-      w / 2 - size * 0.6, VR_CATALOG_Y + h / 2 - size * 0.6,
-      VR_MODAL_Z + (hot ? size * 0.25 : 0.001));
+    // the close in the corner, the two filters in a row to its left
+    vrCatalogTools.forEach((b, i) => {
+      const hot = b.userData.state.hovered;
+      b.scale.setScalar(size * (hot ? VR_BAR_TOOL_HOVER : 1));
+      b.position.set(
+        w / 2 - size * 0.6 - i * size * 1.15 - (i ? size * 0.3 : 0),
+        VR_CATALOG_Y + h / 2 - size * 0.6,
+        VR_MODAL_Z + (hot ? size * 0.25 : 0.001));
+    });
   }
 
   // Lay them out now rather than waiting for the first frame: until then these
@@ -2265,6 +2360,22 @@ Vfs.boot("", "setup.html").then(function (booted) {
   // headset's: inside a session the board is always the diorama, and the
   // desktop comes back to whichever it had. Applied without a shortcut, so a
   // session's start and end can each assert it.
+  // The star: the level being played as a favorite, or not. The library
+  // lists the favorites (its "favorites" filter, and the catalog's in VR).
+  function renderFavoriteBtn() {
+    const on = !!state.levelId && FavoriteLevels.has(state.levelId);
+    hudIcons.favorite({ on });
+    document.getElementById("btn-favorite").title = on
+      ? "a favorite - click to unstar" : "mark this level as a favorite";
+  }
+  document.getElementById("btn-favorite").addEventListener("click", () => {
+    if (!state.levelId) return;
+    FavoriteLevels.toggle(state.levelId);
+    renderFavoriteBtn();
+  });
+  renderFavoriteBtn();
+  document.addEventListener("lem3d-favorite", renderFavoriteBtn); // a star clicked in the library
+
   const flatBtn = document.getElementById("btn-flat");
   const renderFlatBtn = () => {
     hudIcons.flat({ on: state.flat });
@@ -3754,6 +3865,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
       state.level = where.level.index;
     }
     library.setCurrent(state.levelId);
+    renderFavoriteBtn();
     setLevelHash(state.levelId); // the address bar now names what is playing
     return where;
   }
@@ -3810,9 +3922,11 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // (a raycast does not skip an invisible mesh, so the hidden close of a
     // locked catalog is skipped here)
     if (vrCatalog.visible) {
-      const onClose = vrCatalogClose.visible
-        ? rc.intersectObject(vrCatalogClose, false) : [];
-      if (onClose.length) return onClose[0];
+      for (const b of vrCatalogTools) {
+        if (!b.visible) continue;
+        const onTool = rc.intersectObject(b, false);
+        if (onTool.length) return onTool[0];
+      }
       const onPanel = rc.intersectObject(vrCatalogPanel, false);
       return onPanel.length ? onPanel[0] : null;
     }
@@ -4546,6 +4660,10 @@ Vfs.boot("", "setup.html").then(function (booted) {
       else setVrCatalog(true);
     } else if (p.barTool === "catclose") {
       if (!library.locked) setVrCatalog(false);
+    } else if (p.barTool === "catrecent") {
+      setVrCatalogFilter("recent");
+    } else if (p.barTool === "catfav") {
+      setVrCatalogFilter("favorites");
     } else if (p.barTool === "worldpanel") {
       // the scrollbar, pressed or dragged, moves the list instead
       if (p.scrollBar || p.scrubbing) {
@@ -4553,7 +4671,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
       } else {
         const item = vrCatalogItems[p.tile];
         if (item && item.kind === "back") {
-          library.up();
+          if (vrCatalogFilter) applyVrCatalogFilter(null); // out of the list, back to the directory
+          else library.up();
           loadVrCatalog();
         } else if (item && item.kind === "dir") {
           library.navigate(item.node.path);

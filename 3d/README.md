@@ -59,6 +59,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   reset view (all of these
   also work inside a controller-less VR session, moving the diorama instead
   of the camera)
+- **favorite**: the star in the top-left panel, after the globe, marks the
+  level being played as a favorite (full and yellow while it is one) and
+  unmarks it; the library's "favorites" filter lists them.
 - **2D**: the last icon of the top-left panel (a flat card) switches to the flat view of
   the original - the level square on, one screen pixel per level pixel at
   the zoom, the terrain the level's picture, entrances and exits the
@@ -193,7 +196,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   rank, "order" lays the tiles out either by level number or grouped by the
   tileset each level is built from (the choice is remembered). Playing, a
   tile you have cleared is green and carries your best time, and a row counts
-  how many of its levels are done; editing, a world header in tileset order
+  how many of its levels are done. Every tile carries a star: click it to
+  mark the level as a favorite (yellow while it is one), and the "favorites"
+  toggle in the head lists the levels starred, next to "recent", the last
+  levels played. Editing, a world header in tileset order
   shows a green "✔ tagged" mark when a profile file exists in `profiles/`,
   and entering a level opens the editor. Clears are per-browser, in
   localStorage. Classic packs are scanned once for level names and tilesets
@@ -377,7 +383,7 @@ guide" link opens `setup.md`, the player's guide to the assets.
   (`lemmings-3d-controls.json`, the hotkey dialog's own format), the
   preferences (`lemmings-3d-preferences.json`: every `lem3d-*` setting the
   page keeps - 3D effects, the 2D/3D default, sound and music, the VR bar's
-  place, the library's order and place) and the progress
+  place, the library's order and place, the favorite levels) and the progress
   (`lemmings-3d-progress.json`: the levels cleared with best time, most
   lemmings saved and clear count, and the NeoLemmix talismans; an upload
   merges, keeping the best of both and never dropping a clear). In server
@@ -454,7 +460,10 @@ board - where the desktop's 3D and 2D views start too.
   built from and — once you have cleared it — a green ground and your best
   time. It opens on the level you are playing, outlined in yellow. Picking a
   tile enters that level; the close button in its top-right corner leaves the
-  game as it was. Like the questions, it owns the ray while it is up, and it
+  game as it was. Next to the close, a clock lists the last levels played
+  and a star your favorites (each tile of a favorite wears a yellow star),
+  from any pack, labelled with the pack and rank they live in; the same
+  button again, or "‹ back", returns to the directories. Like the questions, it owns the ray while it is up, and it
   holds the clock.
 - **either thumbstick, while the catalog is up** — scrolls the list, up and
   down. Neither stick pans or tilts the board while it is open, and a press
