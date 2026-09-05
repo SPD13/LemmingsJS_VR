@@ -497,7 +497,7 @@ Vfs.boot("").then(function (booted) {
       (uncoloured ? ", " + uncoloured + " out of the colour blend" : "") +
       (files.isDirty(g.url) ? " · unsaved changes" : ""));
     dom.save.disabled = !files.isDirty(g.url);
-    dom.reset.disabled = !tagged && !shaded && !blended && !coloured;
+    dom.reset.disabled = !tagged && !shaded && !unblended && !uncoloured;
   }
 
   async function save() {
