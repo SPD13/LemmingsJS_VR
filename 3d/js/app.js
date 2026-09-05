@@ -4291,6 +4291,16 @@ Vfs.boot("", "setup.html").then(function (booted) {
     pressOnPanel(e, p);
   }, true);
 
+  // the spectator's mark: where the mouse is, and that a button is down -
+  // any button, since the rings are for the player's eye, not an action
+  renderer.domElement.addEventListener("pointerdown", (e) => {
+    spectator.aim(ndcFromEvent(e));
+    spectator.press(true);
+  }, true);
+  renderer.domElement.addEventListener("pointerup", (e) => {
+    if (!e.buttons) spectator.press(false);
+  }, true);
+
   // a middle press must not start the browser's autoscroll: it is a key here
   renderer.domElement.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
   renderer.domElement.addEventListener("pointerdown", (e) => {
@@ -4389,6 +4399,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
     if (p && p.panelUv) session.gui.onDoubleClick(p.panelUv);
   });
   renderer.domElement.addEventListener("pointermove", (e) => {
+    spectator.aim(ndcFromEvent(e));
+    if (!e.buttons) spectator.press(false); // the button came up off the canvas
     if (!mouseAllowed()) return;
     if (session.gui.minimapDrag && (e.buttons & 1)) {
       // held on the map: keep centring the view under the pointer
@@ -4477,6 +4489,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
   });
   // the pointer leaving the canvas takes the cursor with it
   renderer.domElement.addEventListener("pointerleave", () => {
+    spectator.leave();
     if (!mouseAllowed() || renderer.xr.isPresenting) return;
     applyHover(null);
   });
@@ -4767,6 +4780,28 @@ Vfs.boot("", "setup.html").then(function (booted) {
   // the monitor's view of a session: the board from where the head was when
   // it was placed, the bar along the bottom, the beam where it points
   const observer = new ObserverView(renderer, scene, guiRoot);
+  // the desktop mouse while the hands own the pointer: a mark in the headset
+  // at what the monitor's cursor is over, rings out of it when it clicks
+  const spectator = new SpectatorPointer(scene, observer.camera, guiRoot, {
+    sceneHit: raycastHit,
+    boardHit: (rc) => {
+      if (!session) return null;
+      const hits = rc.intersectObject(session.pickPlane, false);
+      return hits.length ? hits[0] : null;
+    },
+    board: () => (session ? { worldGroup: session.worldGroup, terrain: session.terrain } : null),
+    lemmingAt: (x, y) => {
+      if (!session) return null;
+      const lem = session.game.getLemmingManager().getLemmingAt(x, y);
+      if (!lem || !lem.action) return null;
+      // the sprite's centre, as the hover ring finds it
+      session.worldGroup.updateWorldMatrix(true, false);
+      return session.worldGroup.localToWorld(new THREE.Vector3(lem.x, lem.y - 5, LEMMING_Z + 2));
+    },
+  });
+  /** True while the mouse only points, for the headset to see: a session
+   *  whose controllers own the pointer. */
+  const mouseSpectates = () => renderer.xr.isPresenting && !vrMouseFallback();
 
   /**
    * A dolly: the board slides along the line of sight, so the point of it
@@ -5390,6 +5425,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
       vrPan = null;
       vrOrbit = null;
     }
+    // the mouse's mark for the headset, worked out from where the board and
+    // the bar are now (they move under a mouse that sits still)
+    spectator.update(now, mouseSpectates());
     renderer.render(scene, desktopEye());
     // then the monitor's picture: the headset's frame went to the layer
     if (renderer.xr.isPresenting) observer.render(vr.pointerHit);
@@ -5591,7 +5629,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
 
   // debug handle for the console / automated checks
   window.__lem3d = {
-    state, camera, renderer, controls, library, vr, observer, dioramaRoot, placeDioramaForXR,
+    state, camera, renderer, controls, library, vr, observer, spectator, dioramaRoot, placeDioramaForXR,
     // the 2D view: its camera, its numbers, and the switch
     flatCamera, flatView, applyFlat, toggleFlat, transitionFlat, flatPlayPx,
     get flatActive() { return flatActive; }, get viewTween() { return viewTween; },
