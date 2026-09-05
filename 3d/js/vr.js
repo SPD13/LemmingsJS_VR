@@ -325,6 +325,12 @@ class VRManager {
   /** The head's pose from the last rendered frame, or null before one. */
   get lastHeadPose() { return this._lastHeadPose || null; }
 
+  /** The pointing hand's landing this frame: {controller, hit}, or null. */
+  get pointerHit() {
+    const c = this._aiming; // hidden with its controllers gone: its last hit is stale then
+    return c && c.visible && c.userData.lastHit ? { controller: c, hit: c.userData.lastHit } : null;
+  }
+
   resetDiorama() {
     this.dioramaRoot.position.set(0, 0, 0);
     this.dioramaRoot.rotation.set(0, 0, 0);

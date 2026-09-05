@@ -117,7 +117,12 @@ with collision.
 
 The scene's own planes: `LEMMING_Z = TERRAIN_DEPTH/2 − SPRITE_DEPTH/2` (mid-slab,
 so lemmings are embedded in the ground rather than floating in front of it),
-`OBJECT_Z = LEMMING_Z − 0.8`, `OBJECT_BG_Z = −1.4`, `OBJECT_DECAL_Z = 16.25`.
+`OBJECT_Z = LEMMING_Z − 0.8`, `OBJECT_LOW_Z = OBJECT_Z − 3.5` (a NeoLemmix
+`NO_OVERWRITE` gadget: under the terrain where they overlap, which the slab's
+depth test gives, so in the slab a step behind the other objects rather than
+behind the slab, where a firepit's flames read as paint on the backdrop),
+`OBJECT_BG_Z = −1.4` (the DOS no-overwrite flag, a NeoLemmix moving
+background), `OBJECT_DECAL_Z = 16.25`.
 
 ### 2.3 Terrain (`terrain.js`)
 
@@ -672,7 +677,8 @@ decoded and looped, the AdLib track when nothing is found. Pre-level text
 shows in the status line, post-level text and talismans with the result
 (`lem3d-talismans` records them). Nuked lemmings carry their countdown
 digits; pickups and capped exits carry their counts; moving backgrounds
-draw behind the terrain.
+draw behind the terrain, and a `NO_OVERWRITE` gadget in the slab behind the
+other objects (§2.2), which is NeoLemmix's "gadgets low" layer.
 
 Edit mode works on Lemmix levels too: the placed pieces go to `depth.js`
 and the piece editor as an id per distinct drawn image, and tags are kept
@@ -744,8 +750,28 @@ follows room calibration and can point anywhere.
   recentres. The world itself never moves, so there is nothing to feel sick
   about.
 - **No controllers?** The session still runs: a warning sign appears, the
-  desktop mouse becomes the pointer (aim on the mirrored view), and it reaches
-  every in-scene control, scrubbers included.
+  desktop mouse becomes the pointer (aim on the observer view the monitor
+  shows, below), and it reaches every in-scene control, scrubbers included.
+
+### The monitor during a session
+
+Inside a session three draws only into the headset's layer, and a runtime's
+mirror of one eye swings with the head. The page draws the monitor itself
+(`observer.js`): an observer's view of the board, for whoever is watching
+the player. Its camera is parked where the head was when the board was
+placed - a session's first frame, a recentre, a level change - looking at the
+board's focus, and stays there: since the world never moves and the board
+does, it sees every pan, tilt, dolly, drag and scale the player applies and
+nothing of the head's own motion. The beam, the hand marks, the impact dot
+and the board cursor are scene objects, so it shows where the player is
+pointing as it is. The skill bar, wherever it stands in the room, rides this
+camera for the pass the way it rides the desktop's, so it lies along the
+bottom of the monitor with the hovered tile popped out and the selected
+skill framed (the same meshes and bitmap the headset shows); a beam on the
+bar is marked by a dot pinned to the button it hit. The picture is a second
+render into the canvas every second headset frame (`OBSERVER_EVERY`), the
+XR manager switched off for the call; the mouse fallback casts its rays
+through this camera, so a mouse aimed on the monitor lands where it looks.
 
 ### The in-scene interface
 

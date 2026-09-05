@@ -34,6 +34,13 @@ Vfs.boot("", "setup.html").then(function (booted) {
   // normal objects (hatch/exit/traps) sit just behind them at the same depth
   const LEMMING_Z = TERRAIN_DEPTH / 2 - SPRITE_DEPTH / 2;
   const OBJECT_Z = LEMMING_Z - 0.8;
+  // a NeoLemmix NO_OVERWRITE gadget (a firepit's base under a pillar's top,
+  // a trap set into a wall): under the terrain where they overlap, which the
+  // slab's depth test gives, so in the slab and a step behind the other
+  // objects - not behind the slab, where its relief would be lost at the
+  // bottom of a 16-deep hollow. The step keeps its front face behind the 2D
+  // view's terrain quad too (FLAT_TERRAIN_Z), as the original draws it.
+  const OBJECT_LOW_Z = OBJECT_Z - 3.5;
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
   // water and lava fill the slab from here back: a shade proud of the
@@ -2056,6 +2063,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
   window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    observer.resize();
     sizeFlatCamera();
     renderer.setSize(window.innerWidth, window.innerHeight);
     if (flatActive && session) { clampFlatView(session.level); applyFlatView(session.level); }
@@ -2886,7 +2894,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
         }
       }
       objectPool.sync(objectItems, (layer) =>
-        layer < 0 ? OBJECT_BG_Z : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z, false, !!game.clearPhysics);
+        layer < -1 ? OBJECT_BG_Z : layer < 0 ? OBJECT_LOW_Z : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z,
+        false, !!game.clearPhysics);
 
       lemCapture.begin();
       const lems = game.getLemmingManager().lemmings;
@@ -3840,18 +3849,13 @@ Vfs.boot("", "setup.html").then(function (booted) {
     return p;
   }
 
-  /** Mouse ray: desktop camera normally; inside a session, the XR eye camera
-   *  so aiming at the headset's mirrored view on the monitor maps correctly. */
+  /** Mouse ray: the desktop camera normally; inside a session the observer's,
+   *  since that is the picture the monitor shows (observer.js), so a mouse
+   *  aimed on it lands where it looks. */
   function mouseRaycaster(e) {
     const ndc = ndcFromEvent(e);
     if (renderer.xr.isPresenting) {
-      const xrCam = renderer.xr.getCamera();
-      const eye = xrCam.cameras && xrCam.cameras.length ? xrCam.cameras[0] : xrCam;
-      const projInv = new THREE.Matrix4().copy(eye.projectionMatrix).invert();
-      const origin = new THREE.Vector3().setFromMatrixPosition(eye.matrixWorld);
-      const target = new THREE.Vector3(ndc.x, ndc.y, 0.5)
-        .applyMatrix4(projInv).applyMatrix4(eye.matrixWorld);
-      raycaster.set(origin, target.sub(origin).normalize());
+      raycaster.setFromCamera(ndc, observer.camera);
     } else {
       raycaster.setFromCamera(ndc, desktopEye()); // handles the orthographic one too
     }
@@ -4416,6 +4420,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
       startX, session.level.height / 2, TERRAIN_DEPTH / 2);
     const target = headPos.clone().addScaledVector(fwd, 0.9);
     target.y = Math.max(0.7, headPos.y - 0.15); // just below eye level
+    // the monitor's camera parks here too, looking at the board's focus, and
+    // stays until the next placement: the head is free to move after this
+    observer.anchor(headPos, target);
     dioramaRoot.position.copy(target)
       .sub(focusLocal.multiplyScalar(s).applyEuler(dioramaRoot.rotation));
 
@@ -4614,6 +4621,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // a recentre brings the windows to the new view along with the board
     onRecenter: (headPose) => placeVrWindows(headPose),
   });
+  // the monitor's view of a session: the board from where the head was when
+  // it was placed, the bar along the bottom, the beam where it points
+  const observer = new ObserverView(renderer, scene, guiRoot);
 
   /**
    * A dolly: the board slides along the line of sight, so the point of it
@@ -5238,6 +5248,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
       vrOrbit = null;
     }
     renderer.render(scene, desktopEye());
+    // then the monitor's picture: the headset's frame went to the layer
+    if (renderer.xr.isPresenting) observer.render(vr.pointerHit);
   }
 
   // world library: the level packs, browsed like the levels/ directory
@@ -5436,7 +5448,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
 
   // debug handle for the console / automated checks
   window.__lem3d = {
-    state, camera, renderer, controls, library, vr, dioramaRoot, placeDioramaForXR,
+    state, camera, renderer, controls, library, vr, observer, dioramaRoot, placeDioramaForXR,
     // the 2D view: its camera, its numbers, and the switch
     flatCamera, flatView, applyFlat, toggleFlat, transitionFlat, flatPlayPx,
     get flatActive() { return flatActive; }, get viewTween() { return viewTween; },
