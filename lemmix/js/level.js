@@ -505,7 +505,10 @@
     for (let i = 0; i < physics.length; i++) {
       let c = physics[i];
       const bits = c & ALL_OWW;
-      if (bits !== 0 && (bits & (bits - 1)) !== 0) c &= ~(PM.ONEWAY | ALL_OWW); // more than one arrow
+      // RemoveOverlappingOWWs: a one-way pixel keeps its bits only under
+      // exactly one arrow - none, and it is not one-way at all (which is
+      // what the arrows are drawn through: only PM_ONEWAY pixels show them)
+      if (bits === 0 || (bits & (bits - 1)) !== 0) c &= ~(PM.ONEWAY | ALL_OWW);
       if ((c & PM.SOLID) === 0) c &= ~PM.TERRAIN;
       if (c & PM.STEEL) c &= ~PM.ONEWAY;
       if ((c & PM.ONEWAY) === 0) c &= ~ALL_OWW;
@@ -704,6 +707,8 @@
   }
 
   /** The MapObject shape the 3D layer draws: position, animation frames, draw flags. */
+  const OWW_EFFECTS = new Set(["ONEWAYLEFT", "ONEWAYRIGHT", "ONEWAYDOWN", "ONEWAYUP"]);
+
   function gadgetAsObject(g) {
     const frames = [];
     const count = g.frameCount;
@@ -718,13 +723,17 @@
     // 2D view, which has only its terrain quad to hide it), and only the
     // moving backgrounds go behind the slab; ONLY_ON_TERRAIN is a decal over
     // it; a gadget carrying both flags is an ordinary one.
-    const behind = g.effectBase === "BACKGROUND" && !g.onlyOnTerrain;
-    const low = g.noOverwrite && !g.onlyOnTerrain && !behind;
-    const decal = g.onlyOnTerrain && !g.noOverwrite;
+    // A one-way arrow is its own layer (rlOneWayArrows), over the terrain
+    // and cut to its PM_ONEWAY pixels whatever flags it carries: a decal.
+    const oneWay = OWW_EFFECTS.has(g.effect);
+    const behind = g.effectBase === "BACKGROUND" && !g.onlyOnTerrain && !oneWay;
+    const low = g.noOverwrite && !g.onlyOnTerrain && !behind && !oneWay;
+    const decal = oneWay || (g.onlyOnTerrain && !g.noOverwrite);
     const drawProperties = Lemmings && Lemmings.DrawProperties
       ? new Lemmings.DrawProperties(false, behind, decal, false)
       : { isUpsideDown: false, noOverwrite: behind, onlyOverwrite: decal, isErase: false };
     drawProperties.low = low;
+    drawProperties.oneWay = oneWay;
     const object = {
       x: g.x, y: g.y, gadget: g, drawProperties,
       animation: {

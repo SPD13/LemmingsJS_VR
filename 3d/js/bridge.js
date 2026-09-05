@@ -741,6 +741,8 @@ class SpriteCapture {
       // NeoLemmix NO_OVERWRITE gadget, see gadgetAsObject in lemmix/js/level.js),
       // 0 with the lemmings, 1 a decal on the terrain's face
       layer: props.noOverwrite ? -2 : props.onlyOverwrite ? 1 : props.low ? -1 : 0,
+      // a one-way arrow: a decal cut to the one-way pixels rather than to the terrain
+      oneWay: !!props.oneWay,
       key: this._key(),
     });
   }

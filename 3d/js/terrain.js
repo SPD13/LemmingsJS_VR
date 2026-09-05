@@ -48,6 +48,10 @@
 
 const TERRAIN_CHUNK = 32;
 const TERRAIN_DEPTH = 16; // front Z of the main terrain slab (DepthClass.TERRAIN)
+// the decals' skin (decals.js): how far in front of the face it lies, and of
+// the 2D view's quad (the objects stand a whole pixel in front of that one)
+const DECAL_LIFT = 0.1;
+const DECAL_FLAT_LIFT = 0.5;
 
 // face shading factors (MeshBasicMaterial * vertexColors, no lights needed)
 const SHADE_FRONT = 1.0;
@@ -166,6 +170,12 @@ class TerrainMesh {
 
     this.chunkMeshes = new Array(this.chunksX * this.chunksY).fill(null);
     this.dirtyChunks = new Set();
+    // the decals painted on the face (decals.js): their texture on a skin of
+    // per-pixel quads a hair in front of it, one mesh per chunk
+    this.decals = null;
+    this.decalMaterial = null;
+    this.decalMeshes = new Array(this.chunksX * this.chunksY).fill(null);
+    this.decalFlatMesh = null;
 
     for (let cy = 0; cy < this.chunksY; cy++) {
       for (let cx = 0; cx < this.chunksX; cx++) {
@@ -542,6 +552,96 @@ class TerrainMesh {
     return c * (RELIEF_MAX + 1) + this._reliefAt(x, y);
   }
 
+  /**
+   * The decals painted on the face (decals.js): the pixels they may cover
+   * get a second skin, cut per pixel like the face and lying DECAL_LIFT in
+   * front of it - on top of the relief, sloped with it - carrying the decal
+   * texture. The 2D view gets one quad of it over the terrain's quad.
+   */
+  setDecals(decals) {
+    this.decals = decals;
+    this.decalMaterial = decals ? this.resources.track(new THREE.MeshBasicMaterial({
+      map: decals.texture, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    })) : null;
+    if (this.decalFlatMesh) {
+      this.group.remove(this.decalFlatMesh);
+      this.decalFlatMesh = null;
+    }
+    if (this.flatMesh) this._buildDecalFlat();
+    if (this.flat) {
+      // the chunks wait for the quad to come down; the skins go with them
+      for (let i = 0; i < this.decalMeshes.length; i++) this._dropDecalChunk(i);
+    } else {
+      this._rebuildAll();
+    }
+  }
+
+  _buildDecalFlat() {
+    if (!this.decals || this.decalFlatMesh) return;
+    const geom = this.resources.track(new THREE.PlaneGeometry(1, 1));
+    this.decalFlatMesh = new THREE.Mesh(geom, this.decalMaterial);
+    this.decalFlatMesh.scale.set(this.w, this.h, 1);
+    this.decalFlatMesh.name = "decals-flat";
+    this.decalFlatMesh.visible = this.flat;
+    this.group.add(this.decalFlatMesh);
+    this.decalFlatMesh.position.set(this.w / 2, this.h / 2, this.flatZ + DECAL_FLAT_LIFT);
+  }
+
+  _dropDecalChunk(id) {
+    const old = this.decalMeshes[id];
+    if (!old) return;
+    this.chunkGroup.remove(old);
+    old.geometry.dispose();
+    this.decalMeshes[id] = null;
+  }
+
+  /**
+   * The skin of one chunk: a quad per covered solid pixel, its corners where
+   * the face's are (the same sliding with smooth terrain, the same corner
+   * heights with smooth relief), lifted by DECAL_LIFT, mapped onto the
+   * level-sized decal texture.
+   */
+  _rebuildDecalChunk(cx, cy) {
+    const id = cy * this.chunksX + cx;
+    this._dropDecalChunk(id);
+    if (!this.decals) return;
+    const coverage = this.decals.coverage;
+    const x0 = cx * TERRAIN_CHUNK, y0 = cy * TERRAIN_CHUNK;
+    const cw = Math.min(TERRAIN_CHUNK, this.w - x0), ch = Math.min(TERRAIN_CHUNK, this.h - y0);
+    const W = this.w, H = this.h;
+    const slope = this.smooth && this.hasRelief;
+    const positions = [], uvs = [], indices = [];
+    for (let ly = 0; ly < ch; ly++) {
+      for (let lx = 0; lx < cw; lx++) {
+        const px = x0 + lx, py = y0 + ly;
+        if (!coverage[px + py * W]) continue;
+        const c = this._classAt(px, py);
+        if (c === DepthClass.EMPTY) continue;
+        const front = this._frontAt(px, py);
+        const z00 = (slope ? this._cornerZ(px, py, c, front) : front) + DECAL_LIFT;
+        const z10 = (slope ? this._cornerZ(px + 1, py, c, front) : front) + DECAL_LIFT;
+        const z11 = (slope ? this._cornerZ(px + 1, py + 1, c, front) : front) + DECAL_LIFT;
+        const z01 = (slope ? this._cornerZ(px, py + 1, c, front) : front) + DECAL_LIFT;
+        const p00 = this._cornerPos(px, py), p10 = this._cornerPos(px + 1, py);
+        const p11 = this._cornerPos(px + 1, py + 1), p01 = this._cornerPos(px, py + 1);
+        const base = positions.length / 3;
+        positions.push(p00[0], p00[1], z00, p10[0], p10[1], z10, p11[0], p11[1], z11, p01[0], p01[1], z01);
+        const u0 = px / W, u1 = (px + 1) / W, v0 = py / H, v1 = (py + 1) / H;
+        uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+    }
+    if (indices.length === 0) return;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    const mesh = new THREE.Mesh(geom, this.decalMaterial);
+    mesh.name = "decals";
+    this.chunkGroup.add(mesh);
+    this.decalMeshes[id] = mesh;
+  }
+
   /** Swap in a new relief map (the 3D-terrain toggle) and re-mesh. */
   setRelief(reliefMap) {
     this.relief = reliefMap || new Uint8Array(this.w * this.h);
@@ -624,13 +724,16 @@ class TerrainMesh {
       this.flatMesh.scale.set(this.w, this.h, 1);
       this.flatMesh.name = "terrain-flat";
       this.group.add(this.flatMesh);
+      this._buildDecalFlat();
     }
     if (z != null) this.flatZ = z;
     if (this.flatMesh) this.flatMesh.position.set(this.w / 2, this.h / 2, this.flatZ);
+    if (this.decalFlatMesh) this.decalFlatMesh.position.set(this.w / 2, this.h / 2, this.flatZ + DECAL_FLAT_LIFT);
     if (this.flat === on) return;
     this.flat = on;
     this.chunkGroup.visible = !on;
     if (this.flatMesh) this.flatMesh.visible = on;
+    if (this.decalFlatMesh) this.decalFlatMesh.visible = on;
     if (!on) {
       this.dirtyChunks.clear();
       this._rebuildAll();
@@ -811,6 +914,7 @@ class TerrainMesh {
       old.geometry.dispose();
       this.chunkMeshes[id] = null;
     }
+    this._rebuildDecalChunk(cx, cy);
     const geom = this._buildChunkGeometry(cx, cy);
     if (!geom) return;
     const mesh = new THREE.Mesh(geom, geom.groups.length > 1 ? this.materials : this.material);
@@ -1229,6 +1333,9 @@ class TerrainMesh {
 
   dispose() {
     for (const mesh of this.chunkMeshes) {
+      if (mesh) mesh.geometry.dispose();
+    }
+    for (const mesh of this.decalMeshes) {
       if (mesh) mesh.geometry.dispose();
     }
     this.group.parent.remove(this.group);
