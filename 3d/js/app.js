@@ -3271,7 +3271,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
         for (const portal of portals) {
           if (!portal.rebuild || !portal.mesh) continue;
           const geom = buildPortalGeometry(portal.rebuild.frame, portal.rebuild.depth,
-            portal.rebuild.sky, state.smoothTerrain);
+            portal.rebuild.opening, state.smoothTerrain);
           if (!geom) continue;
           const old = portal.mesh.geometry;
           portal.geometry = resources.track(geom);
