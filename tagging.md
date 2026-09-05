@@ -73,13 +73,17 @@ links to that gallery on the galleries page, shows how many tags the file holds
 and whether it exists on disk yet, carries a `● unsaved` mark once it has
 changes, and offers a `⤓ json` link that downloads that one file.
 
-**The tag buttons**, described one by one below. A lit button is the state the
-piece is in, not a button waiting to be pressed. They are disabled until a
-piece is selected.
+**The tag buttons**, described one by one below, in three labelled rows:
+*Terrain layer* (`backdrop`, `terrain`, `relief`, `overlay`, `auto`), *3D
+rendering* (`3D shade`, `invert`, `3D object`) and *Surface* (`surface
+blend`, `colour blend`). A lit button is the state the piece is in, not a
+button waiting to be pressed. They are disabled until a piece is selected.
 
-**The actions**: `save`, `export JSON`, `galleries` (which becomes *this piece
-in its gallery* once something is selected), and `help`, which opens this
-document. Under them, the result of the last save or export.
+**The controls**: `save`, `export JSON` and `reset all`, in a fourth row.
+Under them two small links: *see in gallery*, which opens the galleries page
+on the selected piece (or at its root with nothing selected), and *help*,
+which opens this document in a new tab. Last, the result of the last save or
+export.
 
 On a **special level** — the handful that ship as one pre-rendered image
 (VGASPEC) rather than as a list of placed pieces — the info line reads `no

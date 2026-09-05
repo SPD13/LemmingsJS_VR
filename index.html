@@ -197,7 +197,7 @@
   #confirm .btnrow { justify-content: center; }
   #confirm-yes { border-color: #ffd866; color: #ffd866; }
   #confirm-yes:hover { background: #4a4326; }
-  #hud-editor { bottom: 12px; right: 12px; max-width: 320px; }
+  #hud-editor { bottom: 12px; right: 12px; max-width: 380px; }
   /* the footer: which asset mode is in force, and the way to the other one -
      on the game view, and again on the world library that covers it */
   .assets-foot { bottom: 12px; right: 12px; font-size: 10px; color: #5a6a7c; padding: 2px 8px; }
@@ -222,6 +222,15 @@
   .ed-file .ed-dirty { color: #ffd866; }
   .ed-file .ed-count { color: #8fa1bb; }
   .ed-file .ed-dl { color: #8fa1bb; margin-left: auto; }
+  /* the tag buttons in their sections: a small muted label over each row */
+  #hud-editor .ed-section { margin-top: 6px; }
+  #hud-editor .ed-section .btnrow { margin-top: 2px; }
+  #hud-editor .ed-label { font-size: 10px; color: #8fa1bb; letter-spacing: 0.08em; text-transform: uppercase; }
+  /* the links under the sections: the guide, and this piece in its gallery */
+  #ed-links { margin-top: 8px; font-size: 11px; color: #5a6a7c; }
+  #ed-links a { color: #7fd6e8; text-decoration: none; }
+  #ed-links a:hover { color: #a9e6f4; text-decoration: underline; }
+  #ed-links .ed-sep { margin: 0 4px; }
   #ed-msg { min-height: 16px; margin-top: 6px; font-size: 11px; }
   #ed-msg.ok { color: #6fce7e; }
   #ed-msg.err { color: #e07a6a; }
@@ -318,26 +327,43 @@
   <h1>PIECE EDITOR</h1>
   <div id="ed-info">click a terrain piece to tag it</div>
   <div id="ed-files"></div>
-  <div class="btnrow">
-    <button data-class="backdrop">backdrop</button>
-    <button data-class="terrain">terrain</button>
-    <button data-class="relief">relief</button>
-    <button data-class="overlay">overlay</button>
+  <div class="ed-section">
+    <div class="ed-label">Terrain layer</div>
+    <div class="btnrow">
+      <button data-class="backdrop">backdrop</button>
+      <button data-class="terrain">terrain</button>
+      <button data-class="relief">relief</button>
+      <button data-class="overlay">overlay</button>
+      <button id="ed-auto">auto</button>
+    </div>
   </div>
-  <div class="btnrow">
-    <button id="ed-auto">auto</button>
-    <button id="ed-emboss">3D shade</button>
-    <button id="ed-invert">invert</button>
-    <button id="ed-sculpt">3D object</button>
-    <button id="ed-blend">surface blend</button>
-    <button id="ed-colorblend">colour blend</button>
-    <button id="ed-reset">reset all</button>
+  <div class="ed-section">
+    <div class="ed-label">3D rendering</div>
+    <div class="btnrow">
+      <button id="ed-emboss">3D shade</button>
+      <button id="ed-invert">invert</button>
+      <button id="ed-sculpt">3D object</button>
+    </div>
   </div>
-  <div class="btnrow">
-    <button id="ed-save">save</button>
-    <button id="ed-export">export JSON</button>
-    <button id="ed-galleries">galleries</button>
-    <button id="ed-help">help</button>
+  <div class="ed-section">
+    <div class="ed-label">Surface</div>
+    <div class="btnrow">
+      <button id="ed-blend">surface blend</button>
+      <button id="ed-colorblend">colour blend</button>
+    </div>
+  </div>
+  <div class="ed-section">
+    <div class="ed-label">Controls</div>
+    <div class="btnrow">
+      <button id="ed-save">save</button>
+      <button id="ed-export">export JSON</button>
+      <button id="ed-reset">reset all</button>
+    </div>
+  </div>
+  <div id="ed-links">
+    <a id="ed-galleries" href="galleries.html">see in gallery</a>
+    <span class="ed-sep">·</span>
+    <a id="ed-help" href="https://github.com/SPD13/LemmingsJS_VR/blob/master/tagging.md" target="_blank" rel="noopener">help</a>
   </div>
   <div id="ed-msg"></div>
 </div>
