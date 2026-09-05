@@ -28,6 +28,8 @@
  * level's name, its pack and rank, and its world, best matches first. A
  * query replaces the directory view with the tiles it matches; emptying it
  * (or Escape) brings the directory back, and Enter plays the first match.
+ * Next to it, a "recent" toggle lists the last levels played, latest first
+ * (kept in localStorage, like the progress).
  *
  * Classic levels carry no name in the index (that would mean reading the DAT
  * files); a pack is scanned once for its names and tilesets, and the result
@@ -56,6 +58,8 @@ const PROGRESS_KEY = "lem3d-cleared";
 const ORDER_KEY = "lem3d-lib-order";
 const PATH_KEY = "lem3d-lib-path";
 const SEARCH_MAX = 200; // the most matches the search view lists
+const RECENT_KEY = "lem3d-recent";
+const RECENT_MAX = 50;  // how many levels played the recent filter keeps
 
 /**
  * Fuzzy match: every word of the query must appear in the text as a
@@ -254,6 +258,25 @@ const LevelProgress = {
   },
 };
 
+/**
+ * The levels played, latest first, for the library's recent filter. Kept in
+ * localStorage next to the progress, so per-browser too.
+ */
+const RecentLevels = {
+  list() {
+    try {
+      const list = JSON.parse(localStorage.getItem(RECENT_KEY));
+      return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+  },
+
+  /** A level was played: it moves to the head of the list. */
+  push(levelId) {
+    const list = [levelId].concat(this.list().filter((id) => id !== levelId)).slice(0, RECENT_MAX);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) {}
+  },
+};
+
 class WorldLibrary {
   /**
    * `root` is the repo root as seen from the page ("", the pages sit at the root).
@@ -287,12 +310,18 @@ class WorldLibrary {
       rescan: document.getElementById("lib-rescan"),
       order: document.getElementById("lib-order"),
       search: document.getElementById("lib-search"),
+      recent: document.getElementById("lib-recent"),
     };
+    // the recent filter: on, the grid lists the levels played, latest
+    // first, wherever the browser stands; a search or a move turns it off
+    this.recent = false;
+    this.dom.recent.addEventListener("click", () => this.setRecent(!this.recent));
     // the search: a query replaces the directory view with the levels
     // matching it, from every pack; emptied, the directory comes back
     this.query = "";
     this.dom.search.addEventListener("input", () => {
       this.query = this.dom.search.value.trim();
+      if (this.query) this.setRecent(false, false);
       this._render();
     });
     this.dom.search.addEventListener("keydown", (e) => {
@@ -404,8 +433,23 @@ class WorldLibrary {
     this.dom.galleries.hidden = !this.editMode;
   }
 
-  /** The level being played: the library opens on its directory. */
-  setCurrent(levelId) { this.currentLevelId = levelId; }
+  /** The level being played: the library opens on its directory, and the
+   *  recent filter remembers it. */
+  setCurrent(levelId) {
+    if (levelId && levelId !== this.currentLevelId) RecentLevels.push(levelId);
+    this.currentLevelId = levelId;
+  }
+
+  /** Turn the recent filter on or off; `redraw` (default) shows the change. */
+  setRecent(on, redraw) {
+    on = !!on;
+    if (on) this._clearSearch(false); // one filter at a time
+    if (this.recent !== on) {
+      this.recent = on;
+      this.dom.recent.setAttribute("aria-pressed", String(on));
+      if (redraw !== false && this.isOpen) this._render();
+    }
+  }
 
   /**
    * `opts.path` lands on that directory rather than the current level's;
@@ -446,6 +490,7 @@ class WorldLibrary {
     this.locked = false;
     this.dom.close.hidden = false;
     this._clearSearch(false); // next time, the library opens on the level's directory
+    this.setRecent(false, false);
     this.close();
     this.enterLevel(levelId);
   }
@@ -463,7 +508,8 @@ class WorldLibrary {
   }
 
   navigate(path) {
-    this._clearSearch(false); // navigating anywhere leaves the search
+    this._clearSearch(false); // navigating anywhere leaves the filters
+    this.setRecent(false, false);
     this.path = path || "";
     try { localStorage.setItem(PATH_KEY, this.path); } catch (e) {}
     if (this.isOpen) this._render();
@@ -487,10 +533,12 @@ class WorldLibrary {
       let node = this.currentNode();
       if (!node) { node = LevelTree.root; this.path = ""; }
       this._renderCrumb(node);
-      this.dom.crumb.hidden = !!this.query;
+      const filtered = !!this.query || this.recent;
+      this.dom.crumb.hidden = filtered;
       const hasLevels = !!(node.levels && node.levels.length);
-      this.dom.order.hidden = !!this.query || !(hasLevels && node.engine === "classic");
+      this.dom.order.hidden = filtered || !(hasLevels && node.engine === "classic");
       if (this.query) await this._renderSearch(this.query);
+      else if (this.recent) await this._renderRecent();
       else if (hasLevels) await this._renderLevels(node);
       else this._renderRows(node);
     } catch (err) {
@@ -729,6 +777,35 @@ class WorldLibrary {
     const tiles = document.createElement("div");
     tiles.className = "lib-tiles";
     for (const m of shown) tiles.appendChild(this._buildTile(m.node, m.level, m.scan, true));
+    this.dom.grid.appendChild(tiles);
+  }
+
+  /** The recent view: the levels played, latest first, from any pack. */
+  async _renderRecent() {
+    const hits = RecentLevels.list()
+      .map((id) => LevelTree.byId.get(id)).filter(Boolean); // gone packs drop out
+    const packs = new Set(hits.map((h) => h.pack).filter((p) => p && p.engine === "classic"));
+    for (const pack of packs) {
+      if (this._scans[pack.path]) continue;
+      await this._scanClassic(pack);
+      if (!this.isOpen || !this.recent) return; // moved on meanwhile
+    }
+    const header = document.createElement("div");
+    header.className = "lib-world";
+    const title = document.createElement("span");
+    title.textContent = "recently played · " + hits.length + (hits.length === 1 ? " level" : " levels");
+    header.appendChild(title);
+    this.dom.grid.appendChild(header);
+    if (!hits.length) {
+      this.dom.status.textContent = "no level played yet";
+      return;
+    }
+    const tiles = document.createElement("div");
+    tiles.className = "lib-tiles";
+    for (const hit of hits) {
+      const scan = hit.pack && this._scans[hit.pack.path];
+      tiles.appendChild(this._buildTile(hit.node, hit.level, scan, true));
+    }
     this.dom.grid.appendChild(tiles);
   }
 
