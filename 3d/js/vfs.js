@@ -64,12 +64,31 @@
    * controls this page. Called for the static mode only: the worker serves
    * nothing in server mode, and registering it on the launcher's
    * self-signed https makes the browser log a certificate warning.
+   *
+   * A page load that bypassed the worker - a hard reload (which the
+   * version banner asks for), or DevTools' "Bypass for network" - leaves an
+   * active worker that never controls this page. One normal reload puts
+   * the page under it, so that is what happens, once: the guard in
+   * sessionStorage keeps a bypass that survives the reload (DevTools) from
+   * looping, and that case is reported instead.
    */
   let swReady = null;
   function registerWorker() {
     if (!swReady) swReady = doRegisterWorker();
     return swReady;
   }
+  const RELOAD_KEY = "lem3d-sw-reload"; // sessionStorage: this page reloaded itself to get under the worker
+  const reloaded = () => { try { return !!sessionStorage.getItem(RELOAD_KEY); } catch (e) { return false; } };
+  const setReloaded = (on) => {
+    try { on ? sessionStorage.setItem(RELOAD_KEY, "1") : sessionStorage.removeItem(RELOAD_KEY); } catch (e) {}
+  };
+  const waitControl = (ms) => new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      clearTimeout(timer);
+      resolve(true);
+    }, { once: true });
+  });
   async function doRegisterWorker() {
     if (!("serviceWorker" in navigator)) {
       return {
@@ -84,18 +103,32 @@
     } catch (e) {
       return { controlled: false, reason: "the service worker failed to register: " + (e && e.message) };
     }
-    if (navigator.serviceWorker.controller) return { controlled: true, registration };
-    // first visit: the worker claims the page once active
-    const controlled = await new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), 4000);
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        clearTimeout(timer);
-        resolve(true);
-      }, { once: true });
-    });
+    if (navigator.serviceWorker.controller) {
+      setReloaded(false);
+      return { controlled: true, registration };
+    }
+    // first visit: the worker claims the page once active (ready resolves
+    // on an active worker, controlled page or not)
+    const claimed = waitControl(15000);
+    const active = await Promise.race([
+      navigator.serviceWorker.ready.then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
+    ]);
+    const controlled = active ? await Promise.race([claimed, waitControl(2000)]) : await claimed;
+    if (controlled) {
+      setReloaded(false);
+      return { controlled, registration };
+    }
+    if (!active) return { controlled, registration, reason: "the service worker did not become active" };
+    if (!reloaded()) {
+      // this load bypassed the worker; a normal reload runs under it
+      setReloaded(true);
+      location.reload();
+      return new Promise(() => {});
+    }
     return {
       controlled, registration,
-      reason: controlled ? "" : "the service worker did not take control of the page (a hard reload bypasses it)",
+      reason: "this page load bypassed it (a hard reload, or DevTools' \"Bypass for network\"): reload the page normally",
     };
   }
 
