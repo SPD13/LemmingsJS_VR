@@ -28,7 +28,7 @@
   const PREFS_KEYS = [
     "lem3d-emboss", "lem3d-smooth", "lem3d-doors", "lem3d-skillbar", "lem3d-flat", "lem3d-shadows",
     "lem3d-music", "lem3d-sound", "lem3d-volume", "lem3d-bar", "lem3d-lib-order", "lem3d-lib-path",
-    "lem3d-gal-open",
+    "lem3d-gal-open", "lem3d-favorites",
   ];
   const HOTKEYS_KEY = "lem3d-hotkeys";     // hotkeys.js HotkeyManager
   const CLEARED_KEY = "lem3d-cleared";     // library.js LevelProgress

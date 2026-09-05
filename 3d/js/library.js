@@ -29,7 +29,10 @@
  * query replaces the directory view with the tiles it matches; emptying it
  * (or Escape) brings the directory back, and Enter plays the first match.
  * Next to it, a "recent" toggle lists the last levels played, latest first
- * (kept in localStorage, like the progress).
+ * (kept in localStorage, like the progress), and a "favorites" toggle the
+ * levels starred: every tile carries a star, empty until clicked, that marks
+ * the level as a favorite (kept with the preferences, so it follows the
+ * configuration in server mode).
  *
  * Classic levels carry no name in the index (that would mean reading the DAT
  * files); a pack is scanned once for its names and tilesets, and the result
@@ -60,6 +63,9 @@ const PATH_KEY = "lem3d-lib-path";
 const SEARCH_MAX = 200; // the most matches the search view lists
 const RECENT_KEY = "lem3d-recent";
 const RECENT_MAX = 50;  // how many levels played the recent filter keeps
+const FAVORITES_KEY = "lem3d-favorites"; // a preference: config-store.js syncs it
+// the tile's star (the filter button in index.html draws the same one)
+const STAR_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.9 4 4.4.6-3.2 3 .8 4.4L8 11.7l-3.9 2.1.8-4.4-3.2-3 4.4-.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 
 /**
  * Fuzzy match: every word of the query must appear in the text as a
@@ -277,6 +283,32 @@ const RecentLevels = {
   },
 };
 
+/**
+ * The levels the player starred, in the order they were starred. A
+ * preference, so config-store.js carries it to the server's configuration
+ * files and the setup page downloads and uploads it with the others.
+ */
+const FavoriteLevels = {
+  list() {
+    try {
+      const list = JSON.parse(localStorage.getItem(FAVORITES_KEY));
+      return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+  },
+
+  has(levelId) { return this.list().includes(levelId); },
+
+  /** Star or unstar a level; returns whether it is a favorite now. */
+  toggle(levelId) {
+    const list = this.list();
+    const at = list.indexOf(levelId);
+    if (at >= 0) list.splice(at, 1);
+    else list.push(levelId);
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(list)); } catch (e) {}
+    return at < 0;
+  },
+};
+
 class WorldLibrary {
   /**
    * `root` is the repo root as seen from the page ("", the pages sit at the root).
@@ -311,17 +343,21 @@ class WorldLibrary {
       order: document.getElementById("lib-order"),
       search: document.getElementById("lib-search"),
       recent: document.getElementById("lib-recent"),
+      favorites: document.getElementById("lib-favorites"),
     };
     // the recent filter: on, the grid lists the levels played, latest
-    // first, wherever the browser stands; a search or a move turns it off
+    // first, wherever the browser stands; a search or a move turns it off.
+    // The favorites filter is its twin for the levels starred.
     this.recent = false;
+    this.favorites = false;
     this.dom.recent.addEventListener("click", () => this.setRecent(!this.recent));
+    this.dom.favorites.addEventListener("click", () => this.setFavorites(!this.favorites));
     // the search: a query replaces the directory view with the levels
     // matching it, from every pack; emptied, the directory comes back
     this.query = "";
     this.dom.search.addEventListener("input", () => {
       this.query = this.dom.search.value.trim();
-      if (this.query) this.setRecent(false, false);
+      if (this.query) { this.setRecent(false, false); this.setFavorites(false, false); }
       this._render();
     });
     this.dom.search.addEventListener("keydown", (e) => {
@@ -443,10 +479,21 @@ class WorldLibrary {
   /** Turn the recent filter on or off; `redraw` (default) shows the change. */
   setRecent(on, redraw) {
     on = !!on;
-    if (on) this._clearSearch(false); // one filter at a time
+    if (on) { this._clearSearch(false); this.setFavorites(false, false); } // one filter at a time
     if (this.recent !== on) {
       this.recent = on;
       this.dom.recent.setAttribute("aria-pressed", String(on));
+      if (redraw !== false && this.isOpen) this._render();
+    }
+  }
+
+  /** Turn the favorites filter on or off; `redraw` (default) shows the change. */
+  setFavorites(on, redraw) {
+    on = !!on;
+    if (on) { this._clearSearch(false); this.setRecent(false, false); } // one filter at a time
+    if (this.favorites !== on) {
+      this.favorites = on;
+      this.dom.favorites.setAttribute("aria-pressed", String(on));
       if (redraw !== false && this.isOpen) this._render();
     }
   }
@@ -491,6 +538,7 @@ class WorldLibrary {
     this.dom.close.hidden = false;
     this._clearSearch(false); // next time, the library opens on the level's directory
     this.setRecent(false, false);
+    this.setFavorites(false, false);
     this.close();
     this.enterLevel(levelId);
   }
@@ -510,6 +558,7 @@ class WorldLibrary {
   navigate(path) {
     this._clearSearch(false); // navigating anywhere leaves the filters
     this.setRecent(false, false);
+    this.setFavorites(false, false);
     this.path = path || "";
     try { localStorage.setItem(PATH_KEY, this.path); } catch (e) {}
     if (this.isOpen) this._render();
@@ -533,12 +582,13 @@ class WorldLibrary {
       let node = this.currentNode();
       if (!node) { node = LevelTree.root; this.path = ""; }
       this._renderCrumb(node);
-      const filtered = !!this.query || this.recent;
+      const filtered = !!this.query || this.recent || this.favorites;
       this.dom.crumb.hidden = filtered;
       const hasLevels = !!(node.levels && node.levels.length);
       this.dom.order.hidden = filtered || !(hasLevels && node.engine === "classic");
       if (this.query) await this._renderSearch(this.query);
       else if (this.recent) await this._renderRecent();
+      else if (this.favorites) await this._renderFavorites();
       else if (hasLevels) await this._renderLevels(node);
       else this._renderRows(node);
     } catch (err) {
@@ -781,23 +831,39 @@ class WorldLibrary {
   }
 
   /** The recent view: the levels played, latest first, from any pack. */
-  async _renderRecent() {
-    const hits = RecentLevels.list()
-      .map((id) => LevelTree.byId.get(id)).filter(Boolean); // gone packs drop out
+  _renderRecent() {
+    return this._renderPicked(RecentLevels.list(), "recently played", "no level played yet",
+      () => this.recent);
+  }
+
+  /** The favorites view: the levels starred, from any pack. */
+  _renderFavorites() {
+    return this._renderPicked(FavoriteLevels.list(), "favorites", "no favorite yet - star a level to keep it here",
+      () => this.favorites);
+  }
+
+  /**
+   * A list of level ids from any pack (the recent and favorites views), as
+   * tiles under a header, in the order given. `stillUp` says whether the
+   * view is still the one wanted once the classic packs it needs are
+   * scanned.
+   */
+  async _renderPicked(ids, label, empty, stillUp) {
+    const hits = ids.map((id) => LevelTree.byId.get(id)).filter(Boolean); // gone packs drop out
     const packs = new Set(hits.map((h) => h.pack).filter((p) => p && p.engine === "classic"));
     for (const pack of packs) {
       if (this._scans[pack.path]) continue;
       await this._scanClassic(pack);
-      if (!this.isOpen || !this.recent) return; // moved on meanwhile
+      if (!this.isOpen || !stillUp()) return; // moved on meanwhile
     }
     const header = document.createElement("div");
     header.className = "lib-world";
     const title = document.createElement("span");
-    title.textContent = "recently played · " + hits.length + (hits.length === 1 ? " level" : " levels");
+    title.textContent = label + " · " + hits.length + (hits.length === 1 ? " level" : " levels");
     header.appendChild(title);
     this.dom.grid.appendChild(header);
     if (!hits.length) {
-      this.dom.status.textContent = "no level played yet";
+      this.dom.status.textContent = empty;
       return;
     }
     const tiles = document.createElement("div");
@@ -931,9 +997,36 @@ class WorldLibrary {
 
     const label = document.createElement("div");
     label.className = "lib-label";
-    label.textContent = where.concat(node.name + " " + ordinal).join(" › ");
-    label.title = label.textContent;
+    const text = document.createElement("span");
+    text.className = "lib-name";
+    text.textContent = where.concat(node.name + " " + ordinal).join(" › ");
+    text.title = text.textContent;
+    label.appendChild(text);
     tile.appendChild(label);
+
+    // the star: empty until clicked, full and yellow while the level is a
+    // favorite. It does not enter the level; in the favorites view the tile
+    // unstarred goes away
+    const star = document.createElement("button");
+    star.type = "button";
+    star.className = "lib-star";
+    star.innerHTML = STAR_SVG;
+    const setStar = (on) => {
+      star.classList.toggle("on", on);
+      star.setAttribute("aria-pressed", String(on));
+      star.title = on ? "a favorite - click to unstar" : "mark as a favorite";
+      tile.classList.toggle("favorite", on);
+    };
+    setStar(FavoriteLevels.has(level.id));
+    star.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const on = FavoriteLevels.toggle(level.id);
+      setStar(on);
+      if (!on && this.favorites) this._render();
+      // the page's own star (the HUD's) follows
+      document.dispatchEvent(new CustomEvent("lem3d-favorite", { detail: { levelId: level.id, on } }));
+    });
+    label.appendChild(star);
 
     // playing: a cleared level is marked and wears its best time
     if (!this.editMode) {
@@ -945,7 +1038,7 @@ class WorldLibrary {
         const saved = LevelProgress.saved(level.id);
         time.textContent = "✔ " + LevelProgress.format(best) + (saved !== null ? " · " + saved : "");
         time.title = "best clearing time" + (saved !== null ? ", most lemmings saved" : "");
-        label.appendChild(time);
+        label.insertBefore(time, star);
       }
     }
 

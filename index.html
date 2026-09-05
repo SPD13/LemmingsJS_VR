@@ -102,8 +102,19 @@
   }
   .lib-label {
     font-size: 12px; color: #f0f3f8; margin-top: 6px;
-    display: flex; justify-content: space-between; gap: 8px;
+    display: flex; align-items: center; gap: 8px;
   }
+  .lib-label .lib-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the star on every tile: empty until clicked, full and yellow while the level is a favorite */
+  .lib-star {
+    flex: none; width: 18px; height: 18px; padding: 0; margin: -2px -3px -2px 0;
+    border: 0; border-radius: 3px; background: transparent; color: #5a6a7c;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .lib-star svg { width: 14px; height: 14px; display: block; }
+  .lib-star:hover { color: #f5c542; background: rgba(245, 197, 66, 0.12); }
+  .lib-star.on { color: #f5c542; }
+  .lib-star.on svg path { fill: currentColor; }
   .lib-best { color: #6fce7e; font-variant-numeric: tabular-nums; }
   .lib-tile.cleared { background: #16281a; border-color: #2f6b3d; }
   .lib-tile.cleared:hover { background: #1c3522; }
@@ -132,9 +143,11 @@
   #lib-search:focus { border-color: #6fce7e; }
   #lib-search::placeholder { color: #5a6a7c; }
   #lib-crumb[hidden] { display: none; }
-  /* the recent filter: a toggle, lit while the list of levels played is up */
-  #lib-recent { display: inline-flex; align-items: center; gap: 5px; }
+  /* the recent and favorites filters: toggles, lit while their list is up */
+  #lib-recent, #lib-favorites { display: inline-flex; align-items: center; gap: 5px; }
   #lib-recent[aria-pressed="true"] { color: #6fce7e; border-color: #6fce7e; background: #16281a; }
+  #lib-favorites[aria-pressed="true"] { color: #f5c542; border-color: #f5c542; background: #2a2412; }
+  #lib-favorites[aria-pressed="true"] svg path { fill: currentColor; }
   .lib-rows { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
   .lib-row {
     display: flex; align-items: center; gap: 14px;
@@ -233,6 +246,7 @@
     <button id="btn-next" class="icon"></button>
     <button id="btn-pause" class="icon"></button>
     <button id="btn-library" class="icon"></button>
+    <button id="btn-favorite" class="icon"></button>
     <button id="btn-sound" class="icon"></button>
     <button id="btn-view" class="icon"></button>
     <button id="btn-flat" class="icon"></button>
@@ -246,6 +260,7 @@
     <input id="lib-search" type="search" placeholder="search levels…" autocomplete="off" spellcheck="false"
       title="fuzzy search over every level: its name, pack, rank and world - Escape clears it">
     <button id="lib-recent" title="the last 50 levels played, latest first" aria-pressed="false"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>recent</button>
+    <button id="lib-favorites" title="the levels you starred" aria-pressed="false"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 1.8l1.9 4 4.4.6-3.2 3 .8 4.4L8 11.7l-3.9 2.1.8-4.4-3.2-3 4.4-.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>favorites</button>
     <div id="lib-crumb"></div>
     <span class="lib-spacer"></span>
     <button id="lib-order">order: level</button>
