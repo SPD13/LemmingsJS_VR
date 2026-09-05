@@ -36,11 +36,16 @@ Vfs.boot("", "setup.html").then(function (booted) {
   const OBJECT_Z = LEMMING_Z - 0.8;
   // a NeoLemmix NO_OVERWRITE gadget (a firepit's base under a pillar's top,
   // a trap set into a wall): under the terrain where they overlap, which the
-  // slab's depth test gives, so in the slab and a step behind the other
-  // objects - not behind the slab, where its relief would be lost at the
-  // bottom of a 16-deep hollow. The step keeps its front face behind the 2D
-  // view's terrain quad too (FLAT_TERRAIN_Z), as the original draws it.
-  const OBJECT_LOW_Z = OBJECT_Z - 3.5;
+  // slab's depth test gives, so in the slab with the other objects - a hair
+  // behind them, so two that overlap keep the original's order - and not
+  // behind the slab, where its relief would be lost at the bottom of a
+  // 16-deep hollow and a trap would eat a lemming standing clear of it. The
+  // 2D view has no depth test to do the ordering, only its terrain quad
+  // (FLAT_TERRAIN_Z), so there the gadget steps back behind that quad, as
+  // the original draws it; it changes plane when the doors and the water
+  // appear and go (portalsShown).
+  const OBJECT_LOW_Z = OBJECT_Z - 0.3;
+  const OBJECT_LOW_FLAT_Z = OBJECT_Z - 3.5;
   const OBJECT_BG_Z = -1.4;
   const OBJECT_DECAL_Z = TERRAIN_DEPTH + 0.25;
   // water and lava fill the slab from here back: a shade proud of the
@@ -2894,7 +2899,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
         }
       }
       objectPool.sync(objectItems, (layer) =>
-        layer < -1 ? OBJECT_BG_Z : layer < 0 ? OBJECT_LOW_Z : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z,
+        layer < -1 ? OBJECT_BG_Z
+          : layer < 0 ? (portalsShown ? OBJECT_LOW_Z : OBJECT_LOW_FLAT_Z)
+          : layer > 0 ? OBJECT_DECAL_Z : OBJECT_Z,
         false, !!game.clearPhysics);
 
       lemCapture.begin();

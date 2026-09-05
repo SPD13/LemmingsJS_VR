@@ -676,8 +676,9 @@ camera, renderer, controls}` for console debugging and automated checks.
   happened. Saving needs the launcher's server; on a static host the
   exported profiles must be copied into `3d/profiles/` by hand.
 - Objects that are not openings, water or a stretch of fire still extrude like
-  any sprite, at fixed depths (background objects behind the slab, others in
-  front).
+  any sprite, at fixed depths (moving backgrounds behind the slab, the rest
+  with the lemmings - a NeoLemmix `NO_OVERWRITE` gadget a hair behind the
+  others, and behind the 2D view's terrain).
 - Audio (music + SFX) plays through the engine's own AdLib/OPL synth
   (`js/audio.js`; "sound" button toggles, persisted). SFX indexes into
   ADLIB.DAT are a best-effort mapping — audition with

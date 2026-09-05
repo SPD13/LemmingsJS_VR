@@ -710,11 +710,21 @@
     const saved = g.currentFrame;
     for (let f = 0; f < count; f++) { g.currentFrame = f; frames.push(g.render()); }
     g.currentFrame = saved;
-    // moving backgrounds sit behind the terrain, whatever their flags say
-    const behind = g.noOverwrite || (g.effectBase === "BACKGROUND" && !g.onlyOnTerrain);
+    // NeoLemmix's layers (LemRendering.pas, DrawGadgetsOnLayer): a moving
+    // background is behind the terrain; a NO_OVERWRITE gadget is "gadgets low",
+    // under the terrain where they overlap but part of the scene, not the
+    // backdrop - in the diorama the slab's depth test does that ordering, so
+    // it sits in the slab with the other objects (a step behind them in the
+    // 2D view, which has only its terrain quad to hide it), and only the
+    // moving backgrounds go behind the slab; ONLY_ON_TERRAIN is a decal over
+    // it; a gadget carrying both flags is an ordinary one.
+    const behind = g.effectBase === "BACKGROUND" && !g.onlyOnTerrain;
+    const low = g.noOverwrite && !g.onlyOnTerrain && !behind;
+    const decal = g.onlyOnTerrain && !g.noOverwrite;
     const drawProperties = Lemmings && Lemmings.DrawProperties
-      ? new Lemmings.DrawProperties(false, behind, g.onlyOnTerrain, false)
-      : { isUpsideDown: false, noOverwrite: behind, onlyOverwrite: g.onlyOnTerrain, isErase: false };
+      ? new Lemmings.DrawProperties(false, behind, decal, false)
+      : { isUpsideDown: false, noOverwrite: behind, onlyOverwrite: decal, isErase: false };
+    drawProperties.low = low;
     const object = {
       x: g.x, y: g.y, gadget: g, drawProperties,
       animation: {
