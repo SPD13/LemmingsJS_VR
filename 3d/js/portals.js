@@ -1031,6 +1031,18 @@ function carveTerrainForPortal(depthMap, level, originX, originY, frame) {
 }
 
 /** The rectangle an object's sprite covers, in level pixels. */
+/** May this object be pulled into a door it touches: nothing drawn on the
+ *  terrain, nothing with an effect of its own (a DOS trigger, a Lemmix gadget
+ *  effect). */
+function isPortalCapCandidate(mapObject, info) {
+  const props = mapObject.drawProperties;
+  if (props && (props.onlyOverwrite || props.oneWay)) return false;
+  const g = mapObject.gadget;
+  if (g && g.effectBase !== "NONE") return false;
+  if (!g && info && info.trigger_effect_id) return false;
+  return true;
+}
+
 function portalObjectRect(mapObject) {
   const frame = mapObject.animation.frames[0];
   if (!frame) return null;
@@ -1070,6 +1082,11 @@ function buildPortals(level, profile, depthMap, objectZ, smooth) {
   // with no opening of its own: one door again.
   for (let i = 0; i < count; i++) {
     if (configs[i]) continue;
+    // a cap is plain scenery: an object drawn on the terrain (a one-way
+    // arrow, an "only on terrain" decal) or one that does something to a
+    // lemming is never a piece of the door, however closely it abuts it
+    if (isPortalCapCandidate(level.objects[i], data.objectImg
+      ? data.objectImg[data.objects[i].id] : null) === false) continue;
     const rect = portalObjectRect(level.objects[i]);
     if (!rect) continue;
     for (let j = 0; j < count; j++) {

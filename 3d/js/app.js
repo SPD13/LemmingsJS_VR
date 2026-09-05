@@ -2615,6 +2615,10 @@ Vfs.boot("", "setup.html").then(function (booted) {
     const terrain = new TerrainMesh(worldGroup, level, depthMap, reliefMap, resources, blendMap, colorMap, colorBlendLevel().softness);
     if (state.smooth) terrain.setSmooth(true);
     if (state.smoothTerrain) terrain.setSmoothTerrain(true);
+    // the objects drawn on the terrain's face - the one-way arrows, the
+    // "only on terrain" ones - painted onto it, cut to it (decals.js)
+    const decals = TerrainDecals.forLevel(level, resources, state.engine === "lemmix" ? level.physics : null);
+    if (decals) terrain.setDecals(decals);
 
     // dark backdrop behind the terrain so holes read as depth, not void
     const backdrop = new THREE.Mesh(
@@ -2810,9 +2814,11 @@ Vfs.boot("", "setup.html").then(function (booted) {
       // keep their texture in step with the animation
       // (clear physics: the background gadgets and the on-terrain ones are left
       // out, as NeoLemmix leaves rlBackgroundObjects and rlOnTerrainGadgets out)
+      // (the one-way arrows stay: rlOneWayArrows is drawn in that mode)
       const cpmHides = (i) => {
         const g = level.objects[i] && level.objects[i].gadget;
-        return !!g && (g.effectBase === "BACKGROUND" || g.effectBase === "PAINT" || g.onlyOnTerrain);
+        return !!g && !level.objects[i].drawProperties.oneWay
+          && (g.effectBase === "BACKGROUND" || g.effectBase === "PAINT" || g.onlyOnTerrain);
       };
       const cpmOn = !!(cpmOverlay && game.clearPhysics);
       // (with their geometry hidden - the 2D view, a change of view under
@@ -2820,9 +2826,15 @@ Vfs.boot("", "setup.html").then(function (booted) {
       const dropPortals = portalIndices.size > 0 && portalsShown;
       // a stacked surface draws its own slices, so its flat copy goes too
       const dropStacks = stackIndices.size > 0 && portalsShown;
-      const objectItems = !dropPortals && !dropStacks && !cpmOn ? objCapture.items
+      let objectItems = !dropPortals && !dropStacks && !cpmOn ? objCapture.items
         : objCapture.items.filter((_, i) => !(dropPortals && portalIndices.has(i))
           && !(dropStacks && stackIndices.has(i)) && !(cpmOn && cpmHides(i)));
+      // the decals go onto the terrain's face, not among the sprites
+      // (clear physics: the arrows only, as NeoLemmix keeps rlOneWayArrows)
+      if (decals) {
+        decals.paint(objectItems.filter((it) => it.layer === 1), cpmOn);
+        objectItems = objectItems.filter((it) => it.layer !== 1);
+      }
       if (cpmOverlay) {
         // clear physics: the terrain as its physics map, the layer of
         // trigger areas and marks repainted for this frame
@@ -2967,10 +2979,14 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // Steel areas, which the engine parses and then ignores entirely: the
     // three destructive skills are stopped at them here (js/steel.js).
     // (a Lemmix game handles steel and its entrances itself)
+    // The one-way walls too: the engine reads their arrows' trigger areas
+    // and then never asks about them, so a basher went through from the
+    // wrong side (steel.js OneWayMap).
     const steel = state.engine === "classic" ? installSteel(
       game,
       new SteelMap(steelRangesFrom(groundData && groundData.lr, level)),
-      (lem) => audio.playSfx(SFX.STEEL, sfxPos(lem.x, lem.y))) : null;
+      (lem) => audio.playSfx(SFX.STEEL, sfxPos(lem.x, lem.y)),
+      new OneWayMap(oneWayRangesFrom(level))) : null;
 
     // Multiple entrances: the engine releases every lemming from the first
     // one, where the original takes them in turn. The release is small enough
