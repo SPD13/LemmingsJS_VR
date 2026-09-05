@@ -14,6 +14,7 @@ const path = require("path");
 const D = require("../3d/js/depth.js");
 const { ProfileStore, ProfileFiles, renderTagButtons } = require("../3d/js/profile-store.js");
 const { buildStylesIndex, readStylesIni } = require("./styles-index");
+const { buildMusicIndex } = require("./music-index");
 const { terrainStyles } = require("./levels-index");
 const { createStaticServer } = require("../launcher/server");
 
@@ -414,6 +415,12 @@ async function main() {
     check("a style without terrain has no pieces", index.styles[0].count === 0 && index.styles[0].title === "empty_style" && index.styles[0].theme === "default");
     check("styles.ini names", same(readStylesIni(fs.readFileSync(path.join(styles, "styles.ini"), "utf8")), { my_style: "My Style", other: "Other" }));
     check("no styles folder: an empty index", buildStylesIndex(path.join(tmp, "nowhere")).count === 0);
+    mk(path.join(tmp, "neolemmix", "music", "orig_01.it"), "it");
+    mk(path.join(tmp, "neolemmix", "music", "index.json"), "{}");
+    mk(path.join(tmp, "neolemmix", "music", "Pack", "track.ogg"), "ogg");
+    const musicIndex = buildMusicIndex(tmp);
+    check("the music index lists the files, subfolders included, not itself", same(musicIndex.files, ["orig_01.it", "Pack/track.ogg"]) && musicIndex.count === 2);
+    check("no music folder: an empty music index", buildMusicIndex(path.join(tmp, "nowhere")).count === 0);
 
     console.log("level styles");
     const nxlv = "TITLE x\nTHEME orig_dirt\n$GADGET\n STYLE orig_fire\n PIECE exit\n$END\n$TERRAIN\n STYLE Orig_Marble\n PIECE column_01\n$END\n$TERRAIN\n STYLE orig_marble\n PIECE column_02\n$END\n$TERRAIN\n STYLE *group\n PIECE g1\n$END\n$TERRAIN\n STYLE ohno_snow\n PIECE ice_01\n$END\n";

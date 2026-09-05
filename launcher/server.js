@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const { buildIndex } = require("../tools/levels-index");
 const { buildStylesIndex } = require("../tools/styles-index");
+const { buildMusicIndex } = require("../tools/music-index");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -282,6 +283,20 @@ function createStaticServer(root, port, tls = null) {
         // same file for static hosting)
         if (req.method === "GET" && /^\/neolemmix\/styles\/index\.json$/.test(urlPath)) {
           const json = JSON.stringify(buildStylesIndex(absRoot));
+          res.writeHead(200, {
+            "Content-Type": MIME[".json"],
+            "Content-Length": Buffer.byteLength(json),
+            "Cache-Control": "no-cache",
+          });
+          res.end(json);
+          return;
+        }
+
+        // the music packs' files, so the game asks for a track by the name
+        // it is there under (tools/music-index.js writes the same file for
+        // static hosting)
+        if (req.method === "GET" && /^\/neolemmix\/music\/index\.json$/.test(urlPath)) {
+          const json = JSON.stringify(buildMusicIndex(absRoot));
           res.writeHead(200, {
             "Content-Type": MIME[".json"],
             "Content-Length": Buffer.byteLength(json),
