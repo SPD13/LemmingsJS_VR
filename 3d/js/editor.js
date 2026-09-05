@@ -28,7 +28,7 @@ const TAG_HILITE_COLOR = 0xffd866;
 // whole one, so the highlight is a lip toward the eye rather than a skin
 // fighting the surface for its pixels, and reads from any angle.
 const TAG_HILITE_LIFT = 1;
-// The tagging guide, opened in a new tab by the panel's "help" button. It is
+// The tagging guide, opened in a new tab by the panel's "help" link. It is
 // the repository's own copy rather than the file beside the page, so it reads
 // as a rendered document and is there whether or not this site was deployed
 // with the documentation.
@@ -115,9 +115,9 @@ class PieceEditor {
     this._onResetBtn = () => this.resetAll();
     this._onSaveBtn = () => this.save();
     this._onExportBtn = () => this.export();
-    this._onGalleriesBtn = () => this.leaveTo(this.galleriesUrl());
-    // a new tab, so nothing here is left and unsaved tags are never at risk
-    this._onHelpBtn = () => window.open(TAG_HELP_URL, "_blank", "noopener");
+    // a link, so it can be middle-clicked or copied; a plain click asks about
+    // unsaved tags first, as leaving any other way does
+    this._onGalleriesBtn = (e) => { e.preventDefault(); this.leaveTo(this.galleriesUrl()); };
     this.dom.classBtns.forEach((b) => b.addEventListener("click", this._onClassBtn));
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
@@ -130,8 +130,12 @@ class PieceEditor {
     this.dom.exportBtn.addEventListener("click", this._onExportBtn);
     if (this.dom.galleriesBtn) this.dom.galleriesBtn.addEventListener("click", this._onGalleriesBtn);
     if (this.dom.helpBtn) {
+      // a plain link to a new tab, so nothing here is left and unsaved tags
+      // are never at risk
+      this.dom.helpBtn.href = TAG_HELP_URL;
+      this.dom.helpBtn.target = "_blank";
+      this.dom.helpBtn.rel = "noopener";
       this.dom.helpBtn.title = "the tagging guide, on GitHub (opens in a new tab)";
-      this.dom.helpBtn.addEventListener("click", this._onHelpBtn);
     }
   }
 
@@ -668,7 +672,9 @@ class PieceEditor {
     const key = selected ? this._key(this.selectedId) : null;
     renderTagButtons(this.dom, key, this.s.profile, selected);
     if (this.dom.galleriesBtn) {
-      this.dom.galleriesBtn.textContent = selected ? "this piece in its gallery" : "galleries";
+      this.dom.galleriesBtn.href = this.galleriesUrl();
+      this.dom.galleriesBtn.title = selected
+        ? "open the galleries page on " + key : "open the galleries page";
     }
     if (!this._hasPieceData) {
       this.dom.info.textContent = "no piece data for this level (special level)";
@@ -762,7 +768,6 @@ class PieceEditor {
     this.dom.saveBtn.removeEventListener("click", this._onSaveBtn);
     this.dom.exportBtn.removeEventListener("click", this._onExportBtn);
     if (this.dom.galleriesBtn) this.dom.galleriesBtn.removeEventListener("click", this._onGalleriesBtn);
-    if (this.dom.helpBtn) this.dom.helpBtn.removeEventListener("click", this._onHelpBtn);
     this.dom.panel.hidden = true;
   }
 }
