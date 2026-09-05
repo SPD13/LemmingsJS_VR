@@ -9,13 +9,18 @@
  * for the styles it keeps in the browser.
  *
  *   { version, generated, count, pieceCount,
- *     styles: [ { name, title, theme, pieces: [...], steel: [...], count } ] }
+ *     styles: [ { name, title, theme, hasTheme, hasAlias,
+ *                 pieces: [...], steel: [...], metas: [...], count } ] }
  *
  * `name` is the folder, `title` the display name from styles.ini when it has
  * one, `theme` the LEMMINGS line of theme.nxtm, `pieces` the lowercased
  * piece names (what the engine requests) in natural order, `steel` those
- * whose .nxmt marks them steel. A style without a terrain folder is listed
- * with no pieces. The file lands under neolemmix/, which is not committed.
+ * whose .nxmt marks them steel, `metas` those that have a .nxmt at all.
+ * `hasTheme` and `hasAlias` say whether theme.nxtm and alias.nxmi are there.
+ * The engine (lemmix/js/styles.js) reads the flags and `metas` so it only
+ * asks for the optional files a style has, instead of probing for each.
+ * A style without a terrain folder is listed with no pieces. The file lands
+ * under neolemmix/, which is not committed.
  *
  * Like tools/levels-index.js the folders are read through an io (a repo root
  * on disk, or the setup page's snapshot of the browser's files); loaded as a
@@ -53,10 +58,10 @@ const readOr = (io, p, dflt) => { try { return io.exists(p) ? io.readText(p) : d
 const ext = (f) => { const i = f.lastIndexOf("."); return i < 0 ? "" : f.slice(i).toLowerCase(); };
 const stem = (f) => { const i = f.lastIndexOf("."); return (i < 0 ? f : f.slice(0, i)).toLowerCase(); };
 
-/** The terrain pieces of one style folder: names (lowercased) and which are steel. */
+/** The terrain pieces of one style folder: names (lowercased), which have a .nxmt, and which are steel. */
 function listPieces(io, styleDir) {
   const dir = styleDir + "/terrain";
-  if (!io.isDir(dir)) return { pieces: [], steel: [] };
+  if (!io.isDir(dir)) return { pieces: [], steel: [], metas: [] };
   const names = new Set();
   const metas = new Map(); // lowercased stem -> the .nxmt file name as it is
   for (const f of io.listFiles(dir)) {
@@ -65,12 +70,9 @@ function listPieces(io, styleDir) {
     else if (e === ".nxmt") metas.set(stem(f), f);
   }
   const pieces = Array.from(names).sort(natural);
-  const steel = pieces.filter((name) => {
-    const meta = metas.get(name);
-    if (!meta) return false;
-    return /^\s*STEEL\b/mi.test(readOr(io, dir + "/" + meta, ""));
-  });
-  return { pieces, steel };
+  const withMeta = pieces.filter((name) => metas.has(name));
+  const steel = withMeta.filter((name) => /^\s*STEEL\b/mi.test(readOr(io, dir + "/" + metas.get(name), "")));
+  return { pieces, steel, metas: withMeta };
 }
 
 /** The LEMMINGS line of theme.nxtm, "default" when absent. */
@@ -89,17 +91,19 @@ function buildStylesIndex(source) {
     const titles = readStylesIni(readOr(io, STYLES_DIR + "/styles.ini", ""));
     for (const name of io.listDirs(STYLES_DIR)) {
       const dir = STYLES_DIR + "/" + name;
-      const { pieces, steel } = listPieces(io, dir);
+      const { pieces, steel, metas } = listPieces(io, dir);
       styles.push({
         name: name.toLowerCase(),
         title: titles[name.toLowerCase()] || name,
         theme: readTheme(io, dir),
-        pieces, steel, count: pieces.length,
+        hasTheme: io.exists(dir + "/theme.nxtm"),
+        hasAlias: io.exists(dir + "/alias.nxmi"),
+        pieces, steel, metas, count: pieces.length,
       });
     }
   }
   return {
-    version: 1,
+    version: 2,
     generated: new Date().toISOString(),
     count: styles.length,
     pieceCount: styles.reduce((n, s) => n + s.count, 0),

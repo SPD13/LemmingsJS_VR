@@ -224,6 +224,10 @@ function lemmixPack(io, dir, logicalPath, musicDir) {
   if (info && first(info, "AUTHOR")) pack.author = first(info, "AUTHOR");
   if (info && first(info, "VERSION")) pack.version = first(info, "VERSION");
   if (io.exists(join(dir, "logo.png"))) pack.logo = join(dir, "logo.png");
+  // a pack shipping its own skill panel graphics (skill_panels.png and
+  // friends next to levels.nxmi, the way GameBaseSkillPanel looks them up):
+  // the page asks the pack for them only then (lemmix/js/panel.js)
+  if (io.exists(join(dir, "skill_panels.png"))) pack.panel = true;
   if (music.length) pack.musicRotation = music;
   if (musicDir) pack.musicDir = musicDir;
   return pack;

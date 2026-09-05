@@ -408,6 +408,8 @@ async function main() {
     const my = index.styles[1];
     check("pieces are the lowercased PNG names in natural order", same(my.pieces, ["girder", "rock_2", "rock_10"]) && my.count === 3);
     check("steel comes from the .nxmt", same(my.steel, ["girder"]));
+    check("metas are the pieces that have a .nxmt", same(my.metas, ["girder"]) && same(index.styles[0].metas, []));
+    check("hasTheme and hasAlias say which optional files are there", my.hasTheme === true && my.hasAlias === false && index.styles[0].hasTheme === true);
     check("the title comes from styles.ini, the theme from theme.nxtm", my.title === "My Style" && my.theme === "orig_dirt");
     check("a style without terrain has no pieces", index.styles[0].count === 0 && index.styles[0].title === "empty_style" && index.styles[0].theme === "default");
     check("styles.ini names", same(readStylesIni(fs.readFileSync(path.join(styles, "styles.ini"), "utf8")), { my_style: "My Style", other: "Other" }));

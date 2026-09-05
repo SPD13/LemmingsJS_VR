@@ -92,6 +92,8 @@
   /**
    * The gfx/panel bitmaps, loaded once - or, for a pack that ships its own
    * (skill_panels.png and friends next to its levels.nxmi), that pack's.
+   * `packDir` is given only for such a pack (the levels index's `panel`
+   * flag), so the packs without one are not asked for 17 missing files.
    */
   function loadPanelAssets(io, packDir) {
     const key = packDir || "";

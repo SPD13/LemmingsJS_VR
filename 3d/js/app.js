@@ -5484,7 +5484,8 @@ Vfs.boot("", "setup.html").then(function (booted) {
       if (!this.spriteSets.has(setName)) this.spriteSets.set(setName, new Lemmix.SpriteSet(Lemmix.io).load(setName));
       const sprites = await this.spriteSets.get(setName);
       const game = new Lemmix.Game(level, { masks: this.masks, sprites });
-      game.packDir = where.pack && where.pack.dir ? where.pack.dir : null; // a pack's own panel graphics
+      // a pack's own panel graphics, when the levels index saw it ships them
+      game.packDir = where.pack && where.pack.dir && where.pack.panel ? where.pack.dir : null;
       return game;
     },
     /**

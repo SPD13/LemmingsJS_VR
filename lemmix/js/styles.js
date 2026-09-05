@@ -8,6 +8,8 @@
  *   terrain/<piece>.png/.nxmt  a terrain piece: steel, resizable, nine-slice margins
  *   objects/<piece>.nxmo       a gadget: effect, trigger area, animations (one PNG each)
  *   backgrounds/<name>.png     a tiled backdrop
+ *   index.json                 which of the optional files (theme, alias, .nxmt) each style has,
+ *                              so they are asked for only when there (tools/styles-index.js)
  *
  * Every piece is kept once in its natural orientation; the rotated,
  * flipped and inverted variations a level asks for are derived on demand
@@ -297,7 +299,45 @@
       this._terrain = new Map();  // "gs:piece" -> Promise<MetaTerrain|null>
       this._gadgets = new Map();  // "gs:piece" -> Promise<MetaGadget|null>
       this._images = new Map();   // url -> Promise<Bitmap|null>
+      this._index = null;         // Promise<Map<style name, index entry>|null>, see index()
       this.missing = new Set();   // "gs:piece" references that fell back
+    }
+
+    /**
+     * The styles index (tools/styles-index.js: neolemmix/styles/index.json,
+     * built live by the launcher and by the setup page), by style name -
+     * which optional files each style has, so they are asked for only when
+     * they are there instead of probed for and 404'd. Null without one.
+     */
+    index() {
+      if (!this._index) {
+        this._index = (async () => {
+          const text = await this._text(STYLES_DIR + "index.json");
+          if (text === null) return null;
+          try {
+            const byName = new Map();
+            for (const s of JSON.parse(text).styles || []) byName.set(lower(s.name), s);
+            return byName;
+          } catch (e) { return null; }
+        })();
+      }
+      return this._index;
+    }
+
+    /**
+     * Whether a style has an optional file, from the index: `what` is
+     * "hasTheme", "hasAlias", or "meta" with the terrain piece whose .nxmt
+     * is asked about. Null when unknown - no index, an older one without
+     * the field, a style it does not list - and the file is probed for.
+     */
+    async _has(gs, what, piece) {
+      const byName = await this.index();
+      const entry = byName && byName.get(lower(gs));
+      if (!entry) return null;
+      if (what !== "meta") return typeof entry[what] === "boolean" ? entry[what] : null;
+      if (!Array.isArray(entry.metas)) return null;
+      if (!entry._metaSet) entry._metaSet = new Set(entry.metas.map(lower));
+      return entry._metaSet.has(lower(piece));
     }
 
     _image(url) {
@@ -313,8 +353,10 @@
       if (!this._styles.has(name)) {
         this._styles.set(name, (async () => {
           const dir = STYLES_DIR + name + "/";
+          const [hasTheme, hasAlias] = await Promise.all([this._has(name, "hasTheme"), this._has(name, "hasAlias")]);
           const [themeText, aliasText] = await Promise.all([
-            this._text(dir + "theme.nxtm"), this._text(dir + "alias.nxmi"),
+            hasTheme === false ? null : this._text(dir + "theme.nxtm"),
+            hasAlias === false ? null : this._text(dir + "alias.nxmi"),
           ]);
           const theme = { lemmings: "default", colors: {} };
           if (themeText !== null) {
@@ -385,7 +427,10 @@
       if (!this._terrain.has(key)) {
         this._terrain.set(key, (async () => {
           const dir = STYLES_DIR + lower(gs) + "/terrain/" + lower(piece);
-          const [image, nxmtText] = await Promise.all([this._image(dir + ".png"), this._text(dir + ".nxmt")]);
+          const hasMeta = await this._has(gs, "meta", piece);
+          const [image, nxmtText] = await Promise.all([
+            this._image(dir + ".png"), hasMeta === false ? null : this._text(dir + ".nxmt"),
+          ]);
           if (!image) return null;
           return new MetaTerrain(lower(gs), lower(piece), image, nxmtText !== null ? NxParser.parse(nxmtText) : null);
         })());
