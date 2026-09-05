@@ -8,6 +8,19 @@
 > [`setup.md`](setup.md) for what to download, where, and how to install it,
 > the original games' own files included.
 
+## Features
+
+- **Lemmix engine** - the NeoLemmix game mechanics, so its styles and level
+  packs from https://www.neolemmix.com play here as they do in the original,
+  along with the classic DOS games
+- **2D and 3D rendering** - the original 2D page, and a 3D view of the same
+  levels
+- **VR support** (WebXR) - play the 3D view in a headset, with an external
+  viewer view for a screen next to it and pointer-based skill assignment
+- **Fully web based** - serve it on your own network with the launcher
+  (see [Releases](#releases)), or play the static version at
+  https://lemmix.spd13.us with nothing to install
+
 ## Levels and assets
 
 Git ships the engine only - no copyrighted asset is part of the
@@ -118,5 +131,5 @@ Electron, over plain HTTP.
   authors of NeoLemmix, whose source is licensed CC BY-NC 4.0 and asks that
   the three of them be credited; its graphics, music and sounds remain their
   creators' copyright and are not distributed here
-- ![Claude](img/claude.svg) This project was developed with the help of
+- <img src="img/claude.svg" alt="Claude" width="16" height="16" align="top"> This project was developed with the help of
   Claude Code - https://claude.com/claude-code
