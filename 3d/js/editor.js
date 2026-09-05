@@ -95,6 +95,7 @@ class PieceEditor {
       autoBtn: document.getElementById("ed-auto"),
       embossBtn: document.getElementById("ed-emboss"),
       invertBtn: document.getElementById("ed-invert"),
+      sculptBtn: document.getElementById("ed-sculpt"),
       blendBtn: document.getElementById("ed-blend"),
       colorBlendBtn: document.getElementById("ed-colorblend"),
       resetBtn: document.getElementById("ed-reset"),
@@ -108,6 +109,7 @@ class PieceEditor {
     this._onAutoBtn = () => this.setClass(null);
     this._onEmbossBtn = () => this.toggleEmboss();
     this._onInvertBtn = () => this.toggleEmbossInvert();
+    this._onSculptBtn = () => this.toggleSculpt();
     this._onBlendBtn = () => this.toggleBlend();
     this._onColorBlendBtn = () => this.toggleColorBlend();
     this._onResetBtn = () => this.resetAll();
@@ -120,6 +122,7 @@ class PieceEditor {
     this.dom.autoBtn.addEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.addEventListener("click", this._onEmbossBtn);
     this.dom.invertBtn.addEventListener("click", this._onInvertBtn);
+    this.dom.sculptBtn.addEventListener("click", this._onSculptBtn);
     this.dom.blendBtn.addEventListener("click", this._onBlendBtn);
     this.dom.colorBlendBtn.addEventListener("click", this._onColorBlendBtn);
     this.dom.resetBtn.addEventListener("click", this._onResetBtn);
@@ -238,7 +241,7 @@ class PieceEditor {
       return t1 >= t0;
     };
     const zTop = DEPTH_BANDS.reduce((m, b) => Math.max(m, b ? b.front : 0), 0) +
-      RELIEF_MAX;
+      RELIEF_TOP;
     if (!clip(o.x, d.x, 0, t.w) || !clip(o.y, d.y, 0, t.h) ||
         !clip(o.z, d.z, 0, zTop)) return null;
 
@@ -518,6 +521,23 @@ class PieceEditor {
   }
 
   /**
+   * Read the selected piece as a solid object shaped by its shading, or stop
+   * doing so. Pieces opt in. It lives in the relief map with the 3D shade,
+   * so the same rebuild covers it.
+   */
+  toggleSculpt() {
+    if (this.selectedId == null) return;
+    const url = this._urlFor(this.selectedId);
+    if (!url) return;
+    const key = this._key(this.selectedId);
+    this.files.setSculpt(key, ProfileStore.nextSculptToggle(key, this.s.profile), url);
+    this._refreshProfile();
+    if (this.s.rebuildRelief) this.s.rebuildRelief();
+    this._rebuildHighlights(); // the piece stands at a new height now
+    this._renderInfo();
+  }
+
+  /**
    * Turn surface blend on/off for the selected piece - it is on for every
    * piece until one is tagged out, so this mostly writes exclusions. Only the colours down
    * the extrusion change, so the depth buffer is untouched and the blend map
@@ -611,7 +631,7 @@ class PieceEditor {
       const profile = this.files.get(url);
       const tags = Object.keys(profile.terrain.byId).length +
         Object.keys(profile.emboss.byId).length + Object.keys(profile.blend.byId).length +
-        Object.keys(profile.colorBlend.byId).length;
+        Object.keys(profile.colorBlend.byId).length + Object.keys(profile.sculpt.byId).length;
       const line = document.createElement("div");
       line.className = "ed-file";
       const a = document.createElement("a");
@@ -671,6 +691,7 @@ class PieceEditor {
         ? (embossInvertedFor(key, this.s.profile)
             ? "on (dark raised)" : "on (light raised)")
         : "off") +
+      " · 3D object " + (sculptFor(key, this.s.profile) ? "on" : "off") +
       " · surface blend " + (surfaceBlendFor(key, this.s.profile) ? "on" : "off") +
       " · colour blend " + (colorBlendFor(key, this.s.profile) ? "on" : "off") +
       (url ? " · file " + ProfileStore.fileName(url) + (this.files.isDirty(url) ? " (unsaved)" : "") : "");
@@ -734,6 +755,7 @@ class PieceEditor {
     this.dom.autoBtn.removeEventListener("click", this._onAutoBtn);
     this.dom.embossBtn.removeEventListener("click", this._onEmbossBtn);
     this.dom.invertBtn.removeEventListener("click", this._onInvertBtn);
+    this.dom.sculptBtn.removeEventListener("click", this._onSculptBtn);
     this.dom.blendBtn.removeEventListener("click", this._onBlendBtn);
     this.dom.colorBlendBtn.removeEventListener("click", this._onColorBlendBtn);
     this.dom.resetBtn.removeEventListener("click", this._onResetBtn);

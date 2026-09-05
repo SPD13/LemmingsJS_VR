@@ -545,11 +545,12 @@ class TerrainMesh {
     }
   }
 
-  /** Greedy-meshing key: pixels merge only with the same class and height. */
+  /** Greedy-meshing key: pixels merge only with the same class and height
+   *  (the relief of either reading, so the key spans RELIEF_TOP). */
   _keyAt(x, y) {
     const c = this._classAt(x, y);
     if (c === DepthClass.EMPTY) return 0;
-    return c * (RELIEF_MAX + 1) + this._reliefAt(x, y);
+    return c * (RELIEF_TOP + 1) + this._reliefAt(x, y);
   }
 
   /**

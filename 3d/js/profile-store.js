@@ -2,7 +2,7 @@
 /**
  * Depth profiles, one file per sprite gallery.
  *
- * A tag (depth class, 3D shade, surface blend, colour blend) belongs to a sprite, so it is kept with the
+ * A tag (depth class, 3D shade, 3D object, surface blend, colour blend) belongs to a sprite, so it is kept with the
  * gallery the sprite comes from: a DOS tileset (`profiles/<pack>-g<set>.json`,
  * pieces keyed by their index in the ground set) or a NeoLemmix style folder
  * (`profiles/nx-<style>.json`, pieces keyed `<style>:<piece>`). A level reads
@@ -18,7 +18,7 @@
 (function (root) {
   const D = (typeof module !== "undefined" && module.exports)
     ? require("./depth.js")
-    : { embossEnabledFor, embossInvertedFor, surfaceBlendFor, colorBlendFor };
+    : { embossEnabledFor, embossInvertedFor, sculptFor, surfaceBlendFor, colorBlendFor };
 
   const PROFILE_DIR = "3d/profiles/"; // page-relative: the pages sit at the repo root
   const CLASSES = ["backdrop", "terrain", "relief", "overlay"];
@@ -37,6 +37,7 @@
         emboss: { byId: {} },
         blend: { byId: {} },
         colorBlend: { byId: {} },
+        sculpt: { byId: {} },
       };
     },
 
@@ -52,6 +53,8 @@
       if (!p.blend.byId || typeof p.blend.byId !== "object") p.blend.byId = {};
       if (!p.colorBlend || typeof p.colorBlend !== "object") p.colorBlend = {};
       if (!p.colorBlend.byId || typeof p.colorBlend.byId !== "object") p.colorBlend.byId = {};
+      if (!p.sculpt || typeof p.sculpt !== "object") p.sculpt = {};
+      if (!p.sculpt.byId || typeof p.sculpt.byId !== "object") p.sculpt.byId = {};
       return p;
     },
 
@@ -134,6 +137,10 @@
           if (p.colorBlend.byId) Object.assign(out.colorBlend.byId, p.colorBlend.byId);
           if (p.colorBlend.default !== undefined) out.colorBlend.default = p.colorBlend.default;
         }
+        if (p.sculpt) {
+          if (p.sculpt.byId) Object.assign(out.sculpt.byId, p.sculpt.byId);
+          if (p.sculpt.default !== undefined) out.sculpt.default = p.sculpt.default;
+        }
         if (p.objects && p.objects.byId) {
           if (!out.objects) out.objects = { byId: {} };
           Object.assign(out.objects.byId, p.objects.byId);
@@ -172,6 +179,24 @@
     /** What "invert" sets next: it also turns the shade on. */
     nextEmbossInvert(key, profile) {
       return D.embossInvertedFor(key, profile) ? true : "invert";
+    },
+
+    /**
+     * Set a piece's 3D object sculpt: true reads the piece as a solid body
+     * shaped by its shading (depth.js sculptFor). Unlike the three effects,
+     * pieces opt *in*, so the file carries the pieces tagged in and off is
+     * written by dropping the entry.
+     */
+    withSculpt(profile, key, value) {
+      const p = ProfileStore.normalize(profile);
+      if (value === true) p.sculpt.byId[key] = true;
+      else delete p.sculpt.byId[key];
+      return p;
+    },
+
+    /** What "3D object" sets next: a plain two-state toggle. */
+    nextSculptToggle(key, profile) {
+      return !D.sculptFor(key, profile);
     },
 
     /**
@@ -291,6 +316,12 @@
       e.dirty = true;
     }
 
+    setSculpt(key, value, url) {
+      const e = this.entry(url);
+      ProfileStore.withSculpt(e.profile, key, value);
+      e.dirty = true;
+    }
+
     /** Every tag of the file cleared (in memory; save to persist). */
     resetAll(url) {
       const e = this.entry(url);
@@ -298,6 +329,7 @@
       e.profile.emboss.byId = {};
       e.profile.blend.byId = {};
       e.profile.colorBlend.byId = {};
+      e.profile.sculpt.byId = {};
       e.dirty = true;
     }
 
@@ -330,7 +362,8 @@
         if (!check || !same(e.profile.terrain.byId, check.terrain && check.terrain.byId) ||
             !same(e.profile.emboss.byId, check.emboss && check.emboss.byId) ||
             !same(e.profile.blend.byId, check.blend && check.blend.byId) ||
-            !same(e.profile.colorBlend.byId, check.colorBlend && check.colorBlend.byId)) {
+            !same(e.profile.colorBlend.byId, check.colorBlend && check.colorBlend.byId) ||
+            !same(e.profile.sculpt.byId, check.sculpt && check.sculpt.byId)) {
           throw new Error("read-back mismatch");
         }
         e.dirty = false;
@@ -361,7 +394,7 @@
 
   /**
    * Paint a set of tag buttons for a piece: `dom` = {classBtns (one per
-   * data-class), autoBtn, embossBtn, invertBtn, blendBtn, colorBlendBtn}; all disabled when nothing is
+   * data-class), autoBtn, embossBtn, invertBtn, sculptBtn, blendBtn, colorBlendBtn}; all disabled when nothing is
    * selected (`enabled` false), the current state lit with `.active`.
    */
   function renderTagButtons(dom, key, profile, enabled) {
@@ -376,6 +409,8 @@
     dom.embossBtn.classList.toggle("active", enabled && D.embossEnabledFor(key, profile));
     dom.invertBtn.disabled = !enabled;
     dom.invertBtn.classList.toggle("active", enabled && D.embossInvertedFor(key, profile));
+    dom.sculptBtn.disabled = !enabled;
+    dom.sculptBtn.classList.toggle("active", enabled && D.sculptFor(key, profile));
     dom.blendBtn.disabled = !enabled;
     dom.blendBtn.classList.toggle("active", enabled && D.surfaceBlendFor(key, profile));
     dom.colorBlendBtn.disabled = !enabled;

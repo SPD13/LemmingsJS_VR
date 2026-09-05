@@ -215,7 +215,12 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   count, so turn it off if the frame rate suffers; individual pieces can
   opt out with "3D shade" in the piece editor, or flip which shades are
   raised with "invert" (some pieces are drawn with dark highlights, so
-  darker pixels are the ones standing proud).
+  darker pixels are the ones standing proud). A piece tagged "3D object"
+  is read as a body instead of as grain: a sprite drawn as a lit rounded
+  thing - a bottle, a sausage - is turned on the axis its shading's bands
+  run along, each row across it a round slice as deep as it is wide, so both
+  rims sit on the face and the middle stands proud whichever side the light
+  came from (`tagging.md` has the details).
 - "3D doors" builds the objects that are not flat sprites (`js/portals.js`):
   entrances and exits as real openings, and water given the body its waves
   are the surface of — as wide as the sprite, reaching down column by column

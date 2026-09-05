@@ -85,12 +85,13 @@ async function main() {
   // ================= merging
   {
     console.log("merging");
-    const a = { tileset: "A", terrain: { default: "terrain", byId: { "a:x": "backdrop" } }, emboss: { byId: { "a:x": false } }, blend: { byId: { "a:x": true } }, colorBlend: { byId: { "a:x": true } }, objects: { byId: { 4: { kind: "water" } } } };
+    const a = { tileset: "A", terrain: { default: "terrain", byId: { "a:x": "backdrop" } }, emboss: { byId: { "a:x": false } }, blend: { byId: { "a:x": true } }, colorBlend: { byId: { "a:x": true } }, sculpt: { byId: { "a:x": true } }, objects: { byId: { 4: { kind: "water" } } } };
     const b = { terrain: { byId: { "b:y": "relief", "a:x": "overlay" } } };
     const m = ProfileStore.merge([{ url: "a", profile: a }, { url: "none", profile: null }, { url: "b", profile: b }]);
     check("byId maps are unioned", m.terrain.byId["b:y"] === "relief" && m.emboss.byId["a:x"] === false);
     check("surface blend rides along", m.blend.byId["a:x"] === true);
     check("colour blend rides along", m.colorBlend.byId["a:x"] === true);
+    check("3D object rides along", m.sculpt.byId["a:x"] === true);
     check("a later file wins a duplicate key", m.terrain.byId["a:x"] === "overlay");
     check("object settings ride along", m.objects.byId[4].kind === "water");
     check("the default class is terrain", m.terrain.default === "terrain");
@@ -117,7 +118,17 @@ async function main() {
     ProfileStore.withEmboss(p, "k", "invert");
     check("invert from inverted goes back to light raised", ProfileStore.nextEmbossInvert("k", p) === true);
     check("the depth pass reads the tag", D.depthClassForPiece({ key: "k" }, ProfileStore.withClass(p, "k", "backdrop")) === D.DepthClass.BACKDROP);
-    check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} }, blend: { byId: {} }, colorBlend: { byId: {} } }));
+    check("normalize repairs a bare file", same(ProfileStore.normalize({ tileset: "x" }), { tileset: "x", terrain: { default: "terrain", byId: {} }, emboss: { byId: {} }, blend: { byId: {} }, colorBlend: { byId: {} }, sculpt: { byId: {} } }));
+
+    check("3D object is off by default and toggles on", D.sculptFor("k", p) === false &&
+      ProfileStore.nextSculptToggle("k", p) === true);
+    ProfileStore.withSculpt(p, "k", true);
+    check("...the opt-in is what the file records", p.sculpt.byId["k"] === true &&
+      D.sculptFor("k", p) === true && ProfileStore.nextSculptToggle("k", p) === false);
+    ProfileStore.withSculpt(p, "k", false);
+    check("back off drops the entry again", !("k" in p.sculpt.byId) && D.sculptFor("k", p) === false);
+    check("only a true reads as on", D.sculptFor("k", { sculpt: { byId: { k: "yes" } } }) === false &&
+      D.sculptFor("k", { sculpt: { default: true } }) === true);
 
     check("surface blend is on by default and toggles off", D.surfaceBlendFor("k", p) === true &&
       ProfileStore.nextBlendToggle("k", p) === false);
@@ -139,10 +150,15 @@ async function main() {
     check("an older file's redundant true still reads as on",
       D.colorBlendFor("k", { colorBlend: { byId: { k: true } } }) === true);
 
-    const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton(), blendBtn: fakeButton(), colorBlendBtn: fakeButton() };
+    const dom = { classBtns: ["backdrop", "terrain", "relief", "overlay"].map(fakeButton), autoBtn: fakeButton(), embossBtn: fakeButton(), invertBtn: fakeButton(), sculptBtn: fakeButton(), blendBtn: fakeButton(), colorBlendBtn: fakeButton() };
     renderTagButtons(dom, "k", p, true);
     check("buttons: the class and inverted shade are lit", dom.classBtns[0].classList.contains("active") && !dom.autoBtn.classList.contains("active") &&
       dom.embossBtn.classList.contains("active") && dom.invertBtn.classList.contains("active"));
+    check("buttons: 3D object is dark until tagged in", !dom.sculptBtn.classList.contains("active"));
+    ProfileStore.withSculpt(p, "k", true);
+    renderTagButtons(dom, "k", p, true);
+    check("buttons: ...and lit once it is", dom.sculptBtn.classList.contains("active"));
+    ProfileStore.withSculpt(p, "k", false);
     check("buttons: both blends are lit until they are tagged out",
       dom.blendBtn.classList.contains("active") && dom.colorBlendBtn.classList.contains("active"));
     ProfileStore.withColorBlend(p, "k", false);
@@ -157,7 +173,90 @@ async function main() {
       dom.blendBtn.classList.contains("active") && dom.colorBlendBtn.classList.contains("active") &&
       !dom.invertBtn.classList.contains("active") && !dom.classBtns[0].classList.contains("active"));
     renderTagButtons(dom, null, p, false);
-    check("buttons: nothing selected disables them all", dom.classBtns.every((b) => b.disabled) && dom.autoBtn.disabled && dom.embossBtn.disabled);
+    check("buttons: nothing selected disables them all", dom.classBtns.every((b) => b.disabled) && dom.autoBtn.disabled && dom.embossBtn.disabled && dom.sculptBtn.disabled);
+  }
+
+  // ================= 3D object: a shaded sprite read as a body on a lathe
+  {
+    console.log("3D object");
+    // a strip of level with two pieces on it: a "tube" 24 wide and 6 tall,
+    // shaded in upright bands (a standing cylinder), and a "rock" of two
+    // alternating shades, the plain grain. The placements are what the
+    // compositor would have been given, so the sculpt can read the sprites.
+    const W = 40, H = 6, N = W * H;
+    const TUBE_W = 24, ROCK_X = 30, ROCK_W = 6;
+    const img = new Uint8Array(N * 4), mask = new Uint8Array(N), pieceMap = new Uint16Array(N);
+    const paint = (i, v, id) => { img[i * 4] = img[i * 4 + 1] = img[i * 4 + 2] = v; mask[i] = 1; pieceMap[i] = id + 1; };
+    const level = { width: W, height: H, groundImage: img, getGroundMaskLayer: () => ({ groundMask: mask }) };
+    const sprite = (name, w, h) => ({ name, width: w, height: h, frames: [new Uint8Array(w * h)] }); // all solid
+    const groundData = {
+      lr: { levelWidth: W, levelHeight: H, terrains: [
+        { id: 0, x: 0, y: 0, drawProperties: {} }, { id: 1, x: ROCK_X, y: 0, drawProperties: {} },
+      ] },
+      terraImages: { 0: sprite("s:tube", TUBE_W, H), 1: sprite("s:rock", ROCK_W, H) },
+    };
+    const shadeTube = (shade) => { for (let y = 0; y < H; y++) for (let x = 0; x < TUBE_W; x++) paint(y * W + x, shade(x, y), 0); };
+    for (let y = 0; y < H; y++) for (let x = ROCK_X; x < ROCK_X + ROCK_W; x++) paint(y * W + x, x % 2 ? 180 : 60, 1);
+    const row = (map, y) => Array.from(map.slice(y * W, y * W + W));
+    const col = (map, x) => Array.from({ length: H }, (_, y) => map[y * W + x]);
+    const symmetric = (a) => a.every((v, i) => v === a[a.length - 1 - i]);
+    const rising = (a) => a.every((v, i) => i === 0 || v >= a[i - 1]);
+
+    check("a slice stands its radius, capped",
+      D.sculptRadius(24) === 12 && D.sculptRadius(200) === D.SCULPT_MAX && D.sculptRadius(1) === 0.5);
+    check("the cap is what every relief consumer sizes by", D.RELIEF_TOP >= D.SCULPT_MAX && D.RELIEF_TOP >= D.RELIEF_MAX);
+
+    // a front-lit cylinder: light in the middle, dark at both rims, in four steps
+    shadeTube((x) => 40 + 64 * Math.floor(3.99 * Math.sin(Math.PI * (x + 0.5) / TUBE_W)));
+    const plain = row(D.buildReliefMap(level, pieceMap, ProfileStore.emptyProfile(), true, groundData), 2);
+    check("untagged, both pieces carry the grain over one shared range",
+      plain[0] === 0 && plain[11] === D.RELIEF_MAX && Math.max(...plain) === D.RELIEF_MAX &&
+      plain[ROCK_X] === 0 && plain[ROCK_X + 1] < D.RELIEF_MAX);
+
+    const tagged = ProfileStore.withSculpt(ProfileStore.emptyProfile(), "s:tube", true);
+    const sculpted = row(D.buildReliefMap(level, pieceMap, tagged, true, groundData), 2);
+    const tube = sculpted.slice(0, TUBE_W);
+    check("tagged, the standing tube is sliced across its width and stands its radius",
+      Math.max(...tube) === 12 && tube[11] === 12 && tube[12] === 12, tube);
+    check("...a semicircle: both rims low and alike, rising to the middle",
+      symmetric(tube) && rising(tube.slice(0, 12)) && tube[0] < 4 && new Set(tube).size > 4, tube);
+    check("...the same on every row", same(row(D.buildReliefMap(level, pieceMap, tagged, true, groundData), 0).slice(0, TUBE_W), tube));
+    check("the grain's range is measured without it, so the rock uses the full grain",
+      sculpted[ROCK_X] === 0 && sculpted[ROCK_X + 1] === D.RELIEF_MAX, sculpted.slice(ROCK_X, ROCK_X + ROCK_W));
+
+    // the same cylinder lit from the right: light rim, dark rim - the same body
+    shadeTube((x) => 40 + 8 * x);
+    const sideLit = row(D.buildReliefMap(level, pieceMap, tagged, true, groundData), 2).slice(0, TUBE_W);
+    check("lit from the side, the light rim and the dark rim sit at the same depth, the middle nearest",
+      same(sideLit, tube), sideLit);
+    const inverted = ProfileStore.withEmboss(ProfileStore.withSculpt(ProfileStore.emptyProfile(), "s:tube", true), "s:tube", "invert");
+    check("invert is the shade's business: the body is the same",
+      same(row(D.buildReliefMap(level, pieceMap, inverted, true, groundData), 2).slice(0, TUBE_W), tube));
+
+    // shaded in bands lying along it: a lying cylinder, sliced column by column
+    shadeTube((x, y) => 40 + 40 * y);
+    const lying = D.buildReliefMap(level, pieceMap, tagged, true, groundData);
+    const slice = col(lying, 5);
+    check("bands lying along the piece turn the lathe the other way: sliced down its height",
+      Math.max(...slice) === 3 && symmetric(slice) && rising(slice.slice(0, 3)) && slice[0] < 3, slice);
+    check("...every column alike", same(col(lying, 0), slice) && same(col(lying, 23), slice));
+
+    // one flat colour: no bands, turned on its longer side
+    shadeTube(() => 100);
+    check("a piece of one flat colour is turned on its longer side",
+      same(col(D.buildReliefMap(level, pieceMap, tagged, true, groundData), 5), slice));
+
+    // the sprite's own outline, not what shows: a covering piece in front of
+    // the tube leaves the tube's slice as wide as it was
+    shadeTube((x) => 40 + 8 * x);
+    for (let y = 0; y < H; y++) for (let x = 0; x < 6; x++) paint(y * W + x, 100, 1);
+    const covered = row(D.buildReliefMap(level, pieceMap, tagged, true, groundData), 2);
+    check("a part hidden behind another piece still shapes the part that shows",
+      same(covered.slice(6, TUBE_W), tube.slice(6)) && covered.slice(0, 6).every((v) => v <= D.RELIEF_MAX), covered);
+    check("the 3D-terrain switch off flattens the sculpt with the grain",
+      D.buildReliefMap(level, pieceMap, tagged, false, groundData).every((v) => v === 0));
+    check("a special level, with no placements to read, sculpts nothing",
+      D.buildReliefMap(level, pieceMap, tagged, true, { terraImages: groundData.terraImages }).slice(6, TUBE_W).every((v) => v <= D.RELIEF_MAX));
   }
 
   // ================= surface blend: which colours a pixel may draw from
@@ -252,10 +351,12 @@ async function main() {
     check("export is the file's JSON", JSON.parse(files.exportJson("3d/profiles/nx-b.json")).terrain.byId["b:q"] === "relief");
     files.setBlend("b:q", false, "3d/profiles/nx-b.json");
     files.setColorBlend("b:q", false, "3d/profiles/nx-b.json");
+    files.setSculpt("b:q", true, "3d/profiles/nx-b.json");
     files.resetAll("3d/profiles/nx-b.json");
     check("reset clears every tag of the file", same(files.get("3d/profiles/nx-b.json").terrain.byId, {}) &&
       same(files.get("3d/profiles/nx-b.json").blend.byId, {}) &&
-      same(files.get("3d/profiles/nx-b.json").colorBlend.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
+      same(files.get("3d/profiles/nx-b.json").colorBlend.byId, {}) &&
+      same(files.get("3d/profiles/nx-b.json").sculpt.byId, {}) && files.isDirty("3d/profiles/nx-b.json"));
 
     const st = new ProfileFiles({ fetch: fakeFetch({ "3d/profiles/nx-c.json": "{}" }, { postAs: "static" }).fetch });
     st.setClass("c:p", "relief", "3d/profiles/nx-c.json");
@@ -274,6 +375,11 @@ async function main() {
     mc.setColorBlend("c:p", false, "3d/profiles/nx-c.json");
     const r5 = await mc.save("3d/profiles/nx-c.json");
     check("a read-back that drops the colour blend is not a save", !r5.ok && r5.error === "read-back mismatch");
+
+    const ms = new ProfileFiles({ fetch: fakeFetch({}, { mangle: (json) => JSON.stringify({ ...JSON.parse(json), sculpt: { byId: {} } }) }).fetch });
+    ms.setSculpt("c:p", true, "3d/profiles/nx-c.json");
+    const r6 = await ms.save("3d/profiles/nx-c.json");
+    check("a read-back that drops the 3D object is not a save", !r6.ok && r6.error === "read-back mismatch");
 
     const two = new ProfileFiles({ fetch: fakeFetch({}).fetch });
     two.setClass("a:p", "relief", "3d/profiles/nx-a.json");

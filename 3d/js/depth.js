@@ -76,6 +76,20 @@ function depthClassForPiece(piece, profile) {
 const RELIEF_MAX = 4;
 
 /**
+ * How far a slice of a sculpted piece (the "3D object" tag) may stand proud of
+ * its class band, in game pixels. A slice stands its own radius
+ * (sculptRadius), and this is the cap on it.
+ */
+const SCULPT_MAX = 24;
+
+/**
+ * The most relief any pixel can carry, whichever effect put it there: what the
+ * mesher keys greedy rectangles by, what the picker clips its ray to, what the
+ * VR bar stands in front of.
+ */
+const RELIEF_TOP = Math.max(RELIEF_MAX, SCULPT_MAX);
+
+/**
  * Piece id per pixel (stored as id+1; 0 = no piece), replaying the compositor
  * in the same order as buildDepthMap. Lets per-piece settings — like the
  * colour-keyed relief below — be resolved for any pixel.
@@ -136,6 +150,50 @@ function embossEnabledFor(pieceId, profile) {
 
 function embossInvertedFor(pieceId, profile) {
   return embossModeFor(pieceId, profile) === "invert";
+}
+
+/**
+ * The "3D object" tag: is the piece a flat rendering of a solid object, to be
+ * given that object's shape back.
+ *
+ * A tileset's shading is a light on a surface. An artist drawing a bottle or
+ * a sausage shades it in bands running the length of it - a cylinder lit from
+ * one side is light along that side, dark along the other, and the band in
+ * between, the one facing the viewer, is the nearest point of the body. So
+ * the shade of a pixel says which way its bit of surface *faces*, not how
+ * near it is: the light rim and the dark rim are at the same depth, and no
+ * reading of brightness as height gets that right. (The colour-keyed relief
+ * above does read brightness as height, as a few pixels of grain, which is
+ * fine for texture and wrong for a body.)
+ *
+ * What the shading does say is which way the body runs: the bands lie along
+ * the axis, so the brightness changes *across* it. A sculpted piece is read
+ * as a body turned on that axis - a lathe: every run of pixels across the
+ * axis is one round slice, as deep as it is wide (sculptRadius), with a
+ * semicircle for its profile. That gives a bottle its neck and shoulders
+ * from its outline, the cone of its tip from the rows narrowing, and both
+ * rims at the band's face with the middle standing proud, whichever side the
+ * artist lit it from. The outline is the sprite's own, so a part of it
+ * covered by another piece still shapes the part that shows.
+ *
+ * Pieces opt in: most drawn pixels are ground, not objects, and ground read
+ * as a body would stand out of the slab as a row of bumps.
+ */
+function sculptFor(pieceId, profile) {
+  const cfg = (profile && profile.sculpt) || {};
+  const byId = cfg.byId || {};
+  const value = Object.prototype.hasOwnProperty.call(byId, pieceId)
+    ? byId[pieceId] : cfg.default;
+  return value === true;
+}
+
+/**
+ * How far a round slice `width` pixels across stands proud at its middle:
+ * its radius, since a round thing is as deep as it is wide, capped at
+ * SCULPT_MAX so a wide barrel does not stand out of the board.
+ */
+function sculptRadius(width) {
+  return Math.min(SCULPT_MAX, width / 2);
 }
 
 /** How many colours one blended wall may draw from. */
@@ -352,27 +410,43 @@ function buildBlendMap(level, pieceMap, profile, groundData) {
 }
 
 /**
- * Per-pixel relief height (0..RELIEF_MAX) keyed off pixel brightness: the
- * tilesets shade a single hue, so lighter pixels read as raised. The
- * brightness range is measured across the pixels actually being embossed, so
- * every tileset uses the full range instead of a fixed global threshold.
- * `enabled` false (the default) returns a flat map.
+ * Per-pixel relief height keyed off pixel brightness: the tilesets shade a
+ * single hue, so lighter pixels read as raised. Two readings share the map:
+ *
+ * - the colour-keyed relief (the "3D shade" tag): 0..RELIEF_MAX of grain on
+ *   every piece not tagged out, the brightness range measured across the
+ *   pixels actually being embossed, so every tileset uses the full range
+ *   instead of a fixed global threshold;
+ * - the sculpt (the "3D object" tag, sculptFor): the tagged pieces read as
+ *   bodies turned on the axis their shading runs along, which replaces the
+ *   grain on those pixels and is left out of the grain's range.
+ *
+ * `enabled` false (the 3D-terrain switch off) returns a flat map: the switch
+ * is where the triangle count is answered, and both readings cost the same.
  */
 function buildReliefMap(level, pieceMap, profile, enabled, groundData) {
   const W = level.width, H = level.height;
   const relief = new Uint8Array(W * H);
   if (!enabled) return relief;
 
-  // 0 = off, 1 = lighter is higher, 2 = darker is higher; a Lemmix level's
-  // pieces are tagged by name, so the id is looked up through its image
+  // per piece id (stored as id+1, 0 = no piece): the emboss - 0 = off, 1 =
+  // lighter is higher, 2 = darker is higher - and whether the piece is
+  // sculpted. A Lemmix level's pieces are tagged by name, so the id is
+  // looked up through its image.
   const images = (groundData && groundData.terraImages) || {};
   let maxId = 254;
   for (const id of Object.keys(images)) maxId = Math.max(maxId, +id);
   const embossById = new Uint8Array(maxId + 2);
+  const sculptById = new Uint8Array(maxId + 2);
+  let anySculpt = false;
   for (let id = 0; id <= maxId; id++) {
     const key = images[id] && images[id].name != null ? images[id].name : id;
     const mode = embossModeFor(key, profile);
     embossById[id + 1] = mode === "off" ? 0 : mode === "invert" ? 2 : 1;
+    if (images[id] && sculptFor(key, profile)) {
+      sculptById[id + 1] = 1;
+      anySculpt = true;
+    }
   }
 
   const img = level.groundImage;
@@ -382,22 +456,106 @@ function buildReliefMap(level, pieceMap, profile, enabled, groundData) {
     return (img[o] * 299 + img[o + 1] * 587 + img[o + 2] * 114) / 1000;
   };
 
+  // --- the grain, over every embossed pixel that is not a sculpted one
   let lo = 255, hi = 0;
   for (let i = 0; i < W * H; i++) {
-    if (!mask[i] || !embossById[pieceMap[i]]) continue;
+    const p = pieceMap[i];
+    if (!mask[i] || !embossById[p] || sculptById[p]) continue;
     const l = luma(i);
     if (l < lo) lo = l;
     if (l > hi) hi = l;
   }
-  if (hi <= lo) return relief;
-
-  for (let i = 0; i < W * H; i++) {
-    const mode = embossById[pieceMap[i]];
-    if (!mask[i] || !mode) continue;
-    const t = (luma(i) - lo) / (hi - lo);
-    relief[i] = Math.round((mode === 2 ? 1 - t : t) * RELIEF_MAX);
+  if (hi > lo) {
+    for (let i = 0; i < W * H; i++) {
+      const p = pieceMap[i];
+      const mode = embossById[p];
+      if (!mask[i] || !mode || sculptById[p]) continue;
+      const t = (luma(i) - lo) / (hi - lo);
+      relief[i] = Math.round((mode === 2 ? 1 - t : t) * RELIEF_MAX);
+    }
   }
+
+  if (anySculpt) sculptRelief(relief, W, H, pieceMap, mask, luma, sculptById, groundData);
   return relief;
+}
+
+/**
+ * The sculpted pieces' heights, written into `relief` over their pixels.
+ *
+ * First the axis, per piece id: the shading's bands run along it, so the
+ * brightness changes more *across* it than along it. Summed over the piece's
+ * visible pixels, a bigger change from a pixel to its right-hand neighbour
+ * than to the one below says the bands are upright and the body stands
+ * (a bottle: sliced row by row), the other way round says it lies (a
+ * sausage: sliced column by column). A piece of one flat colour has no
+ * bands, and is turned on its longer side.
+ *
+ * Then the lathe, per placement: each row (or column) of the sprite is cut
+ * into its runs of solid pixels, and every run is one round slice - a
+ * semicircle as deep as the run's radius (sculptRadius), its rims at the
+ * band's face and its middle standing proud. The runs come from the sprite,
+ * not from what shows, so a slice half hidden behind another piece keeps
+ * its true width; only the pixels the level draws for the piece are written.
+ * Later placements overwrite earlier ones, in the compositor's own order.
+ */
+function sculptRelief(relief, W, H, pieceMap, mask, luma, sculptById, groundData) {
+  const usable = groundData && groundData.lr && Array.isArray(groundData.lr.terrains) &&
+    groundData.lr.levelWidth === W && groundData.lr.levelHeight === H;
+  if (!usable) return;
+
+  // --- the axis: change across x against change across y, per piece id
+  const ids = sculptById.length;
+  const dx = new Float64Array(ids), dy = new Float64Array(ids);
+  for (let i = 0; i < W * H; i++) {
+    const p = pieceMap[i];
+    if (!mask[i] || !sculptById[p]) continue;
+    const l = luma(i);
+    const x = i % W;
+    if (x + 1 < W && mask[i + 1] && pieceMap[i + 1] === p) dx[p] += Math.abs(l - luma(i + 1));
+    if (i + W < W * H && mask[i + W] && pieceMap[i + W] === p) dy[p] += Math.abs(l - luma(i + W));
+  }
+
+  // --- the lathe
+  const images = groundData.terraImages || {};
+  for (const piece of groundData.lr.terrains) {
+    const p = piece.id + 1;
+    if (!sculptById[p]) continue;
+    const src = images[piece.id];
+    if (!src || !src.frames || !src.frames[0]) continue;
+    const pixBuf = src.frames[0];
+    const w = src.width, h = src.height;
+    const props = piece.drawProperties || {};
+    // in the sprite's output orientation (buildPieceMap reads it the same way)
+    const solid = (x, y) => {
+      const sy = props.isUpsideDown ? (h - y - 1) : y;
+      return (pixBuf[sy * w + x] & 0x80) === 0;
+    };
+    const write = (x, y, z) => {
+      const ox = x + piece.x, oy = y + piece.y;
+      if (ox < 0 || ox >= W || oy < 0 || oy >= H) return;
+      const idx = oy * W + ox;
+      if (mask[idx] && pieceMap[idx] === p) relief[idx] = z;
+    };
+    // upright bands (or none and a tall sprite): the body stands, slice the rows
+    const acrossX = dx[p] !== dy[p] ? dx[p] > dy[p] : h >= w;
+    const along = acrossX ? h : w, across = acrossX ? w : h;
+    for (let a = 0; a < along; a++) {
+      const at = (b) => acrossX ? solid(b, a) : solid(a, b);
+      for (let b0 = 0; b0 < across;) {
+        if (!at(b0)) { b0++; continue; }
+        let b1 = b0;
+        while (b1 + 1 < across && at(b1 + 1)) b1++;
+        const width = b1 - b0 + 1, r = width / 2, amp = sculptRadius(width);
+        const centre = b0 + r;
+        for (let b = b0; b <= b1; b++) {
+          const u = (b + 0.5 - centre) / r;
+          const z = Math.round(amp * Math.sqrt(Math.max(0, 1 - u * u)));
+          if (acrossX) write(b, a, z); else write(a, b, z);
+        }
+        b0 = b1 + 1;
+      }
+    }
+  }
 }
 
 /**
@@ -456,7 +614,8 @@ function buildDepthMap(level, groundData, profile) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DepthClass, DepthClassByName, DEPTH_BANDS, DepthProfiles, pieceKey, depthClassForPiece,
-    RELIEF_MAX, buildPieceMap, embossModeFor, embossEnabledFor, embossInvertedFor,
+    RELIEF_MAX, SCULPT_MAX, RELIEF_TOP, buildPieceMap, embossModeFor, embossEnabledFor, embossInvertedFor,
+    sculptFor, sculptRadius,
     BLEND_PALETTE_MAX, BLEND_MERGE, surfaceBlendFor, buildBlendMap,
     colorBlendFor, buildColorBlendMap,
     buildReliefMap, buildDepthMap,
