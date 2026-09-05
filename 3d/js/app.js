@@ -2071,10 +2071,11 @@ Vfs.boot("", "setup.html").then(function (booted) {
     const level = session.level;
     dioramaRoot.updateMatrixWorld(true);
     // the frontmost plane the board reaches: a relief piece's face with its
-    // per-pixel relief on top (depth.js DEPTH_BANDS), the objects' decals,
+    // per-pixel relief on top - a sculpted object's full height (depth.js
+    // DEPTH_BANDS, RELIEF_TOP) - the objects' decals,
     // the slab itself - so no part of the board is in front of the bar
     const frontPx = Math.max(TERRAIN_DEPTH, OBJECT_DECAL_Z,
-      DEPTH_BANDS[DepthClass.RELIEF].front + RELIEF_MAX);
+      DEPTH_BANDS[DepthClass.RELIEF].front + RELIEF_TOP);
     // the level's bottom edge, under the focus, on that plane
     const edge = dioramaRoot.localToWorld(
       new THREE.Vector3(levelFocusX(level), 0, frontPx));

@@ -62,7 +62,7 @@ The panel has four parts, top to bottom.
 
 **The info line** describes the selected piece and everything currently true of
 it — how many times the level places it, its depth class (and whether that is a
-tag or the default), the state of each of the three effect tags, and the file
+tag or the default), the state of each of the four effect tags, and the file
 its tags live in, marked `(unsaved)` when that file has changes that are not on
 disk. With nothing selected it reads `click a terrain piece to tag it`, plus a
 count of files with unsaved changes.
@@ -165,6 +165,43 @@ turns the effect off across the board. It multiplies the terrain's triangle
 count, so that switch is also the answer if the frame rate suffers. With it
 off, the tag is still recorded but shows nothing.
 
+### `3D object`
+
+**What it decides:** whether the piece is a flat picture of a solid object,
+to be given that object's shape back.
+
+Some sprites are not ground at all but things: a mustard bottle, a sausage,
+a barrel, a pipe. The artist drew them the way a lit rounded body looks,
+shaded in bands running the length of it — a cylinder lit from one side is
+light down that side and dark down the other, and the band between, the one
+facing you, is the nearest part of it. So a pixel's shade says which way its
+bit of surface *faces*, not how near it is: the light rim and the dark rim
+are at the same depth. `3D shade` reads brightness as height, which is fine
+for a few pixels of grain and wrong for a body.
+
+What the shading does say is which way the body **runs**: the bands lie along
+it, so the colour changes across it. `3D object` reads the piece as a body
+turned on that axis — a lathe. Every row across the axis (every column, for
+a piece that lies) is cut into its runs of solid pixels, and each run is one
+round slice: as deep as it is wide, a semicircle for its profile, its two rims
+on the class band's face and its middle standing proud by the run's radius, up
+to a cap of 24 game pixels. A bottle 32 wide comes 16 pixels out of the slab
+along its body, less through its neck, and to a point at the tip of its cap,
+all from its outline; which side the artist lit it from makes no difference.
+The outline is the sprite's own, so a part of it hidden behind another piece
+still shapes the part that shows. A piece of one flat colour has no bands to
+read and is turned on its longer side.
+
+**Pieces opt in.** It is off for everything by default: nearly every drawn
+pixel is ground, and ground read as a body would stand out of the slab as a
+row of bumps. The button is lit only for the pieces tagged in. On those
+pixels it replaces the 3D shade, whatever that tag says (`invert` included),
+and they are left out of the shade's brightness range so a bright bottle
+cannot flatten the grain on the rock beside it.
+
+Like the shade, it is held on top by the **"3D terrain"** switch: that is the
+switch that answers the triangle count, and a body costs what grain costs.
+
 ### `surface blend`
 
 **What it decides:** what the extruded *side walls* are coloured with.
@@ -230,8 +267,8 @@ inside it. That is what the master switch is there to answer.
 
 ### `reset all`
 
-Clears **every tag in every file this level uses** — classes, shades, both
-blends — in memory. It does not touch the disk until you save, and there is no
+Clears **every tag in every file this level uses** — classes, shades, 3D
+objects, both blends — in memory. It does not touch the disk until you save, and there is no
 undo, so it is worth an export first if there was anything in those files you
 did not mean to lose.
 
@@ -355,7 +392,7 @@ there are per gallery.
 
 ## The file format
 
-A profile file is a small JSON object with four sections. Every one of them is
+A profile file is a small JSON object with five sections. Every one of them is
 optional, and every entry inside them is optional: what is not named takes the
 default.
 
@@ -380,6 +417,9 @@ default.
   },
   "colorBlend": {
     "byId": { "orig_dirt:sign_01": false }
+  },
+  "sculpt": {
+    "byId": { "ray_food:mustard": true }
   }
 }
 ```
@@ -390,14 +430,17 @@ default.
 | `emboss.byId` | `false` = no 3D shade; `"invert"` = darker pixels raised | On, lighter pixels raised |
 | `blend.byId` | `false` = no surface blend | On |
 | `colorBlend.byId` | `false` = no colour blend | On |
+| `sculpt.byId` | `true` = read as a 3D object | Off |
 
-Note the direction of the three effect sections: they are lists of
-**exceptions**. All three effects are on by default, so a file records only the
-pieces tagged *out* of them, and turning one back on removes the entry rather
-than writing `true`. An older file's redundant `true` still reads as on and is
-cleared the first time that piece is touched. Depth classes are the other way
-round, since `terrain` is a real default rather than an effect: a `terrain.byId`
-entry names a class, and `auto` removes it.
+Note the direction of the shade and blend sections: they are lists of
+**exceptions**. Those three effects are on by default, so a file records only
+the pieces tagged *out* of them, and turning one back on removes the entry
+rather than writing `true`. An older file's redundant `true` still reads as on
+and is cleared the first time that piece is touched. `sculpt` runs the other
+way: it is off by default, so the file lists the pieces tagged *in*, and
+turning one off removes the entry. Depth classes are different again, since
+`terrain` is a real default rather than an effect: a `terrain.byId` entry names
+a class, and `auto` removes it.
 
 Anything else in the file is left alone when the page rewrites it, so extra
 fields — `tileset` above, or notes of your own — survive a save.

@@ -1,0 +1,23 @@
+{
+  "terrain": {
+    "default": "terrain",
+    "byId": {}
+  },
+  "emboss": {
+    "byId": {}
+  },
+  "blend": {
+    "byId": {}
+  },
+  "colorBlend": {
+    "byId": {}
+  },
+  "sculpt": {
+    "byId": {
+      "ray_food:bottle": true,
+      "ray_food:sausage": true,
+      "ray_food:mustard": true,
+      "ray_food:ketchup": true
+    }
+  }
+}

@@ -420,6 +420,11 @@ Vfs.boot("").then(function (booted) {
     invertBtn.textContent = "invert";
     invertBtn.addEventListener("click", () => tag(g, sp, () =>
       files.setEmboss(sp.key, ProfileStore.nextEmbossInvert(sp.key, files.get(g.url)), g.url)));
+    const sculptBtn = document.createElement("button");
+    sculptBtn.textContent = "3D object";
+    sculptBtn.title = "read the piece as a solid object shaped by its shading";
+    sculptBtn.addEventListener("click", () => tag(g, sp, () =>
+      files.setSculpt(sp.key, ProfileStore.nextSculptToggle(sp.key, files.get(g.url)), g.url)));
     const blendBtn = document.createElement("button");
     blendBtn.textContent = "surface blend";
     blendBtn.addEventListener("click", () => tag(g, sp, () =>
@@ -428,9 +433,9 @@ Vfs.boot("").then(function (booted) {
     colorBlendBtn.textContent = "colour blend";
     colorBlendBtn.addEventListener("click", () => tag(g, sp, () =>
       files.setColorBlend(sp.key, ProfileStore.nextColorBlendToggle(sp.key, files.get(g.url)), g.url)));
-    row2.append(embossBtn, invertBtn, blendBtn, colorBlendBtn);
+    row2.append(embossBtn, invertBtn, sculptBtn, blendBtn, colorBlendBtn);
     el.append(pic, name, size, row1, row2);
-    const card = { el, sprite: sp, canvas, size, dom: { classBtns, autoBtn, embossBtn, invertBtn, blendBtn, colorBlendBtn } };
+    const card = { el, sprite: sp, canvas, size, dom: { classBtns, autoBtn, embossBtn, invertBtn, sculptBtn, blendBtn, colorBlendBtn } };
     cards.set(String(sp.key), card);
     return card;
   }
@@ -487,6 +492,9 @@ Vfs.boot("").then(function (booted) {
     // holds is the exceptions
     const uncoloured = Object.keys(profile.colorBlend.byId)
       .filter((k) => profile.colorBlend.byId[k] === false).length;
+    // the 3D object is the one effect pieces opt into, so its entries are the pieces that have
+    const sculpted = Object.keys(profile.sculpt.byId)
+      .filter((k) => profile.sculpt.byId[k] === true).length;
     dom.status.textContent = "";
     const b = document.createElement("b");
     b.textContent = ProfileStore.fileName(g.url);
@@ -495,9 +503,10 @@ Vfs.boot("").then(function (booted) {
       (shaded ? ", " + shaded + " shade setting" + (shaded === 1 ? "" : "s") : "") +
       (unblended ? ", " + unblended + " out of the surface blend" : "") +
       (uncoloured ? ", " + uncoloured + " out of the colour blend" : "") +
+      (sculpted ? ", " + sculpted + " as 3D object" + (sculpted === 1 ? "" : "s") : "") +
       (files.isDirty(g.url) ? " · unsaved changes" : ""));
     dom.save.disabled = !files.isDirty(g.url);
-    dom.reset.disabled = !tagged && !shaded && !unblended && !uncoloured;
+    dom.reset.disabled = !tagged && !shaded && !unblended && !uncoloured && !sculpted;
   }
 
   async function save() {
