@@ -25,6 +25,12 @@ of pieces. Tagging is the polish.
 - [The workbench](#the-workbench)
 - [Choosing a piece](#choosing-a-piece)
 - [The tagging options](#the-tagging-options)
+  - [Terrain layer](#terrain-layer-backdrop--terrain--relief--overlay--auto)
+  - [3D rendering: 3D shade and invert](#3d-rendering-3d-shade-and-invert)
+  - [3D rendering: 3D object](#3d-rendering-3d-object)
+  - [Surface: surface blend](#surface-surface-blend)
+  - [Surface: colour blend](#surface-colour-blend)
+  - [Controls](#controls-save--export-json--reset-all)
 - [Where the tags are kept](#where-the-tags-are-kept)
 - [Saving in server mode](#saving-in-server-mode)
 - [Exporting in static mode](#exporting-in-static-mode)
@@ -58,14 +64,17 @@ and tagging wants a mouse.
 
 ## The workbench
 
-The panel has four parts, top to bottom.
+The panel has five parts, top to bottom: the info line, the file list, the
+four labelled rows of buttons, the two links under them, and the message
+line.
 
 **The info line** describes the selected piece and everything currently true of
 it — how many times the level places it, its depth class (and whether that is a
-tag or the default), the state of each of the four effect tags, and the file
-its tags live in, marked `(unsaved)` when that file has changes that are not on
-disk. With nothing selected it reads `click a terrain piece to tag it`, plus a
-count of files with unsaved changes.
+tag or the default), the state of each of the four effect tags (`3D shade`,
+with which shades it raises; `3D object`; `surface blend`; `colour blend`),
+and the file its tags live in, marked `(unsaved)` when that file has changes
+that are not on disk. With nothing selected it reads `click a terrain piece to
+tag it`, plus a count of files with unsaved changes.
 
 **The file list** names every sprite gallery this level draws from — one line
 each, since a NeoLemmix level can mix pieces from several styles. Each line
@@ -73,17 +82,31 @@ links to that gallery on the galleries page, shows how many tags the file holds
 and whether it exists on disk yet, carries a `● unsaved` mark once it has
 changes, and offers a `⤓ json` link that downloads that one file.
 
-**The tag buttons**, described one by one below, in three labelled rows:
-*Terrain layer* (`backdrop`, `terrain`, `relief`, `overlay`, `auto`), *3D
-rendering* (`3D shade`, `invert`, `3D object`) and *Surface* (`surface
-blend`, `colour blend`). A lit button is the state the piece is in, not a
-button waiting to be pressed. They are disabled until a piece is selected.
+**The tag buttons**, in three labelled rows, one row per kind of question:
 
-**The controls**: `save`, `export JSON` and `reset all`, in a fourth row.
-Under them two small links: *see in gallery*, which opens the galleries page
-on the selected piece (or at its root with nothing selected), and *help*,
-which opens this document in a new tab. Last, the result of the last save or
-export.
+| Row | Buttons | What it answers |
+| --- | --- | --- |
+| **Terrain layer** | `backdrop` `terrain` `relief` `overlay` `auto` | How far out of the slab the piece stands — its depth class. One of the four, or `auto` for the default. |
+| **3D rendering** | `3D shade` `invert` `3D object` | What the piece's shading is read as: grain on its face (`3D shade`, with `invert` for pieces drawn with dark highlights), or the shape of a solid body (`3D object`). |
+| **Surface** | `surface blend` `colour blend` | How its colours are spread: down the extruded side walls (`surface blend`), and into the neighbouring pixels (`colour blend`). |
+
+Each button is described in [The tagging options](#the-tagging-options)
+below, under the row it belongs to. A lit button is the state the piece is in,
+not a button waiting to be pressed, so a freshly selected untagged piece shows
+`auto`, `3D shade`, `surface blend` and `colour blend` lit, since those are
+the defaults. The buttons are disabled until a piece is selected.
+
+**The controls** — `save`, `export JSON` and `reset all` — in a fourth row,
+labelled *Controls*. They act on the level's files rather than on the
+selected piece, so they work with nothing selected.
+
+**The links**, small and under the controls: *see in gallery* opens the
+galleries page on the selected piece, scrolled to its sprite — or at the root
+of the galleries with nothing selected — asking first if any file holds
+unsaved tags; *help* opens this document in a new tab, leaving the page as it
+is. Both are ordinary links, so they can be middle-clicked or copied.
+
+**The message line**, last, gives the result of the last save or export.
 
 On a **special level** — the handful that ship as one pre-rendered image
 (VGASPEC) rather than as a list of placed pieces — the info line reads `no
@@ -112,11 +135,18 @@ on the level's own plane, but from the same footprint.
 
 ## The tagging options
 
-### Depth class: `backdrop` · `terrain` · `relief` · `overlay` · `auto`
+The options follow the panel's rows: the terrain layer first, then the two
+readings of the shading, then the two blends, then the controls. Every option
+is a *tag* on the sprite, kept in its gallery's profile file (see [Where the
+tags are kept](#where-the-tags-are-kept)); the panel and the galleries page
+set the same tags.
 
-**What it decides:** how far out of the slab the piece's pixels stand. This is
-the one tag that changes the diorama's geometry rather than its colours, and
-the only one with more than two states.
+### Terrain layer: `backdrop` · `terrain` · `relief` · `overlay` · `auto`
+
+**What it decides:** how far out of the slab the piece's pixels stand — the
+piece's *depth class*. This is the one tag whose whole job is the diorama's
+geometry rather than its colours, and the one with the most states: four
+classes and the default.
 
 Each class is a Z band, in game pixels, measured from the back of the slab:
 
@@ -141,11 +171,13 @@ The **cycle-class key** (`K` traditional, `L` functional) walks the selected
 piece through terrain → relief → backdrop → overlay → auto and round again,
 which is quicker than aiming at buttons when working through a tileset.
 
-Depth class is the only tag with no master switch. It is always in force.
+Depth class has no master switch. It is always in force.
 
-### `3D shade` and `invert`
+### 3D rendering: `3D shade` and `invert`
 
-**What it decides:** whether the piece's own shading is read as height.
+**What it decides:** whether the piece's own shading is read as height — as
+*grain* on the face. The other button of the row, `3D object`, reads it as a
+body instead, and is described next.
 
 Lemmings tilesets shade a single hue — a cliff is one brown, lighter where the
 artist meant it to catch light. `3D shade` takes that at its word: within the
@@ -162,17 +194,22 @@ The button is lit until you turn it off.
 the *darker* pixels are the ones meant to stand proud. It flips the mapping,
 and turns the shade on if it was off. In the file this is the value `"invert"`
 rather than `true` or `false`, so it is one setting with three states, not two
-tags.
+tags: the two buttons show the state between them — `3D shade` lit on its
+own is light raised, both lit is dark raised, neither is off.
 
 Held on top by the **"3D terrain"** switch in the 3D effects drawer, which
 turns the effect off across the board. It multiplies the terrain's triangle
 count, so that switch is also the answer if the frame rate suffers. With it
 off, the tag is still recorded but shows nothing.
 
-### `3D object`
+### 3D rendering: `3D object`
 
 **What it decides:** whether the piece is a flat picture of a solid object,
 to be given that object's shape back.
+
+Where `3D shade` is texture, this is geometry: the slab's face is reshaped
+into the body, so a tagged bottle is a real bulge with its own walls, round
+when the view swings to its side, not a bottle-shaped decal.
 
 Some sprites are not ground at all but things: a mustard bottle, a sausage,
 a barrel, a pipe. The artist drew them the way a lit rounded body looks,
@@ -206,7 +243,7 @@ cannot flatten the grain on the rock beside it.
 Like the shade, it is held on top by the **"3D terrain"** switch: that is the
 switch that answers the triangle count, and a body costs what grain costs.
 
-### `surface blend`
+### Surface: `surface blend`
 
 **What it decides:** what the extruded *side walls* are coloured with.
 
@@ -231,7 +268,7 @@ of the same green.
 
 This tag has **no master switch**. It is per-piece or nothing.
 
-### `colour blend`
+### Surface: `colour blend`
 
 **What it decides:** whether neighbouring pixels' colours run into each other
 instead of meeting at a hard edge.
@@ -269,12 +306,20 @@ Colour blend costs geometry: a blended pixel cannot merge into a greedy
 rectangle, since a rectangle has no corners to carry the colours of the pixels
 inside it. That is what the master switch is there to answer.
 
-### `reset all`
+### Controls: `save` · `export JSON` · `reset all`
 
-Clears **every tag in every file this level uses** — classes, shades, 3D
-objects, both blends — in memory. It does not touch the disk until you save, and there is no
-undo, so it is worth an export first if there was anything in those files you
-did not mean to lose.
+The fourth row is not tags but what is done with them. All three act on
+**every file this level uses**, whether or not a piece is selected.
+
+`save` writes the changed files to disk through the launcher — server mode
+only, see [Saving in server mode](#saving-in-server-mode). `export JSON`
+downloads them instead, for placing by hand — see [Exporting in static
+mode](#exporting-in-static-mode).
+
+`reset all` clears **every tag in every file this level uses** — classes,
+shades, 3D objects, both blends — in memory. It does not touch the disk until
+you save, and there is no undo, so it is worth an export first if there was
+anything in those files you did not mean to lose.
 
 ## Where the tags are kept
 
@@ -380,13 +425,17 @@ browser's dialog, not the app's.
 
 ## The sprite galleries
 
-`galleries.html` — the `galleries` button in the panel, or *this piece in its
-gallery* when a piece is selected, which opens it scrolled to that sprite —
-tags the same files sprite by sprite instead of level by level. Down the left
-is a tree of every gallery: the classic games with a directory per pack holding
-its tilesets, and the NeoLemmix styles with a directory per author. On the
-right, a miniature of every terrain sprite in the open gallery with the same
-tag buttons on each and the current state lit.
+`galleries.html` — the *see in gallery* link under the panel's controls, which
+opens it scrolled to the selected sprite, or at the root of the galleries with
+nothing selected — tags the same files sprite by sprite instead of level by
+level. Down the left is a tree of every gallery: the classic games with a
+directory per pack holding its tilesets, and the NeoLemmix styles with a
+directory per author. On the right, a miniature of every terrain sprite in the
+open gallery with the same tag buttons on each — the four classes and `auto`
+on one row, `3D shade`, `invert`, `3D object`, `surface blend` and `colour
+blend` on the next — and the current state lit. The gallery's head names its
+profile file and counts what it holds: class tags, shade settings, pieces out
+of either blend, pieces tagged as 3D objects.
 
 It is the better tool for working through a whole tileset methodically; the
 piece editor is the better tool for fixing the piece that looks wrong in the
