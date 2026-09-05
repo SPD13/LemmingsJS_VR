@@ -611,7 +611,16 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   the dent is the connected patch of sky nearest the exit's own trigger box,
   the spot a lemming has to reach to get out. Stray saturated pixels
   elsewhere in the artwork are left alone, and a patch under a few pixels is
-  ignored so a lone pixel nearer the trigger cannot win. A door is not
+  ignored so a lone pixel nearer the trigger cannot win. Just as many exits
+  are drawn as a black mouth with nothing lit beyond it - a milk carton, a
+  castle, a cave - so near-black is the other opening colour, held to a
+  stricter standard since a sprite has far more black in it than blue (its
+  outlines, its shadows, its lettering): the black is eroded a pixel and
+  grown back so lines and outlines drop out, and a patch counts only when
+  it is the size of a doorway, fills its box rather than tracing it, lies
+  within a few pixels of the trigger and stands over it, since a doorway is
+  walked into where a shadow beside the door is not. Where sky and black
+  both offer a patch, the nearer to the trigger is the doorway. A door is not
   always one object either — the tilesets stack an exit and its cap as two,
   and only the piece carrying the trigger reads as an opening — so a piece
   abutting an exit along most of a side is built as the same slab at the

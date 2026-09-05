@@ -46,6 +46,11 @@ const PORTAL_SKY_MIN = 40;         // sky is at least this bright,
 const PORTAL_SKY_SAT = 0.35;       // this saturated (not a tinted grey),
 const PORTAL_SKY_WARM = 0.2;       // and this far off red (not a yellow)
 const PORTAL_SKY_PATCH_MIN = 6;    // a doorway is a patch, not a stray pixel
+const PORTAL_DARK_MAX = 48;        // a dark doorway is under this in every channel,
+const PORTAL_DARK_PATCH_MIN = 12;  // at least this many pixels once opened,
+const PORTAL_DARK_SIDE_MIN = 3;    // this wide and this tall,
+const PORTAL_DARK_FILL = 0.45;     // filling this much of its bounding box,
+const PORTAL_DARK_REACH = 10;      // and within this many pixels of the trigger
 const PORTAL_FRAME_THICK = 1;      // frame left over the door's own tunnel
 const PORTAL_TUNNEL_SHADE = 0.3;   // how much the tunnel darkens with depth
 const PORTAL_FUNNEL_RINGS = 3;     // rings of frame the funnel eases across
@@ -722,38 +727,26 @@ function isSkyColour(v) {
 }
 
 /**
- * The opening's pixels: sky, but only the patch of it that is the doorway.
- *
- * Colour alone is not enough. Some tilesets are built of blue stone - the
- * crystal set most of all - and pick up stray saturated pixels all over the
- * sprite, which would dent it at random. But the level data says where the
- * doorway is: an exit carries the trigger box a lemming has to reach to get
- * out. So the region is the connected patch of sky nearest that box, and
- * scattered pixels elsewhere in the artwork are left alone.
+ * Or is it the dark of a doorway with nothing lit beyond it? Just as many
+ * exits are drawn that way - a black mouth in a milk carton, a castle, a
+ * cave - and no hue is any help there: black in every channel, and a shade
+ * or two off it where the artist antialiased the edge.
  */
-function spriteSkyMask(frame, triggerX, triggerY) {
-  const w = frame.width, h = frame.height;
-  const mask = frame.getMask(), buf = frame.getBuffer();
-  const candidate = new Uint8Array(w * h);
-  let any = false;
-  for (let i = 0; i < w * h; i++) {
-    if (mask[i] && isSkyColour(buf[i])) { candidate[i] = 1; any = true; }
-  }
-  if (!any) return null;
+function isDarkColour(v) {
+  const r = v & 255, g = (v >> 8) & 255, b = (v >> 16) & 255;
+  return Math.max(r, g, b) < PORTAL_DARK_MAX;
+}
 
-  // the patch whose nearest pixel to the trigger is nearest of all
-  const seen = new Uint8Array(w * h);
-  let best = null, bestD = Infinity;
+/** The 4-connected patches of a mask, each an array of pixel indices. */
+function maskPatches(candidate, w, h) {
+  const seen = new Uint8Array(w * h), patches = [];
   for (let start = 0; start < w * h; start++) {
     if (!candidate[start] || seen[start]) continue;
     const blob = [], stack = [start];
     seen[start] = 1;
-    let d2 = Infinity;
     while (stack.length) {
       const i = stack.pop(), x = i % w, y = (i / w) | 0;
       blob.push(i);
-      const dx = x - triggerX, dy = y - triggerY;
-      d2 = Math.min(d2, dx * dx + dy * dy);
       for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + ox, ny = y + oy;
         if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
@@ -763,14 +756,115 @@ function spriteSkyMask(frame, triggerX, triggerY) {
         stack.push(j);
       }
     }
-    // a lone saturated pixel can easily sit closer to the trigger than the
-    // doorway does, and denting one pixel is not worth doing
-    if (blob.length < PORTAL_SKY_PATCH_MIN) continue;
-    if (d2 < bestD) { bestD = d2; best = blob; }
+    patches.push(blob);
   }
+  return patches;
+}
+
+/**
+ * The mask eroded by a pixel and grown back: a blob keeps its shape, a line
+ * a pixel wide has nothing left to grow back from. Pixel art draws its
+ * outlines and shadows in the same black as its doorways, and often touching
+ * them, so without this the doorway comes out wearing the whole outline as a
+ * tail - or loses to it, since the outline runs right down to the trigger.
+ */
+function openMask(candidate, w, h) {
+  const inside = (m, x, y) => x >= 0 && x < w && y >= 0 && y < h && m[y * w + x] !== 0;
+  const eroded = new Uint8Array(w * h), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (candidate[y * w + x] && inside(candidate, x - 1, y) && inside(candidate, x + 1, y)
+        && inside(candidate, x, y - 1) && inside(candidate, x, y + 1)) eroded[y * w + x] = 1;
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!candidate[y * w + x]) continue;
+      if (eroded[y * w + x] || inside(eroded, x - 1, y) || inside(eroded, x + 1, y)
+        || inside(eroded, x, y - 1) || inside(eroded, x, y + 1)) out[y * w + x] = 1;
+    }
+  }
+  return out;
+}
+
+/** A patch's extent, and how near it comes to the trigger. */
+function patchShape(blob, w, triggerX, triggerY) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, d2 = Infinity;
+  for (const i of blob) {
+    const x = i % w, y = (i / w) | 0;
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+    const dx = x - triggerX, dy = y - triggerY;
+    d2 = Math.min(d2, dx * dx + dy * dy);
+  }
+  return { width: x1 - x0 + 1, height: y1 - y0 + 1, x0, x1, d2 };
+}
+
+/**
+ * The patch nearest the trigger among those `accept` lets through, with
+ * how near it comes; null when none does.
+ */
+function nearestPatch(candidate, w, h, triggerX, triggerY, accept) {
+  let best = null;
+  for (const blob of maskPatches(candidate, w, h)) {
+    const shape = patchShape(blob, w, triggerX, triggerY);
+    if (!accept(blob, shape)) continue;
+    if (!best || shape.d2 < best.d2) best = { blob, d2: shape.d2 };
+  }
+  return best;
+}
+
+/**
+ * The opening's pixels: sky or dark, but only the patch of it that is the
+ * doorway.
+ *
+ * Colour alone is not enough. Some tilesets are built of blue stone - the
+ * crystal set most of all - and pick up stray saturated pixels all over the
+ * sprite, which would dent it at random. But the level data says where the
+ * doorway is: an exit carries the trigger box a lemming has to reach to get
+ * out. So the region is the connected patch of sky nearest that box, and
+ * scattered pixels elsewhere in the artwork are left alone.
+ *
+ * Dark is the same idea held to a stricter standard, since a sprite has far
+ * more black in it than blue: its outlines, its shadows, its lettering. The
+ * mask is opened first (openMask), so lines and outlines drop out, and a
+ * patch counts as a doorway only when it is the size of one - a lemming
+ * fits through it, and it fills its box rather than tracing it - lies close
+ * to the trigger, and stands over it: a doorway is walked into, so its
+ * columns span the trigger's, where a shadow beside the door does not.
+ *
+ * Sky was tuned first on its own and keeps its looser terms, so what it
+ * found before it still finds. Where both find a patch, the nearer one to
+ * the trigger is the doorway - a black mouth under a blue roof is the mouth,
+ * a blue door beside a black shadow is the door - and sky on a tie.
+ */
+function spriteOpeningMask(frame, triggerX, triggerY) {
+  const w = frame.width, h = frame.height;
+  const mask = frame.getMask(), buf = frame.getBuffer();
+  const sky = new Uint8Array(w * h), dark = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    if (!mask[i]) continue;
+    if (isSkyColour(buf[i])) sky[i] = 1;
+    if (isDarkColour(buf[i])) dark[i] = 1;
+  }
+  // a lone saturated pixel can easily sit closer to the trigger than the
+  // doorway does, and denting one pixel is not worth doing
+  const skyBest = nearestPatch(sky, w, h, triggerX, triggerY,
+    (blob) => blob.length >= PORTAL_SKY_PATCH_MIN);
+  const reach2 = PORTAL_DARK_REACH * PORTAL_DARK_REACH;
+  const darkBest = nearestPatch(openMask(dark, w, h), w, h, triggerX, triggerY,
+    (blob, shape) => blob.length >= PORTAL_DARK_PATCH_MIN
+      && Math.min(shape.width, shape.height) >= PORTAL_DARK_SIDE_MIN
+      && blob.length >= PORTAL_DARK_FILL * shape.width * shape.height
+      && shape.d2 <= reach2
+      && shape.x0 <= triggerX && triggerX <= shape.x1 + 1);
+  let best = skyBest;
+  if (darkBest && (!best || darkBest.d2 < best.d2)) best = darkBest;
   if (!best) return null;
   const out = new Uint8Array(w * h);
-  for (const i of best) out[i] = 1;
+  for (const i of best.blob) out[i] = 1;
   return out;
 }
 
@@ -798,10 +892,10 @@ function spriteSkyMask(frame, triggerX, triggerY) {
  * at them - the face, the floor and the walls all ask for the same one - so
  * the slab stays closed however far they move.
  */
-function buildPortalGeometry(frame, depth, sky, smooth) {
+function buildPortalGeometry(frame, depth, opening, smooth) {
   const w = frame.width, h = frame.height;
   const mask = frame.getMask();
-  if (!sky) sky = new Uint8Array(w * h); // all frame: a slab with no opening
+  if (!opening) opening = new Uint8Array(w * h); // all frame: a slab with no opening
   const thick = PORTAL_FRAME_THICK + depth;
 
   // The sprites are drawn with gaps inside their outline - a skull's eye
@@ -848,7 +942,7 @@ function buildPortalGeometry(frame, depth, sky, smooth) {
   }
 
   const isFrame = (x, y) => x >= 0 && x < w && y >= 0 && y < h &&
-    solid[y * w + x] !== 0 && !sky[y * w + x];
+    solid[y * w + x] !== 0 && !opening[y * w + x];
 
   // How far each pixel of frame lies from the opening. Counting whole rings
   // would terrace the funnel - every pixel in a ring at one height, and the
@@ -863,7 +957,7 @@ function buildPortalGeometry(frame, depth, sky, smooth) {
   const DIAG = Math.SQRT2, FAR = 1e6;
   const dist = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    dist[i] = solid[i] && sky[i] ? 0 : FAR;
+    dist[i] = solid[i] && opening[i] ? 0 : FAR;
   }
   const relax = (i, j, cost) => {
     const d = dist[j] + cost;
@@ -900,7 +994,7 @@ function buildPortalGeometry(frame, depth, sky, smooth) {
     if (x < 0 || x >= w || y < 0 || y >= h) return 0;
     const i = y * w + x;
     if (!solid[i]) return 0;
-    if (sky[i]) return thick;
+    if (opening[i]) return thick;
     const t = dist[i] / (rings + 1);
     if (t >= 1) return 0;
     return thick * (1 - t * t * (3 - 2 * t));
@@ -969,7 +1063,7 @@ function buildPortalGeometry(frame, depth, sky, smooth) {
             [c11[0], c11[1], -thick, u1, v1], [c01[0], c01[1], -thick, u0, v1]],
            1 - PORTAL_TUNNEL_SHADE);
 
-      if (sky[y * w + x]) continue; // the opening: nothing in front of the floor
+      if (opening[y * w + x]) continue; // the opening: nothing in front of the floor
       const z00 = cornerZ(x, y), z10 = cornerZ(x + 1, y);
       const z11 = cornerZ(x + 1, y + 1), z01 = cornerZ(x, y + 1);
       // the face, darkening as it steps down toward the opening
@@ -1132,7 +1226,7 @@ function buildPortals(level, profile, depthMap, objectZ, smooth) {
       openness = hatchOpenness(mapObject.animation.frames, built.openingMask,
         frame.width);
     } else if (config.shape === "slab") {
-      rebuild = { frame, depth: config.depth, sky: null };
+      rebuild = { frame, depth: config.depth, opening: null };
       geometry = buildPortalGeometry(frame, config.depth, null, smooth);
     } else {
       // the trigger box is in object space; the frame may be inset from it
@@ -1140,8 +1234,8 @@ function buildPortals(level, profile, depthMap, objectZ, smooth) {
         - frame.offsetX;
       const ty = (info ? info.trigger_top + info.trigger_height / 2 : frame.height / 2)
         - frame.offsetY;
-      rebuild = { frame, depth: config.depth, sky: spriteSkyMask(frame, tx, ty) };
-      geometry = buildPortalGeometry(frame, config.depth, rebuild.sky, smooth);
+      rebuild = { frame, depth: config.depth, opening: spriteOpeningMask(frame, tx, ty) };
+      geometry = buildPortalGeometry(frame, config.depth, rebuild.opening, smooth);
     }
     if (!geometry) continue;
 
