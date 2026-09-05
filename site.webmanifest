@@ -2,7 +2,9 @@
     "name": "Lemmings - Lemmings / Oh no! More Lemmings",
     "short_name": "Lemmings",
     "description": "An HTML5 port of Lemmings",
-    "icons": [],
+    "icons": [
+        { "src": "img/lemmix_vr_logo.png", "sizes": "256x256", "type": "image/png" }
+    ],
     "display": "fullscreen",
     "orientation": "landscape"
 }
