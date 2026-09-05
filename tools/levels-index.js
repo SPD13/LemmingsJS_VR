@@ -229,8 +229,24 @@ function lemmixPack(io, dir, logicalPath, musicDir) {
   // the page asks the pack for them only then (lemmix/js/panel.js)
   if (io.exists(join(dir, "skill_panels.png"))) pack.panel = true;
   if (music.length) pack.musicRotation = music;
-  if (musicDir) pack.musicDir = musicDir;
+  if (musicDir) {
+    pack.musicDir = musicDir;
+    // its files ("sub/name.ext" below musicDir), so the game asks for a
+    // track by the name it is there under (app.js musicCandidates)
+    pack.musicFiles = listFilesBelow(io, musicDir);
+  }
   return pack;
+}
+
+/** Every file under `dir`, as paths relative to it ("sub/name.ext"), in natural order. */
+function listFilesBelow(io, dir) {
+  const out = [];
+  const walk = (d, rel) => {
+    for (const f of io.listFiles(d)) out.push(rel + f);
+    for (const sub of io.listDirs(d)) walk(d + "/" + sub, rel + sub + "/");
+  };
+  if (io.isDir(dir)) walk(dir, "");
+  return out;
 }
 
 /** A folder of .nxlv files, in the order its levels.nxmi lists them. */
@@ -319,7 +335,7 @@ function summarize(node, depth, out) {
   for (const c of node.children || []) if (c.kind !== "dir" || c.children) summarize(c, depth + 1, out);
 }
 
-const api = { buildIndex, nodeIO, snapshotIO, parseNx, readLevelHeader, terrainStyles, summarize, LEVELS_DIR };
+const api = { buildIndex, nodeIO, snapshotIO, parseNx, readLevelHeader, terrainStyles, summarize, listFilesBelow, LEVELS_DIR };
 if (isNode) module.exports = api;
 else root.LevelsIndex = api;
 

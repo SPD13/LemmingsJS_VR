@@ -2735,7 +2735,7 @@ Vfs.boot("", "setup.html").then(function (booted) {
     // the music is started here and again by the sound and music toggles
     const playMusic = () => {
       if (!state.music) return;
-      if (state.engine === "lemmix") audio.playLevelMusic(lemmixEngine.musicCandidates(where, level), musicTrack);
+      if (state.engine === "lemmix") lemmixEngine.musicCandidates(where, level).then((urls) => audio.playLevelMusic(urls, musicTrack));
       else audio.playMusic(musicTrack);
     };
     playMusic();
@@ -5519,7 +5519,21 @@ Vfs.boot("", "setup.html").then(function (booted) {
      * in the pack's music folder and then neolemmix/music/ (the NeoLemmix
      * music packs), with the extensions NeoLemmix tries.
      */
-    musicCandidates(where, level) {
+    /**
+     * The NeoLemmix music packs' files (neolemmix/music/index.json, built
+     * live by the launcher and by the setup page), fetched once; null
+     * without one, and every extension is tried then.
+     */
+    musicIndex() {
+      if (!this._musicIndex) {
+        this._musicIndex = fetch(Lemmix.ASSET_DIR + "music/index.json")
+          .then((res) => res.ok ? res.json() : null)
+          .then((idx) => idx && Array.isArray(idx.files) ? idx.files : null)
+          .catch(() => null);
+      }
+      return this._musicIndex;
+    },
+    async musicCandidates(where, level) {
       const names = [];
       const music = (level.info && level.info.music) || "";
       if (music) {
@@ -5534,14 +5548,24 @@ Vfs.boot("", "setup.html").then(function (booted) {
         const ordinal = LevelTree.levelsOf(where.pack).indexOf(where.level);
         names.push(rotation[((ordinal % rotation.length) + rotation.length) % rotation.length]);
       }
+      // each folder with the files known to be in it (the pack's from the
+      // levels index, the music packs' from their index), or null: then
+      // every extension is a candidate, the way NeoLemmix tries them
       const dirs = [];
-      if (where.pack && where.pack.musicDir) dirs.push(where.pack.musicDir);
-      dirs.push(Lemmix.ASSET_DIR + "music");
+      if (where.pack && where.pack.musicDir) dirs.push({ dir: where.pack.musicDir, files: where.pack.musicFiles || null });
+      dirs.push({ dir: Lemmix.ASSET_DIR + "music", files: await this.musicIndex() });
+      const exts = ["ogg", "wav", "mp3", "it", "mod", "xm", "s3m"];
       const urls = [];
+      const encode = (p) => p.split("/").map(encodeURIComponent).join("/");
       for (const name of names) {
-        for (const dir of dirs) {
-          for (const ext of ["ogg", "wav", "mp3", "it", "mod", "xm", "s3m"]) {
-            urls.push((dir + "/" + name + "." + ext).split("/").map(encodeURIComponent).join("/"));
+        for (const { dir, files } of dirs) {
+          if (files) {
+            const stem = name.toLowerCase() + ".";
+            const there = files.filter((f) => f.toLowerCase().startsWith(stem) && exts.includes(f.slice(stem.length).toLowerCase()));
+            there.sort((a, b) => exts.indexOf(a.slice(stem.length).toLowerCase()) - exts.indexOf(b.slice(stem.length).toLowerCase()));
+            for (const f of there) urls.push(encode(dir + "/" + f));
+          } else {
+            for (const ext of exts) urls.push(encode(dir + "/" + name + "." + ext));
           }
         }
       }

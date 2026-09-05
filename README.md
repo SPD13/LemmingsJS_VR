@@ -87,13 +87,16 @@ vendored under `lemmix/vendor/chiptune3/` (MIT, libopenmpt BSD); the setup
 page unpacks zips with fflate, vendored as `3d/lib/fflate.min.js` (MIT).
 
 The level browser reads `levels/index.json`, the sprite galleries
-(`galleries.html`) `neolemmix/styles/index.json`. In static mode the
-setup page writes both into the browser's storage after every change. On
-disk, regenerate them after adding or removing a pack or unpacking the styles:
+(`galleries.html`) and the engine `neolemmix/styles/index.json`, the music
+`neolemmix/music/index.json`; the indexes also say which files are there,
+so the game asks only for those. In static mode the setup page writes them
+into the browser's storage after every change. On disk, regenerate them
+after adding or removing a pack, unpacking the styles or adding music:
 
 ```
 node tools/levels-index.js
 node tools/styles-index.js
+node tools/music-index.js
 ```
 
 ## Releases

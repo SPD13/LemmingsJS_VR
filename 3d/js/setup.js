@@ -577,6 +577,17 @@
     } else {
       await Vfs.remove("files", stylesPath);
     }
+
+    progress("indexing the music", null);
+    const musicPath = MusicIndex.MUSIC_DIR + "/" + MusicIndex.INDEX_FILE;
+    const music = await Vfs.readTexts(MusicIndex.MUSIC_DIR + "/", () => false);
+    music.delete(musicPath);
+    if (music.size) {
+      const index = MusicIndex.buildMusicIndex(LevelsIndex.snapshotIO(music));
+      await Vfs.putFiles([{ path: musicPath, blob: new Blob([JSON.stringify(index)], { type: "application/json" }) }], INDEX_UNIT);
+    } else {
+      await Vfs.remove("files", musicPath);
+    }
   }
 
   // ---- the page's state ----
