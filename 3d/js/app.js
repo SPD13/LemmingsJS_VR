@@ -751,6 +751,27 @@ Vfs.boot("", "setup.html").then(function (booted) {
     }
     c.stroke();
   });
+  // two arrows chasing round a circle: the library's rescan
+  const rescanIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    const mx = 32, my = 32, r = 13, head = 8, half = 6;
+    for (const from of [Math.PI * 0.15, Math.PI * 1.15]) {
+      const to = from + Math.PI * 0.7;   // each arc: a bit over a third of the way round
+      c.beginPath();
+      c.arc(mx, my, r, from, to);
+      c.stroke();
+      // the head: on the arc's tip, pointing the way the arc was going
+      const ex = mx + r * Math.cos(to), ey = my + r * Math.sin(to);
+      const tx = -Math.sin(to), ty = Math.cos(to);
+      const nx = Math.cos(to), ny = Math.sin(to);
+      c.fillStyle = "#cdd6e4";
+      c.beginPath();
+      c.moveTo(ex + tx * head, ey + ty * head);
+      c.lineTo(ex + nx * half, ey + ny * half);
+      c.lineTo(ex - nx * half, ey - ny * half);
+      c.closePath();
+      c.fill();
+    }
+  });
   // the 3D effects: bumpy ground, an arch, a slope, the bar in relief
   const embossIcon = (cx, st) => switchIcon(cx, st, (c) => {
     c.beginPath();
@@ -821,6 +842,9 @@ Vfs.boot("", "setup.html").then(function (booted) {
     smoothTerrain: iconizeHudButton(document.getElementById("btn-smooth-terrain"), smoothTerrainIcon, "edge smoothing"),
     colorBlend: iconizeHudButton(document.getElementById("btn-colorblend"), colorBlendIcon, "colour blend"),
     skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
+    // the world library's own tools, in the same dress
+    libRescan: iconizeHudButton(document.getElementById("lib-rescan"), rescanIcon, "rescan the level packs"),
+    libSetup: iconizeHudButton(document.getElementById("lib-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
   };
   // the sound column keeps its own place, so it is not in the row above, but
   // it is pressed like the rest

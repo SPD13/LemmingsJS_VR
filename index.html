@@ -5,6 +5,8 @@
 <meta name="lem3d-version" content="1.0.0">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lemmix JS+VR — validation mode</title>
+<link rel="icon" type="image/png" href="img/lemmix_vr_logo.png">
+<link rel="apple-touch-icon" href="img/lemmix_vr_logo.png">
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c; }
   body { font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; }
@@ -79,6 +81,9 @@
   #library[hidden] { display: none; }
   #lib-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; }
   #lib-head h1 { font-size: 15px; color: #6fce7e; letter-spacing: 0.08em; margin: 0; }
+  #lib-head-logo { height: 44px; width: 44px; flex: none; align-self: center; margin: -6px -6px 0 0; image-rendering: pixelated; }
+  /* the icon buttons sit mid-row: a canvas has no text baseline to share */
+  #lib-head button.icon { align-self: center; margin: -4px 0; }
   #lib-status { color: #8fa1bb; font-size: 12px; min-height: 16px; margin-bottom: 10px; }
   .lib-game {
     font-size: 13px; color: #f0f3f8; letter-spacing: 0.06em;
@@ -265,6 +270,7 @@
 
 <div id="library" hidden>
   <div id="lib-head">
+    <img id="lib-head-logo" src="img/lemmix_vr_logo.png" alt="" width="44" height="44">
     <h1>WORLD LIBRARY</h1>
     <input id="lib-search" type="search" placeholder="search levels…" autocomplete="off" spellcheck="false"
       title="fuzzy search over every level: its name, pack, rank and world - Escape clears it">

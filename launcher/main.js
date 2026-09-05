@@ -187,6 +187,7 @@ function createWindow() {
     resizable: false,
     title: "Lemmings VR Launcher",
     backgroundColor: "#10141c",
+    icon: path.join(__dirname, "..", "img", "lemmix_vr_logo.png"),  // the window's icon (Windows, Linux)
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
