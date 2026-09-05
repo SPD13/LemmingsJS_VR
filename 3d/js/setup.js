@@ -863,7 +863,7 @@
       $("version-warning").textContent = "Version " + v.server + " is on the server and this page is " + v.page +
         ": hard reload the page (⇧ reload, or Ctrl+F5) to load the update.";
     });
-    if (!booted.sw.controlled) {
+    if (booted.mode === "static" && !booted.sw.controlled) {
       $("sw-warning").hidden = false;
       $("sw-warning").textContent = "The service worker that serves the static mode is not running: " + booted.sw.reason +
         ". Installs still land in this browser's storage, but the game cannot play from it here.";

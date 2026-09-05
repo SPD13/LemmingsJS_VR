@@ -517,7 +517,7 @@ class GuiPanel {
     if (!img) return false;
     this.canvas.width = img.width;
     this.canvas.height = img.height;
-    this.ctx = this.canvas.getContext("2d");
+    this.ctx = this.canvas.getContext("2d", { willReadFrequently: true }); // read back every frame (_textChecksum)
 
     this.texture = this.resources.track(new THREE.CanvasTexture(this.canvas));
     this.texture.magFilter = THREE.NearestFilter;

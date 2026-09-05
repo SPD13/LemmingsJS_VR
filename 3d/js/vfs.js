@@ -59,8 +59,18 @@
 
   // ---- the service worker -------------------------------------------------
 
-  /** Registers the worker; resolves {controlled, reason} once it controls this page. */
-  const swReady = (async () => {
+  /**
+   * Registers the worker (once); resolves {controlled, reason} once it
+   * controls this page. Called for the static mode only: the worker serves
+   * nothing in server mode, and registering it on the launcher's
+   * self-signed https makes the browser log a certificate warning.
+   */
+  let swReady = null;
+  function registerWorker() {
+    if (!swReady) swReady = doRegisterWorker();
+    return swReady;
+  }
+  async function doRegisterWorker() {
     if (!("serviceWorker" in navigator)) {
       return {
         controlled: false,
@@ -87,7 +97,7 @@
       controlled, registration,
       reason: controlled ? "" : "the service worker did not take control of the page (a hard reload bypasses it)",
     };
-  })();
+  }
 
   /** Tells the worker the mode and waits for its answer (it may be starting up). */
   function tellWorker(mode) {
@@ -416,15 +426,20 @@
   const markSetupSeen = () => { try { localStorage.setItem(SEEN_KEY, "1"); } catch (e) {} };
 
   /**
-   * What a page does before touching any asset: wait for the worker, settle
-   * the mode, and - with no levels to play (nothing installed in static
-   * mode, none on the launcher in server mode) and the setup page never
-   * shown - go to the setup page instead (`setupUrl`, carrying a forced
-   * mode). Resolves {mode, sw} otherwise; never resolves after a redirect.
+   * What a page does before touching any asset: settle the mode, register
+   * the worker when the mode is static (and tell it the mode), and - with
+   * no levels to play (nothing installed in static mode, none on the
+   * launcher in server mode) and the setup page never shown - go to the
+   * setup page instead (`setupUrl`, carrying a forced mode). Resolves
+   * {mode, sw} otherwise; never resolves after a redirect.
    */
   async function boot(root, setupUrl) {
-    const sw = await swReady;
     const m = await resolveMode(root);
+    let sw = { controlled: false, reason: "the worker is registered in static mode only" };
+    if (m === "static") {
+      sw = await registerWorker();
+      if (sw.controlled) await tellWorker(m);
+    }
     if (setupUrl && !setupSeen()) {
       const bare = m === "static" ? !(await playable(root)) : !!(health && health.levels === 0);
       if (bare) {
@@ -437,7 +452,7 @@
 
   root.Vfs = {
     DB_NAME, SEEN_KEY, PARAM, INDEX_PATH, HEALTH_PATH, STORE_PREFIXES, MIME, mimeOf,
-    swReady, boot, resolveMode, setMode, fetchHealth, link,
+    registerWorker, boot, resolveMode, setMode, fetchHealth, link,
     VERSION_FILE, pageVersion, checkVersion,
     get mode() { return mode; },
     get forced() { return forced; },
