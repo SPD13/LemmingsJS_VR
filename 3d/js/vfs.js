@@ -430,6 +430,41 @@
     try { return await has(INDEX_PATH); } catch (e) { return false; }
   }
 
+  /**
+   * What the game needs, in the mode in force: {engine, styles, levels} as
+   * booleans - NeoLemmix, the styles package, at least one level. The
+   * browser's store answers in static mode; the launcher's health check in
+   * server mode, and without a launcher (a plain server, forced) the
+   * folders are probed the way setup.html does.
+   */
+  async function ready(root) {
+    const count = (index) => ((index && index.children) || []).reduce((n, c) => n + (c.count || 0), 0);
+    if (mode === "static") {
+      const [engine, styles, index] = await Promise.all([
+        get("units", "engine").catch(() => null),
+        get("units", "styles").catch(() => null),
+        readText(INDEX_PATH).then(JSON.parse).catch(() => null),
+      ]);
+      return { engine: !!engine, styles: !!styles, levels: count(index) > 0 };
+    }
+    if (health) {
+      const nx = health.neolemmix || {};
+      return { engine: !!nx.engine, styles: !!nx.styles, levels: health.levels > 0 };
+    }
+    const probe = async (path, json) => {
+      try {
+        const res = await fetch(root + path + "?probe=" + Date.now(), { method: json ? "GET" : "HEAD", cache: "no-store" });
+        return res.ok ? (json ? await res.json() : true) : null;
+      } catch (e) { return null; }
+    };
+    const [engine, styles, index] = await Promise.all([
+      probe("neolemmix/gfx/panel/empty_slot.png"),
+      probe("neolemmix/styles/index.json", true),
+      probe(INDEX_PATH, true),
+    ]);
+    return { engine: !!engine, styles: !!(styles && styles.count), levels: count(index) > 0 };
+  }
+
   // ---- the release version ------------------------------------------------
 
   const VERSION_FILE = "version.json";
@@ -460,21 +495,30 @@
 
   /**
    * What a page does before touching any asset: settle the mode, register
-   * the worker when the mode is static (and tell it the mode), and - with
-   * no levels to play (nothing installed in static mode, none on the
-   * launcher in server mode) and the setup page never shown - go to the
-   * setup page instead (`setupUrl`, carrying a forced mode). Resolves
-   * {mode, sw} otherwise; never resolves after a redirect.
+   * the worker when the mode is static (and tell it the mode), and go to
+   * the setup page instead (`setupUrl`, carrying a forced mode) when there
+   * is nothing to play. With `need` "game" (the root page) that is whenever
+   * NeoLemmix, the styles package or a level is missing (`ready`), every
+   * time; otherwise (the classic page) with no levels at all - nothing
+   * installed in static mode, none on the launcher in server mode - and
+   * the setup page never shown. Resolves {mode, sw} otherwise; never
+   * resolves after a redirect.
    */
-  async function boot(root, setupUrl) {
+  async function boot(root, setupUrl, need) {
     const m = await resolveMode(root);
     let sw = { controlled: false, reason: "the worker is registered in static mode only" };
     if (m === "static") {
       sw = await registerWorker();
       if (sw.controlled) await tellWorker(m);
     }
-    if (setupUrl && !setupSeen()) {
-      const bare = m === "static" ? !(await playable(root)) : !!(health && health.levels === 0);
+    if (setupUrl) {
+      let bare;
+      if (need === "game") {
+        const r = await ready(root);
+        bare = !(r.engine && r.styles && r.levels);
+      } else {
+        bare = !setupSeen() && (m === "static" ? !(await playable(root)) : !!(health && health.levels === 0));
+      }
       if (bare) {
         location.replace(link(setupUrl));
         return new Promise(() => {});
@@ -490,7 +534,7 @@
     get mode() { return mode; },
     get forced() { return forced; },
     get health() { return health; },
-    playable, setupSeen, markSetupSeen,
+    playable, ready, setupSeen, markSetupSeen,
     openDb, get, put, remove, getAll,
     putFiles, deletePrefix, deleteUnit, list, levelDirs, has, readText, readTexts, readBlob,
     estimate, persist,

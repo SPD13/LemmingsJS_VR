@@ -22,11 +22,11 @@
  */
 
 // Nothing runs before the asset store is settled: the service worker in
-// control, the asset mode known, and - static mode with nothing installed -
-// the setup page shown instead (see vfs.js); then, in server mode, the
-// player's configuration read from the server (see config-store.js), so
-// every setting below sees it.
-Vfs.boot("", "setup.html").then(function (booted) {
+// control, the asset mode known, and - NeoLemmix, the styles package or a
+// level missing in the mode in force - the setup page shown instead (see
+// vfs.js); then, in server mode, the player's configuration read from the
+// server (see config-store.js), so every setting below sees it.
+Vfs.boot("", "setup.html", "game").then(function (booted) {
   return ConfigStore.sync(booted.mode, "").then(function () { return booted; });
 }).then(function (booted) {
   // lemmings live embedded mid-slab (sprite centered at TERRAIN_DEPTH/2), so
@@ -5708,11 +5708,6 @@ Vfs.boot("", "setup.html").then(function (booted) {
     hud.loading.classList.add("hidden");
     hud.name.textContent = "no level loaded";
     hud.state.textContent = "choose a level in the world library";
-    if (state.assets === "static") {
-      Vfs.playable("").then((ok) => {
-        if (!ok) hud.state.textContent = "nothing installed — open Setup (right edge) to add NeoLemmix and levels";
-      });
-    }
     setVrStatus({ name: "choose a level", meta: "", note: "", kind: "" });
     library.open({ path: "", locked: true });
   }
