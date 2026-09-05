@@ -509,6 +509,22 @@ board - where the desktop's 3D and 2D views start too.
   diorama at your current gaze; `[` / `]` tune the pose yaw correction by 15°
   and re-place (default 0° — kept in case a runtime reports a rotated
   forward axis; a permanent value goes in `vrYawCorrection` in `js/app.js`)
+- **the mouse on the monitor, with controllers**: the hands own the pointer,
+  so the desktop mouse does nothing to the game - but the headset sees it. A
+  pink dot (neither the beam's green nor the fallback's yellow) sits on
+  whatever the monitor's cursor is over: the face of the terrain under it
+  (the ray is marched through the extrusion, so a wall's front and not the
+  plane behind it), a lemming (the dot grows a little there), a card of the
+  skill bar, a window's button. It is a landing and not a beam, since a
+  mouse on a monitor has no depth to show. A click, any button, sends
+  concentric rings out of the dot, fading as they grow, for as long as the
+  button is held and a beat after, so the player's eye goes to where the
+  person at the monitor is clicking. The dot is worked out every frame, so
+  it stays on what the cursor is over while the board or the bar is moved
+  in the room, and it goes with the mouse when it leaves the page's canvas.
+  A mouse that has not moved or clicked for a couple of seconds is not
+  pointing at anything, so the mark fades out then and comes back at the
+  next move or click.
 - **no controllers?** The session still runs: a warning sign appears beside
   the play area and the desktop mouse becomes the pointer — aim on the
   mirrored view on the monitor; a glowing dot in the headset marks the aim
