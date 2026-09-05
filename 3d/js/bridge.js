@@ -736,7 +736,11 @@ class SpriteCapture {
     this.items.push({
       frame, x, y,
       flipY: !!props.isUpsideDown,
-      layer: props.noOverwrite ? -1 : props.onlyOverwrite ? 1 : 0,
+      // -2 behind the slab (noOverwrite: the DOS flag, a NeoLemmix moving
+      // background), -1 in the slab behind the other objects (`low`, a
+      // NeoLemmix NO_OVERWRITE gadget, see gadgetAsObject in lemmix/js/level.js),
+      // 0 with the lemmings, 1 a decal on the terrain's face
+      layer: props.noOverwrite ? -2 : props.onlyOverwrite ? 1 : props.low ? -1 : 0,
       key: this._key(),
     });
   }
@@ -795,7 +799,7 @@ class BillboardPool {
 
   /**
    * Rebuild sprites from captured draw calls.
-   * zFor(layer) maps a capture layer (-1 background / 0 normal / 1 decal) to depth.
+   * zFor(layer) maps a capture layer (-2 background / -1 low / 0 normal / 1 decal) to depth.
    */
   sync(items, zFor, interpolate, flat) {
     const nextPositions = interpolate ? new Map() : null;

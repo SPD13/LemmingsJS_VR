@@ -117,10 +117,14 @@ with collision.
 
 The scene's own planes: `LEMMING_Z = TERRAIN_DEPTH/2 − SPRITE_DEPTH/2` (mid-slab,
 so lemmings are embedded in the ground rather than floating in front of it),
-`OBJECT_Z = LEMMING_Z − 0.8`, `OBJECT_LOW_Z = OBJECT_Z − 3.5` (a NeoLemmix
-`NO_OVERWRITE` gadget: under the terrain where they overlap, which the slab's
-depth test gives, so in the slab a step behind the other objects rather than
-behind the slab, where a firepit's flames read as paint on the backdrop),
+`OBJECT_Z = LEMMING_Z − 0.8`, `OBJECT_LOW_Z = OBJECT_Z − 0.3` (a NeoLemmix
+`NO_OVERWRITE` gadget, NeoLemmix's "gadgets low" layer: under the terrain
+where they overlap, which the slab's depth test gives, so in the slab with
+the other objects and a hair behind them, where a trap still reaches the
+lemming it catches - not behind the slab, where a firepit's flames read as
+paint on the backdrop; the 2D view has no depth test, only its terrain quad,
+so there the gadget steps back to `OBJECT_LOW_FLAT_Z = OBJECT_Z − 3.5`,
+behind the quad, changing plane when the doors and the water do),
 `OBJECT_BG_Z = −1.4` (the DOS no-overwrite flag, a NeoLemmix moving
 background), `OBJECT_DECAL_Z = 16.25`.
 
@@ -677,8 +681,9 @@ decoded and looped, the AdLib track when nothing is found. Pre-level text
 shows in the status line, post-level text and talismans with the result
 (`lem3d-talismans` records them). Nuked lemmings carry their countdown
 digits; pickups and capped exits carry their counts; moving backgrounds
-draw behind the terrain, and a `NO_OVERWRITE` gadget in the slab behind the
-other objects (§2.2), which is NeoLemmix's "gadgets low" layer.
+draw behind the terrain, and a `NO_OVERWRITE` gadget in the slab with the
+other objects, a hair behind them (§2.2), which is NeoLemmix's "gadgets low"
+layer.
 
 Edit mode works on Lemmix levels too: the placed pieces go to `depth.js`
 and the piece editor as an id per distinct drawn image, and tags are kept
