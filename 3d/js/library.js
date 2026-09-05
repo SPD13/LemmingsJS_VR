@@ -23,6 +23,12 @@
  * a world's header means a tagging file for that tileset exists in
  * 3d/profiles/ - and entering a level turns the piece editor on.
  *
+ * A search field at the head finds levels across every pack: a fuzzy match
+ * (the query's words as subsequences, a command palette's way) over each
+ * level's name, its pack and rank, and its world, best matches first. A
+ * query replaces the directory view with the tiles it matches; emptying it
+ * (or Escape) brings the directory back, and Enter plays the first match.
+ *
  * Classic levels carry no name in the index (that would mean reading the DAT
  * files); a pack is scanned once for its names and tilesets, and the result
  * is cached in localStorage. Tile miniatures are rendered lazily
@@ -49,6 +55,38 @@ const SCAN_CACHE_KEY = "lem3d-worlds-v4";
 const PROGRESS_KEY = "lem3d-cleared";
 const ORDER_KEY = "lem3d-lib-order";
 const PATH_KEY = "lem3d-lib-path";
+const SEARCH_MAX = 200; // the most matches the search view lists
+
+/**
+ * Fuzzy match: every word of the query must appear in the text as a
+ * subsequence (its letters in order, gaps allowed), the way a command
+ * palette matches. Returns a score - higher is better, letters that sit
+ * together or open a word count for more, letters far apart for less - or
+ * -1 when a word does not match at all.
+ */
+function fuzzyScore(query, text) {
+  const hay = text.toLowerCase();
+  let total = 0;
+  for (const word of query.toLowerCase().split(/\s+/).filter(Boolean)) {
+    const at = hay.indexOf(word);
+    if (at >= 0) {                       // a plain substring: best of all
+      total += 100 + word.length * 10 + (at === 0 || /[^a-z0-9]/.test(hay[at - 1]) ? 20 : 0);
+      continue;
+    }
+    let score = 0, pos = -1, last = -2;
+    for (const ch of word) {
+      pos = hay.indexOf(ch, pos + 1);
+      if (pos < 0) return -1;
+      if (pos === last + 1) score += 8;  // runs on from the previous letter
+      else if (pos === 0 || /[^a-z0-9]/.test(hay[pos - 1])) score += 6; // opens a word
+      else score += 1;
+      score -= Math.min(pos - last - 1, 10) * 0.2; // the gap it skipped
+      last = pos;
+    }
+    total += score;
+  }
+  return total;
+}
 
 /**
  * The level tree, and every way of looking a level up in it. Loaded once
@@ -248,7 +286,27 @@ class WorldLibrary {
       close: document.getElementById("lib-close"),
       rescan: document.getElementById("lib-rescan"),
       order: document.getElementById("lib-order"),
+      search: document.getElementById("lib-search"),
     };
+    // the search: a query replaces the directory view with the levels
+    // matching it, from every pack; emptied, the directory comes back
+    this.query = "";
+    this.dom.search.addEventListener("input", () => {
+      this.query = this.dom.search.value.trim();
+      this._render();
+    });
+    this.dom.search.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.query) this._clearSearch(true);
+        else { this.dom.search.blur(); this.close(); }
+      } else if (e.key === "Enter" && this.query) {
+        // the first match plays
+        const first = this.dom.grid.querySelector(".lib-tile");
+        if (first) first.click();
+      }
+    });
     // a classic pack's levels: by number, the way the game plays them, or by
     // the world each level is built from
     let saved = null;
@@ -274,6 +332,7 @@ class WorldLibrary {
     this.path = path;
     this.ready = null;
     this._scans = {};      // classic pack path -> its tileset scan
+    this._scanning = {};   // classic pack path -> the scan under way
     this._loadChain = Promise.resolve();
     this._observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
@@ -362,6 +421,9 @@ class WorldLibrary {
     this.isOpen = true;
     this.dom.panel.hidden = false;
     if (this.onVisibility) this.onVisibility(true);
+    // a keyboard machine lands in the search field (a touch screen would
+    // raise its keyboard over the list, so it does not)
+    if (!window.matchMedia("(pointer: coarse)").matches) this.dom.search.focus();
     this.tree().then(() => {
       const hit = opts.path === undefined && this.currentLevelId
         && LevelTree.byId.get(this.currentLevelId);
@@ -383,6 +445,7 @@ class WorldLibrary {
   enter(levelId) {
     this.locked = false;
     this.dom.close.hidden = false;
+    this._clearSearch(false); // next time, the library opens on the level's directory
     this.close();
     this.enterLevel(levelId);
   }
@@ -392,7 +455,15 @@ class WorldLibrary {
     return LevelTree.root ? (LevelTree.nodeAt(this.path) || LevelTree.root) : null;
   }
 
+  /** Drop the query; `redraw` brings the directory view back at once. */
+  _clearSearch(redraw) {
+    this.query = "";
+    this.dom.search.value = "";
+    if (redraw && this.isOpen) this._render();
+  }
+
   navigate(path) {
+    this._clearSearch(false); // navigating anywhere leaves the search
     this.path = path || "";
     try { localStorage.setItem(PATH_KEY, this.path); } catch (e) {}
     if (this.isOpen) this._render();
@@ -416,9 +487,11 @@ class WorldLibrary {
       let node = this.currentNode();
       if (!node) { node = LevelTree.root; this.path = ""; }
       this._renderCrumb(node);
+      this.dom.crumb.hidden = !!this.query;
       const hasLevels = !!(node.levels && node.levels.length);
-      this.dom.order.hidden = !(hasLevels && node.engine === "classic");
-      if (hasLevels) await this._renderLevels(node);
+      this.dom.order.hidden = !!this.query || !(hasLevels && node.engine === "classic");
+      if (this.query) await this._renderSearch(this.query);
+      else if (hasLevels) await this._renderLevels(node);
       else this._renderRows(node);
     } catch (err) {
       this._fail(err);
@@ -601,6 +674,64 @@ class WorldLibrary {
     this.dom.grid.appendChild(tiles);
   }
 
+  /**
+   * The search view: every level of every pack whose name, pack, rank or
+   * world fuzzily matches the query, best matches first. A classic pack's
+   * names come from its scan, so the packs are scanned first (once; the
+   * scan is cached) - the status strip says so while it runs.
+   */
+  async _renderSearch(query) {
+    const root = LevelTree.root;
+    const classicPacks = [];
+    const walk = (n) => {
+      if (n.kind === "pack" && n.engine === "classic") classicPacks.push(n);
+      for (const child of n.children || []) walk(child);
+    };
+    walk(root);
+    for (const pack of classicPacks) {
+      if (this._scans[pack.path]) continue;
+      await this._scanClassic(pack);
+      if (!this.isOpen || this.query !== query) return; // typed on meanwhile
+    }
+
+    const matches = [];
+    for (const level of LevelTree.levelsOf(root)) {
+      const hit = LevelTree.byId.get(level.id);
+      const { node, pack } = hit;
+      const scan = pack && this._scans[pack.path];
+      const info = scan && scan.byId[level.id];
+      const name = level.title || (info ? info.name : "") || "";
+      const world = info
+        ? worldName(pack.gameType, { set: info.set, special: info.set === SPECIAL_SET })
+        : (level.theme || "");
+      const ordinal = node.levels.indexOf(level) + 1;
+      const chain = hit.ancestors.filter((a) => a !== root).map((a) => a.name);
+      const text = [name, ...chain, node.name + " " + ordinal, world].join(" ");
+      const score = fuzzyScore(query, text);
+      if (score < 0) continue;
+      matches.push({ score, level, node, scan });
+    }
+    matches.sort((a, b) => b.score - a.score);
+
+    const shown = matches.slice(0, SEARCH_MAX);
+    const header = document.createElement("div");
+    header.className = "lib-world";
+    const title = document.createElement("span");
+    title.textContent = "matching “" + query + "” · " + matches.length +
+      (matches.length === 1 ? " level" : " levels") +
+      (matches.length > shown.length ? " (first " + shown.length + " shown)" : "");
+    header.appendChild(title);
+    this.dom.grid.appendChild(header);
+    if (!matches.length) {
+      this.dom.status.textContent = "no level matches";
+      return;
+    }
+    const tiles = document.createElement("div");
+    tiles.className = "lib-tiles";
+    for (const m of shown) tiles.appendChild(this._buildTile(m.node, m.level, m.scan, true));
+    this.dom.grid.appendChild(tiles);
+  }
+
   _renderHeader(node, text, levels, world) {
     const header = document.createElement("div");
     header.className = "lib-world";
@@ -635,6 +766,16 @@ class WorldLibrary {
    */
   async _scanClassic(pack) {
     if (this._scans[pack.path]) return this._scans[pack.path];
+    // one scan at a time per pack: a second asker (the search typed on
+    // while a directory scans, say) waits for the one under way
+    if (!this._scanning[pack.path]) {
+      this._scanning[pack.path] = this._doScanClassic(pack)
+        .finally(() => { delete this._scanning[pack.path]; });
+    }
+    return this._scanning[pack.path];
+  }
+
+  async _doScanClassic(pack) {
     let cache = {};
     try { cache = JSON.parse(localStorage.getItem(SCAN_CACHE_KEY)) || {}; } catch (e) {}
     if (cache[pack.path]) {
@@ -691,10 +832,16 @@ class WorldLibrary {
     if (node && node.engine === "classic" && node.pack) await this._scanClassic(node.pack);
   }
 
-  _buildTile(node, level, scan) {
+  /** `full` labels the tile with where it lives too ("Lemmings › Fun 3"),
+   *  for a list that mixes packs (the search). */
+  _buildTile(node, level, scan, full) {
     const tile = document.createElement("div");
     tile.className = "lib-tile";
     const ordinal = node.levels.indexOf(level) + 1;
+    const where = [];
+    if (full) {
+      for (let n = node.parent; n && n.parent; n = n.parent) where.unshift(n.name);
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = 240;
@@ -707,7 +854,8 @@ class WorldLibrary {
 
     const label = document.createElement("div");
     label.className = "lib-label";
-    label.textContent = node.name + " " + ordinal;
+    label.textContent = where.concat(node.name + " " + ordinal).join(" › ");
+    label.title = label.textContent;
     tile.appendChild(label);
 
     // playing: a cleared level is marked and wears its best time

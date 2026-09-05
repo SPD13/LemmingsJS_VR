@@ -123,6 +123,15 @@
   #lib-crumb .lib-part.here { color: #f0f3f8; font-weight: 600; }
   #lib-crumb .lib-sep { color: #5a6a7c; }
   #lib-head .lib-spacer { flex: 1; }
+  /* the search field: a query replaces the directory view with the levels it matches */
+  #lib-search {
+    font: inherit; font-size: 12px; color: #f0f3f8; background: #161c28;
+    border: 1px solid #33405a; border-radius: 4px; padding: 3px 8px; width: 220px;
+    outline: none;
+  }
+  #lib-search:focus { border-color: #6fce7e; }
+  #lib-search::placeholder { color: #5a6a7c; }
+  #lib-crumb[hidden] { display: none; }
   .lib-rows { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 14px; }
   .lib-row {
     display: flex; align-items: center; gap: 14px;
@@ -231,6 +240,8 @@
 <div id="library" hidden>
   <div id="lib-head">
     <h1>WORLD LIBRARY</h1>
+    <input id="lib-search" type="search" placeholder="search levels…" autocomplete="off" spellcheck="false"
+      title="fuzzy search over every level: its name, pack, rank and world - Escape clears it">
     <div id="lib-crumb"></div>
     <span class="lib-spacer"></span>
     <button id="lib-order">order: level</button>
@@ -340,6 +351,7 @@
 <script src="3d/js/profile-store.js"></script>
 <script src="3d/js/portals.js"></script>
 <script src="3d/js/steel.js"></script>
+<script src="3d/js/decals.js"></script>
 <script src="3d/js/terrain.js"></script>
 <script src="3d/js/editor.js"></script>
 <script src="3d/js/library.js"></script>
