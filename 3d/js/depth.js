@@ -616,7 +616,7 @@ if (typeof module !== "undefined" && module.exports) {
     DepthClass, DepthClassByName, DEPTH_BANDS, DepthProfiles, pieceKey, depthClassForPiece,
     RELIEF_MAX, SCULPT_MAX, RELIEF_TOP, buildPieceMap, embossModeFor, embossEnabledFor, embossInvertedFor,
     sculptFor, sculptRadius,
-    BLEND_PALETTE_MAX, BLEND_MERGE, surfaceBlendFor, buildBlendMap,
+    BLEND_PALETTE_MAX, BLEND_MERGE, surfaceBlendFor, buildBlendMap, blendLuma, blendNear,
     colorBlendFor, buildColorBlendMap,
     buildReliefMap, buildDepthMap,
   };

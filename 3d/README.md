@@ -44,7 +44,8 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
 `?emboss=`, `?smooth=`, `?smoothterrain=`, `?doors=`, `?skillbar=`, `?flatskills=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
-`0`/`off`/`false`), and `?assets=static|server` - where `neolemmix/` and
+`0`/`off`/`false`), `?environment=off|ambient|full` (the room around the board, see
+the 3D effects below), and `?assets=static|server` - where `neolemmix/` and
 `levels/` come from: this browser's storage, filled on the setup page, or
 the web server (see "Setup" below). Those are normally toggled with the buttons and
 kept in localStorage; the URL overrides both, which is how you ask for them
@@ -282,6 +283,34 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   `skill_panels.png` - which competes with the pictures and counts on them.
   The colour is the texture's mean, so the panel keeps its tone; off, the
   original texture. Applies on the desktop and in a headset alike.
+- "environment" (full by default) puts the board in a room drawn in the
+  level's own pixel art - a floor in front of and below it, a back wall, a
+  ceiling, dim side walls - so it sits in a place instead of a void
+  (`3d/js/environment.js`, the pictures from `3d/js/envgen.js`). It is a
+  strength like the colour blend: *full* lays the level's own terrain pieces
+  as a ground strip, as overhangs above and as a distant horizon behind, from
+  a generator seeded with the level's id, over *ambient*, which is the same
+  room in gradients dithered between the level's colours (the style's theme
+  colours, the colours the blend map sampled from the picture, a DOS
+  tileset's palette); then *off*. The style's background image, when the
+  level names one (`$BACKGROUND`), is tiled behind the slab and, coarser, on
+  the back wall; a picture meant to be placed once rather than tiled (the
+  dirt style's monster) stands once behind the board. The pictures are
+  coarser than the board's pixels - two to eight of them per environment
+  pixel, more with distance - so the room reads as further away and never
+  competes with the play area, and everything is pre-shaded, the scene being
+  unlit. In a headset the room takes the board's placement the moment it is
+  placed and then stays: the floor is at the physical floor whatever height
+  the board hangs at, and a board grabbed or rescaled afterwards moves inside
+  the room. On the desktop the same room stands around the diorama. It is
+  built after the board is up, a plane per frame, and its cost is in
+  `__lem3d.environment.stats`. A style's profile (`3d/profiles/nx-<style>.json`)
+  may carry an `environment` section: `mode` (`clump` or `tile`), a
+  `wallpaper` (`style:name` from the style's `backgrounds/`), `backgrounds`
+  (`name: prop|wallpaper`), a `palette` (`material` hex list, `bg`),
+  explicit `floor`/`ceiling`/`wall` piece lists and an `exclude` list.
+  Pictures made offline for a style (`node tools/env-gen.js <style>`, see
+  `3d/env/README.md`) are shown instead of the live collage.
 - the pencil icon of the right panel, the piece-editor key (`J` by default) or
   `?edit=1` enters edit mode and opens the piece editor (which pauses the sim):
   click a terrain piece to
