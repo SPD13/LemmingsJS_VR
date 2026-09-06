@@ -138,6 +138,7 @@
       game.panelLayout = this.layout;
       this.rrHeld = 0;
       this.held = null; // a frame back/forward half held down: {step, next}
+      this.flatBackground = false; // the buttons on one plain colour instead of skill_panels.png
       this.icons = {};
       this.dirty = true;
       this.disposed = false;
@@ -158,6 +159,34 @@
 
     dispose() { this.disposed = true; }
 
+    /** The buttons' background as one plain colour (the mean of the pack's
+     *  skill_panels.png, so the panel keeps the pack's tone) instead of the
+     *  texture, so the pictures and counts have nothing to compete with. */
+    setFlatBackground(on) {
+      on = !!on;
+      if (this.flatBackground === on) return;
+      this.flatBackground = on;
+      if (!this.assets || this.disposed) return; // applied when the graphics are in
+      this._buildBase();
+      this.render(true);
+    }
+
+    /** The mean of a bitmap's opaque pixels, lifted off black if need be: a
+     *  tile that is nearly black would leave nothing to tell a button from
+     *  the gap around it. */
+    _meanColor(bmp) {
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < bmp.data.length; i += 4) {
+        if (!bmp.data[i + 3]) continue;
+        r += bmp.data[i]; g += bmp.data[i + 1]; b += bmp.data[i + 2]; n++;
+      }
+      if (!n) return [96, 96, 96];
+      r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
+      const lift = 48 - (r + g + b);
+      if (lift > 0) { r += Math.ceil(lift / 3); g += Math.ceil(lift / 3); b += Math.ceil(lift / 3); }
+      return [r, g, b];
+    }
+
     /** The panel with its buttons and pictures, before any counts. */
     _buildBase() {
       const A = this.assets;
@@ -166,7 +195,14 @@
       const n = this.cells.length;
       // button backgrounds tile skill_panels.png across the row (DrawBlankPanel)
       const blank = A.skill_panels;
-      for (let x = 0; x < n * CELL; x += blank.width) {
+      if (this.flatBackground) {
+        // ...or one plain colour where the tiles would go
+        const [r, g, b] = this._meanColor(blank);
+        for (let y = 0; y < blank.height && BUTTON_Y + y < PANEL_H; y++) for (let x = 0; x < n * CELL; x++) {
+          const p = ((BUTTON_Y + y) * PANEL_W + x) * 4;
+          base.data[p] = r; base.data[p + 1] = g; base.data[p + 2] = b; base.data[p + 3] = 255;
+        }
+      } else for (let x = 0; x < n * CELL; x += blank.width) {
         Pixels.blit(base, x, BUTTON_Y, blank, 0, 0, Math.min(blank.width, n * CELL - x), blank.height, Pixels.combineGadget);
       }
       // which pixels are a picture, for the toolbar to raise: where an icon
