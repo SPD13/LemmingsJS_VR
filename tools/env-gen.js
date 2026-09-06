@@ -16,15 +16,33 @@
  *     --dry              the collages only, no model (default out: tmp/env-dry/)
  *     --out <dir>        where to write (default 3d/env/ unless --dry)
  *     --planes a,b,c     floor, wall, ceiling (default all three)
- *     --api <url>        the server (default http://127.0.0.1:7860)
+ *     --layers 0,1       which depth layers (default: every one the model can
+ *                        work on; a far layer's picture too flat to send is
+ *                        kept as its collage)
+ *     --api <url>        the server (default http://127.0.0.1:7860; https with a
+ *                        self-signed certificate is accepted)
+ *     --probe            ask the server what model and LoRAs it has, and stop
+ *     --as <style>       write a level's pictures under this style's folder
+ *                        (a level is otherwise written under its own name)
  *     --denoise <0..1>   img2img strength (default 0.45)
  *     --steps <n>        sampling steps (default 24)
  *     --cfg <n>          guidance (default 7)
  *     --seed <n>         the model's seed (default from the name)
- *     --lora <name[:w]>  a LoRA to name in the prompt, <lora:name:w>
- *     --model <name>     override_settings.sd_model_checkpoint
+ *     --lora <file[:w]>  a LoRA file the server has (Draw Things: its .ckpt
+ *                        name from /sdapi/v1/options), with a weight; a bare
+ *                        name goes into the prompt as <lora:name:w>; "none"
+ *                        switches the app's own LoRA off for the run
+ *     --model <file>     the model file (Draw Things: its .ckpt name)
+ *     --sampler <name>   the sampler
  *     --prompt "<text>"  extra words for every plane
+ *     --trigger "<w>"    the LoRA's trigger words, first in the prompt
  *     --no-quantise      keep the model's colours (still pixel-sized)
+ *     --colors <n>       how many colours to snap to (default 32)
+ *     --palette raw|collage  whose colours: the model's own picture, reduced
+ *                        (default: clean, the hues the model kept), or the
+ *                        collage's (the tileset's exactly, but speckled)
+ *     --dither           dither between neighbouring palette colours (off: nearest only)
+ *     --requantise       redo the finish from the saved <plane>-raw.png, no model call
  *     --keep-raw         also write the model's output as-is (<plane>-raw.png)
  *   Every run also writes contact.html next to the pictures: the collage,
  *   the model's answer and the finished picture side by side, with scores.
@@ -36,25 +54,35 @@ const EnvGen = require("../3d/js/envgen.js");
 const { ProfileStore } = require("../3d/js/profile-store.js");
 
 const PX_PER_METRE = 400; // 1 / VR_PIXEL_SCALE (vr.js)
-const PLANES = ["floor", "wall", "ceiling"];
+const KINDS = ["floor", "wall", "ceiling"];
 
 function parseArgs(argv) {
-  const o = { names: [], planes: PLANES, api: "http://127.0.0.1:7860", denoise: 0.45, steps: 24, cfg: 7, quantise: true };
+  const o = { names: [], planes: KINDS, api: "http://127.0.0.1:7860", denoise: 0.45, steps: 24, cfg: 7, quantise: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], next = () => argv[++i];
     if (a === "--dry") o.dry = true;
     else if (a === "--out") o.out = next();
-    else if (a === "--planes") o.planes = next().split(",").map((s) => s.trim()).filter((p) => PLANES.includes(p));
+    else if (a === "--planes") o.planes = next().split(",").map((s) => s.trim()).filter((p) => KINDS.includes(p));
+    else if (a === "--layers") o.layers = next().split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
     else if (a === "--api") o.api = next();
+    else if (a === "--probe") o.probe = true;
+    else if (a === "--as") o.as = next();
     else if (a === "--denoise") o.denoise = parseFloat(next());
     else if (a === "--steps") o.steps = parseInt(next(), 10);
     else if (a === "--cfg") o.cfg = parseFloat(next());
     else if (a === "--seed") o.seed = parseInt(next(), 10);
     else if (a === "--lora") o.lora = next();
     else if (a === "--model") o.model = next();
+    else if (a === "--sampler") o.sampler = next();
     else if (a === "--prompt") o.prompt = next();
+    else if (a === "--trigger") o.trigger = next();
     else if (a === "--no-quantise") o.quantise = false;
+    else if (a === "--colors") o.colors = parseInt(next(), 10);
+    else if (a === "--palette") o.paletteFrom = next();
+    else if (a === "--dither") o.dither = true;
+    else if (a === "--requantise") o.requantise = true;
     else if (a === "--keep-raw") o.keepRaw = true;
+    else if (a === "--keep-raw") o.keepRaw = true; // twice is fine
     else if (a.startsWith("--")) throw new Error("unknown option " + a);
     else o.names.push(a);
   }
@@ -151,6 +179,26 @@ function contactSheet(images) {
 }
 
 // ------------------------------------------------------------ the model
+/** A JSON call to the server; a self-signed certificate (Draw Things) is let through. */
+async function api(base, ep, body) {
+  if (/^https:/i.test(base)) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  const url = base.replace(/\/$/, "") + ep;
+  const res = await fetch(url, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {});
+  const text = await res.text();
+  if (!res.ok) throw new Error(ep + ": HTTP " + res.status + " " + text.slice(0, 200));
+  if (!text) throw new Error(ep + ": an empty answer - is this the HTTP API server (Draw Things: Settings > API Server), not its gRPC one?");
+  try { return JSON.parse(text); } catch (e) { throw new Error(ep + ": not JSON: " + text.slice(0, 120)); }
+}
+
+/** What the server has: its model, the LoRAs it knows. */
+async function probe(base) {
+  const out = {};
+  for (const ep of ["/sdapi/v1/options", "/sdapi/v1/sd-models", "/sdapi/v1/loras", "/sdapi/v1/samplers"]) {
+    try { out[ep] = await api(base, ep); } catch (e) { out[ep] = "error: " + e.message; }
+  }
+  return out;
+}
+
 /** A bitmap as a PNG buffer / base64, and back. */
 function pngBuffer(bmp) {
   const { PNG } = require("pngjs");
@@ -169,6 +217,16 @@ function enlarge(bmp, f) {
   const w = bmp.width * f, h = bmp.height * f, out = new Lemmix.Bitmap(w, h);
   const s = bmp.words(), d = out.words();
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = s[((y / f) | 0) * bmp.width + ((x / f) | 0)];
+  return out;
+}
+
+/** A bitmap at exactly `w` x `h`, nearest pixel (the server wants the init image at the size it is asked for). */
+function resizeNearest(bmp, w, h) {
+  const out = new Lemmix.Bitmap(w, h), s = bmp.words(), d = out.words();
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(bmp.height - 1, Math.floor(y * bmp.height / h));
+    for (let x = 0; x < w; x++) d[y * w + x] = s[sy * bmp.width + Math.min(bmp.width - 1, Math.floor(x * bmp.width / w))];
+  }
   return out;
 }
 
@@ -209,8 +267,10 @@ function topColors(bmp, n) {
  * gradients, so the result is pixel art in the level's palette again
  * without losing the shading the model added.
  */
-function quantise(bmp, collage, palette) {
-  const pal = EnvGen.quantPalette(topColors(collage, 48).concat(palette.material), palette.dark);
+function quantise(bmp, collage, palette, opts) {
+  const from = opts.paletteFrom === "collage" ? collage : bmp;
+  const pal = EnvGen.quantPalette(topColors(from, opts.colors || 32).concat(palette.material), palette.dark);
+  const dither = !!opts.dither;
   const out = bmp.clone(), d = out.data;
   const BAYER = [[0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26], [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22],
     [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25], [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21]];
@@ -224,7 +284,7 @@ function quantise(bmp, collage, palette) {
       let a = pal[0], da = Infinity, s = pal[0], ds = Infinity;
       for (const c of pal) { const dd = dist(c, r, g, b); if (dd < da) { s = a; ds = da; a = c; da = dd; } else if (dd < ds) { s = c; ds = dd; } }
       // dither only between two colours close enough to be shades of one another
-      const frac = da + ds > 0 && ds < 4 * da + 2000 ? da / (da + ds) : 0;
+      const frac = dither && da + ds > 0 && ds < 4 * da + 2000 ? da / (da + ds) : 0;
       const c = frac > BAYER[y & 7][x & 7] / 64 ? s : a;
       d[p] = (c >> 16) & 255; d[p + 1] = (c >> 8) & 255; d[p + 2] = c & 255; d[p + 3] = 255;
     }
@@ -250,35 +310,70 @@ function score(bmp, collage, palette) {
   return { paletteDistance: +(far / n).toFixed(1), meanLuma: +(lum / n).toFixed(1) };
 }
 
+/** The file a plane is kept in: floor.png for the first layer, floor-1.png for the next... */
+const fileFor = (name) => { const { kind, i } = EnvGen.parsePlane(name); return kind + (i ? "-" + i : ""); };
+
 const PLANE_WORDS = {
   floor: "ground seen from above, rocks and soil in the foreground, cave floor",
   wall: "distant background wall, far away, atmospheric depth, seamless tileable",
   ceiling: "cave ceiling seen from below, overhangs and stalactites, dark",
 };
 
-/** One plane through the model: the collage as the init image at the plane's
- *  size scaled up, back down to size afterwards. */
-async function polish(bmp, plane, info, opts, seed) {
-  const f = Math.max(1, Math.floor(768 / Math.max(bmp.width, bmp.height)));
-  const big = enlarge(bmp, f);
-  const gw = Math.max(256, Math.round(big.width / 64) * 64), gh = Math.max(256, Math.round(big.height / 64) * 64);
-  const lora = opts.lora ? " <lora:" + (opts.lora.includes(":") ? opts.lora : opts.lora + ":0.8") + ">" : "";
+/** Can the model work on a picture this shape? The far layers are low and wide. */
+function modelable(bmp) {
+  return Math.min(bmp.width, bmp.height) >= 96 && Math.max(bmp.width, bmp.height) / Math.min(bmp.width, bmp.height) <= 5;
+}
+
+/** A cut-out (a wall that is not the last) over the fog, so the model sees a whole picture. */
+function overFog(bmp, fog) {
+  const out = bmp.clone(), d = out.data;
+  const fr = (fog >> 16) & 255, fg = (fog >> 8) & 255, fb = fog & 255;
+  for (let p = 0; p < d.length; p += 4) {
+    const a = d[p + 3] / 255;
+    d[p] = d[p] * a + fr * (1 - a); d[p + 1] = d[p + 1] * a + fg * (1 - a); d[p + 2] = d[p + 2] * a + fb * (1 - a); d[p + 3] = 255;
+  }
+  return out;
+}
+
+/** The collage's alpha put back on the model's answer: the skyline stays a cut-out. */
+function withAlphaOf(bmp, collage) {
+  const out = bmp.clone(), d = out.data, c = collage.data;
+  for (let p = 3; p < d.length; p += 4) d[p] = c[p];
+  return out;
+}
+
+/** One plane through the model: the collage as the init image at a size the
+ *  model likes (its short side at least 256, its long side 1024 at most,
+ *  multiples of 64), back down to the plane's size afterwards. */
+async function polish(bmp, name, info, opts, seed) {
+  const { kind, i } = EnvGen.parsePlane(name);
+  const sc = Math.max(1, 256 / Math.min(bmp.width, bmp.height));
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(v / 64) * 64));
+  const gw = clamp(bmp.width * sc, 256, 1024), gh = clamp(bmp.height * sc, 256, 768);
+  const loraInPrompt = opts.lora && opts.lora !== "none" && !/\.(ckpt|safetensors)$/i.test(opts.lora.split(":")[0]);
+  const lora = loraInPrompt ? " <lora:" + (opts.lora.includes(":") ? opts.lora : opts.lora + ":0.8") + ">" : "";
+  const distance = i === 0 ? "" : i === 1 ? "middle distance" : "far away, hazy, atmospheric perspective";
   const prompt = [
-    "pixel art", "16-bit video game background", info.title + " tileset", PLANE_WORDS[plane],
+    opts.trigger || "", "pixel art", "16-bit video game background", info.title + " tileset", PLANE_WORDS[kind], distance,
     "flat shading, limited palette, crisp pixels, no text", opts.prompt || "",
   ].filter(Boolean).join(", ") + lora;
   const body = {
-    init_images: [pngBuffer(big).toString("base64")],
+    init_images: [pngBuffer(resizeNearest(bmp, gw, gh)).toString("base64")],
     prompt, negative_prompt: "blurry, photo, realistic, text, watermark, smooth gradient, 3d render, noise",
     denoising_strength: opts.denoise, steps: opts.steps, cfg_scale: opts.cfg, seed,
-    width: gw, height: gh, sampler_name: "DPM++ 2M Karras", tiling: plane === "wall",
-    override_settings: opts.model ? { sd_model_checkpoint: opts.model } : {},
+    width: gw, height: gh,
   };
-  const res = await fetch(opts.api.replace(/\/$/, "") + "/sdapi/v1/img2img", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error("img2img: HTTP " + res.status + " " + (await res.text()).slice(0, 200));
-  const json = await res.json();
+  // Draw Things validates the keys it gets: only what it knows goes in. Its
+  // own `loras` list (a file name, a weight) replaces the app's selection;
+  // an empty list switches the app's LoRA off for this call.
+  if (opts.lora === "none") body.loras = [];
+  else if (opts.lora && /\.(ckpt|safetensors)$/i.test(opts.lora.split(":")[0])) {
+    const [file, w] = opts.lora.split(":");
+    body.loras = [{ file, weight: w ? parseFloat(w) : 0.8 }];
+  }
+  if (opts.model) body.model = opts.model;
+  if (opts.sampler) body.sampler_name = opts.sampler;
+  const json = await api(opts.api, "/sdapi/v1/img2img", body);
   if (!json.images || !json.images[0]) throw new Error("img2img: no image in the answer");
   const raw = fromPngBuffer(Buffer.from(json.images[0].split(",").pop(), "base64"));
   return { raw, small: boxDown(raw, bmp.width, bmp.height), prompt };
@@ -287,6 +382,16 @@ async function polish(bmp, plane, info, opts, seed) {
 // --------------------------------------------------------------- the run
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.probe) {
+    const p = await probe(opts.api);
+    for (const [ep, v] of Object.entries(p)) {
+      if (typeof v === "string") { console.log(ep + ": " + v); continue; }
+      if (ep.endsWith("options")) console.log(ep + ": model " + JSON.stringify(v.sd_model_checkpoint) + ", " + Object.keys(v).length + " keys");
+      else if (Array.isArray(v)) console.log(ep + ": " + v.map((m) => m.title || m.name || m.model_name || JSON.stringify(m)).join(" | "));
+      else console.log(ep + ": " + JSON.stringify(v).slice(0, 300));
+    }
+    return;
+  }
   if (!opts.names.length) { console.log(fs.readFileSync(__filename, "utf8").split("*/")[0].split("\n").slice(2).map((l) => l.replace(/^ \* ?/, "")).join("\n")); return; }
   const repoRoot = findRepoRoot();
   const styles = new Lemmix.StyleManager(nodeIO(repoRoot));
@@ -295,26 +400,54 @@ async function main() {
   for (const name of opts.names) {
     const isLevel = /\.nxlv$/i.test(name) || name.includes("/");
     const t0 = Date.now();
-    const { ctx, wallpaper, title, name: outName } = isLevel ? await levelContext(repoRoot, styles, name) : await styleContext(repoRoot, styles, name);
+    const loaded = isLevel ? await levelContext(repoRoot, styles, name) : await styleContext(repoRoot, styles, name);
+    const { ctx, wallpaper, title } = loaded;
+    const outName = opts.as || loaded.name;
     const room = EnvGen.roomFor(isLevel ? ctx.width : 1600, isLevel ? ctx.height : 160, PX_PER_METRE);
     const palette = EnvGen.derivePalette(ctx);
-    const built = EnvGen.build(ctx, { room, full: true, palette, wallpaper }, opts.planes.concat(["backdrop"]));
+    const names = EnvGen.planeNames(room).filter((n) => {
+      const { kind, i } = EnvGen.parsePlane(n);
+      return KINDS.includes(kind) && opts.planes.includes(kind) && (!opts.layers || opts.layers.includes(i));
+    });
+    const built = EnvGen.build(ctx, { room, full: true, palette, wallpaper }, names.concat(["backdrop"]));
+    const lastWall = "wall" + (room.layers.length - 1);
     const dir = path.join(outRoot, outName);
     fs.mkdirSync(dir, { recursive: true });
     const rows = [];
     const seedBase = opts.seed !== undefined ? opts.seed : EnvGen.seededRandom(outName)() * 1e9 | 0;
-    for (const plane of opts.planes) {
+    for (const plane of names) {
+      const file = fileFor(plane);
       const collage = built.planes[plane];
-      const row = { plane, w: collage.width, h: collage.height, collage: plane + "-collage.png", scores: {} };
+      const cutout = EnvGen.parsePlane(plane).kind === "wall" && plane !== lastWall;
+      const row = { plane, w: collage.width, h: collage.height, collage: file + "-collage.png", scores: {} };
       writePng(path.join(dir, row.collage), collage.width, collage.height, collage.data);
       row.scores.collage = score(collage, collage, palette);
       if (!opts.dry) {
-        process.stdout.write("  " + plane + " through the model... ");
-        const { raw, small, prompt } = await polish(collage, plane, { title }, opts, seedBase + PLANES.indexOf(plane));
-        const finished = opts.quantise ? quantise(small, collage, palette) : small;
+        if (!modelable(collage)) {
+          // too low and wide for the model: the collage is the picture
+          row.final = file + ".png";
+          row.note = "the collage, kept: too flat for the model";
+          writePng(path.join(dir, row.final), collage.width, collage.height, collage.data);
+          row.scores.final = row.scores.collage;
+          rows.push(row);
+          continue;
+        }
+        let raw, small, prompt;
+        const init = cutout ? overFog(collage, built.fog) : collage;
+        if (opts.requantise) {
+          process.stdout.write("  " + plane + " from its raw picture... ");
+          raw = fromPngBuffer(fs.readFileSync(path.join(dir, file + "-raw.png")));
+          small = boxDown(raw, collage.width, collage.height);
+          prompt = "(as before)";
+        } else {
+          process.stdout.write("  " + plane + " through the model... ");
+          ({ raw, small, prompt } = await polish(init, plane, { title }, opts, seedBase + names.indexOf(plane)));
+        }
+        let finished = opts.quantise ? quantise(small, collage, palette, opts) : small;
+        if (cutout) finished = withAlphaOf(finished, collage);
         row.prompt = prompt;
-        if (opts.keepRaw) { row.raw = plane + "-raw.png"; writePng(path.join(dir, row.raw), raw.width, raw.height, raw.data); }
-        row.final = plane + ".png";
+        if (opts.keepRaw) { row.raw = file + "-raw.png"; writePng(path.join(dir, row.raw), raw.width, raw.height, raw.data); }
+        row.final = file + ".png";
         writePng(path.join(dir, row.final), finished.width, finished.height, finished.data);
         row.scores.final = score(finished, collage, palette);
         console.log("done");
@@ -332,7 +465,8 @@ async function main() {
         bg: "#" + palette.bg.toString(16).padStart(6, "0"), dark: "#" + palette.dark.toString(16).padStart(6, "0"),
       },
       wallpaper: wallpaper ? { key: wallpaper.key, kind: wallpaper.kind } : null,
-      room: { k: { floor: room.floor.k, wall: room.wall.k } },
+      fog: "#" + built.fog.toString(16).padStart(6, "0"),
+      room: { layers: room.layers.map((l) => ({ d: l.d, kFloor: l.floor.k, kWall: l.wall.k, fog: +l.fog.toFixed(2) })) },
       model: opts.dry ? null : { api: opts.api, denoise: opts.denoise, steps: opts.steps, cfg: opts.cfg, seed: seedBase, lora: opts.lora || null, model: opts.model || null },
       planes: rows,
     };
@@ -348,7 +482,7 @@ async function main() {
 /** 3d/env/index.json: the styles with a finished picture, which the page reads so it never probes for one. */
 function writeShippedIndex(outRoot) {
   const styles = fs.readdirSync(outRoot, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && PLANES.some((p) => fs.existsSync(path.join(outRoot, d.name, p + ".png"))))
+    .filter((d) => d.isDirectory() && KINDS.some((p) => fs.existsSync(path.join(outRoot, d.name, p + ".png"))))
     .map((d) => d.name).sort();
   fs.writeFileSync(path.join(outRoot, "index.json"), JSON.stringify({ styles }, null, 2) + "\n");
   console.log("3d/env/index.json: " + styles.length + " style(s)");
@@ -375,7 +509,7 @@ function writeContact(outRoot, report) {
       html += "<div class=row>";
       const cell = (label, file, sc) => "<div><small>" + esc(label) + (sc ? " · Δpalette " + sc.paletteDistance + " · luma " + sc.meanLuma : "") +
         "</small><img src='" + esc(m.name + "/" + file) + "' width=" + r.w * 2 + "></div>";
-      html += cell(r.plane + " collage " + r.w + "x" + r.h, r.collage, r.scores.collage);
+      html += cell(r.plane + " collage " + r.w + "x" + r.h + (r.note ? " · " + r.note : ""), r.collage, r.scores.collage);
       if (r.raw) html += cell(r.plane + " model, raw", r.raw, null);
       if (r.final) html += cell(r.plane + " finished", r.final, r.scores.final);
       html += "</div>";

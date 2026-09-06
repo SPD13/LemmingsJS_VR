@@ -1,9 +1,11 @@
 "use strict";
 /**
- * The environment: a floor, a back wall, a ceiling and two dim side walls
- * around the board, so the diorama sits in a place drawn in the level's own
- * pixel art rather than floating in the void. The pictures are envgen.js's;
- * this hangs them in the scene and keeps them where they belong.
+ * The environment: a floor, a ceiling and a run of walls going back in
+ * layers around the board - each layer a band of floor and ceiling and a
+ * cut-out skyline the next shows through, the last one the sky, every one
+ * deeper in the fog - so the diorama sits in a place with distance in it
+ * rather than floating in the void. The pictures are envgen.js's; this
+ * hangs them in the scene and keeps them where they belong.
  *
  * The room lives under `envRoot`, a sibling of `dioramaRoot` in the same
  * frame (1 unit = 1 board pixel, y up, the slab's back face at z = 0). In a
@@ -16,7 +18,7 @@
  * units, the same proportions, so the whole thing can be looked at without
  * a headset.
  *
- * The room and its five planes, their geometry and materials live for the
+ * The room and its planes, their geometry and materials live for the
  * page; a level only brings its own textures (an EnvironmentSet), built off
  * the critical path once the board is up - the ambient gradients first, in
  * one go, then the collage a plane per frame - and disposed with the level.
@@ -50,14 +52,26 @@ class Environment {
 
     const geom = new THREE.PlaneGeometry(1, 1);
     this.geometry = geom;
-    const plane = (name) => {
-      const mesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: ENV_SCENE_COLOR, side: THREE.FrontSide }));
+    const plane = (name, cutout) => {
+      // a wall that is not the last is a cut-out: what it leaves clear shows the layer behind
+      const mat = new THREE.MeshBasicMaterial({ color: ENV_SCENE_COLOR, side: THREE.FrontSide });
+      if (cutout) { mat.transparent = true; mat.alphaTest = 0.5; }
+      const mesh = new THREE.Mesh(geom, mat);
       mesh.name = "env-" + name;
       mesh.frustumCulled = false; // a plane the player stands on is cut by the near plane oddly otherwise
       root.add(mesh);
       return mesh;
     };
-    this.planes = { floor: plane("floor"), ceiling: plane("ceiling"), wall: plane("wall"), sideL: plane("sideL"), sideR: plane("sideR") };
+    this.planes = {};
+    const n = EnvGen.ROOM.LAYERS.length;
+    // far to near, so the nearer cut-outs are drawn over the further layers
+    for (let i = n - 1; i >= 0; i--) {
+      this.planes["wall" + i] = plane("wall" + i, i < n - 1);
+      this.planes["floor" + i] = plane("floor" + i, false);
+      this.planes["ceiling" + i] = plane("ceiling" + i, false);
+    }
+    this.planes.sideL = plane("sideL", false);
+    this.planes.sideR = plane("sideR", false);
     // the slab's own backdrop, handed to app.js for the plane it puts behind the terrain
     this.backdropMaterial = new THREE.MeshBasicMaterial({ color: ENV_BACKDROP_COLOR });
   }
@@ -134,48 +148,53 @@ class Environment {
     const token = ++this._token;
     const { ctx, room, styles } = this.level;
     const t0 = performance.now();
-    const stats = { mode: this.mode };
-    const set = { textures: [], palette: null, wallpaper: null, planes: {}, source: "collage" };
+    const stats = { mode: this.mode, ms: {} };
+    const set = { textures: [], palette: null, wallpaper: null, fog: null, planes: {}, source: "collage" };
     this.set = set;
     const tick = () => new Promise((r) => setTimeout(r, 0));
     const stale = () => token !== this._token;
 
     await tick();
     if (stale()) return;
-    // the colours, and the ambient gradients on every plane in one go
     const palette = EnvGen.derivePalette(ctx);
     set.palette = palette;
     stats.paletteSource = palette.source;
-    this._applyScene();
+    // the wallpaper first: a sky is what the far layers dissolve into
+    set.wallpaper = await this._wallpaper(ctx, styles);
+    if (stale()) return;
     const files = await this._files(ctx);
     if (stale()) return;
     if (files) set.source = "file";
+    const opts = { room, palette, wallpaper: set.wallpaper };
+    // the near layer and the sky in gradients, in one go, so the room is there at once
     let t = performance.now();
-    const ambient = EnvGen.build(ctx, { room, full: false, palette }, ["floor", "ceiling", "wall", "side"]);
-    stats.ambientMs = Math.round(performance.now() - t);
-    for (const name of ["floor", "ceiling", "wall", "side"]) this._apply(name, ambient.planes[name]);
-    // the wallpaper: the level's own background, else the one the profile names
-    set.wallpaper = await this._wallpaper(ctx, styles);
-    if (stale()) return;
+    const far = room.layers[room.layers.length - 1].i;
+    const first = ["floor0", "wall0", "ceiling0", "wall" + far, "side"];
+    const ambient = EnvGen.build(ctx, Object.assign({ full: false }, opts), first);
+    set.fog = ambient.fog;
+    this._applyScene();
+    for (const name of first) this._apply(name, ambient.planes[name]);
     this._applyBackdrop();
-    if (this.mode !== "full") { stats.totalMs = Math.round(performance.now() - t0); this.stats = stats; return; }
-
-    // the collage, a plane per frame; shipped pictures (3d/env/<style>/) instead where there are any
+    stats.ms.ambient = Math.round(performance.now() - t);
+    const full = this.mode === "full";
+    // then every plane, one per frame: the collage, or the shipped picture where there is one
     let pieces = null;
-    for (const name of ["floor", "wall", "ceiling"]) {
+    for (const name of EnvGen.planeNames(room)) {
+      if (name === "side" || name === "backdrop") continue;
+      if (!full && first.includes(name)) continue;
       await tick();
       if (stale()) return;
       t = performance.now();
       let bitmap = files && files[name];
       if (!bitmap) {
-        const built = EnvGen.build(ctx, { room, full: true, palette, wallpaper: set.wallpaper, pieces }, [name, name === "wall" ? "backdrop" : ""]);
+        const built = EnvGen.build(ctx, Object.assign({ full, pieces }, opts), [name, name === "wall0" ? "backdrop" : ""]);
         pieces = built.pieces;
         bitmap = built.planes[name];
-        stats.collageMode = built.mode;
-        if (name === "wall" && built.backdrop) this._applyBackdropProp(built.backdrop);
+        if (built.mode) stats.collageMode = built.mode;
+        if (built.backdrop) this._applyBackdropProp(built.backdrop);
       }
       this._apply(name, bitmap);
-      stats[name + "Ms"] = Math.round(performance.now() - t);
+      stats.ms[name] = Math.round(performance.now() - t);
     }
     stats.totalMs = Math.round(performance.now() - t0);
     this.stats = stats;
@@ -201,9 +220,13 @@ class Environment {
     };
     // only asked for when an index says the folder is there: no probing 404s
     if (!Environment.shipped || !Environment.shipped.has(ctx.themeName)) return null;
-    const [floor, wall, ceiling] = await Promise.all([load("floor"), load("wall"), load("ceiling")]);
-    if (!floor && !wall && !ceiling) return null;
-    return { floor, wall, ceiling };
+    // floor.png is the first layer's, floor-1.png the next one's, and so on
+    const names = EnvGen.planeNames(this.level.room).filter((n) => n !== "side" && n !== "backdrop");
+    const files = await Promise.all(names.map((n) => load(Environment.fileFor(n))));
+    const out = {};
+    let any = false;
+    names.forEach((n, i) => { if (files[i]) { out[n] = files[i]; any = true; } });
+    return any ? out : null;
   }
 
   async _wallpaper(ctx, styles) {
@@ -237,15 +260,17 @@ class Environment {
     return tex;
   }
 
-  /** A plane's picture: row 0 is the wall's edge for the floor and ceiling,
-   *  the top for the wall; the sides share one picture. */
+  /** A plane's picture: row 0 is the far edge for a floor or ceiling band,
+   *  the top for a wall; the sides share one picture. */
   _apply(name, bitmap) {
     if (!bitmap) return;
     const targets = name === "side" ? [this.planes.sideL, this.planes.sideR] : [this.planes[name]];
+    if (!targets[0]) return;
+    const kind = EnvGen.parsePlane(name).kind;
     // the ceiling faces down and its local +y runs toward the player, so the
-    // wall's edge (row 0) has to be at the bottom of its picture
-    const tex = this._texture(name === "ceiling" ? bitmap.flipVertical() : bitmap, true);
-    if (name === "wall") this._wallRepeat(tex);
+    // far edge (row 0) has to be at the bottom of its picture
+    const tex = this._texture(kind === "ceiling" ? bitmap.flipVertical() : bitmap, true);
+    if (kind === "wall") this._wallRepeat(tex);
     for (const mesh of targets) {
       const old = mesh.material.map;
       mesh.material.map = tex;
@@ -267,7 +292,8 @@ class Environment {
 
   _applyScene() {
     const on = this.active && this.set && this.set.palette;
-    const hex = on ? EnvGen.scale(this.set.palette.dark, 0.35) : this._sceneColor;
+    // past the last layer there is only the fog
+    const hex = on ? (this.set.fog !== null ? this.set.fog : EnvGen.scale(this.set.palette.dark, 0.35)) : this._sceneColor;
     if (this.scene.background && this.scene.background.isColor) this.scene.background.setHex(hex);
     else this.scene.background = new THREE.Color(hex);
   }
@@ -351,29 +377,42 @@ class Environment {
   _layout() {
     if (!this.level) return;
     if (this._yFloor === undefined) this.placeDesktop();
-    const { W, sidePx, behindPx, frontPx } = this.level.room;
-    const yF = this._yFloor, yC = this._yCeil;
+    const room = this.level.room, W = room.W;
+    const yF = this._yFloor, yC = this._yCeil, yMid = (yF + yC) / 2;
     const p = this.planes;
-    const spanX = W + 2 * sidePx, spanZ = behindPx + frontPx, zMid = (frontPx - behindPx) / 2;
-    p.floor.rotation.set(-Math.PI / 2, 0, 0);
-    p.floor.scale.set(spanX, spanZ, 1);
-    p.floor.position.set(W / 2, yF, zMid);
-    p.ceiling.rotation.set(Math.PI / 2, 0, 0);
-    p.ceiling.scale.set(spanX, spanZ, 1);
-    p.ceiling.position.set(W / 2, yC, zMid);
-    p.wall.rotation.set(0, 0, 0);
-    p.wall.scale.set(spanX, yC - yF, 1);
-    p.wall.position.set(W / 2, (yF + yC) / 2, -behindPx);
+    for (const l of room.layers) {
+      const zMid = (l.zNear + l.zFar) / 2;
+      const floor = p["floor" + l.i], ceiling = p["ceiling" + l.i], wall = p["wall" + l.i];
+      floor.rotation.set(-Math.PI / 2, 0, 0);
+      floor.scale.set(l.spanX, l.depth, 1);
+      floor.position.set(W / 2, yF, zMid);
+      ceiling.rotation.set(Math.PI / 2, 0, 0);
+      ceiling.scale.set(l.spanX, l.depth, 1);
+      ceiling.position.set(W / 2, yC, zMid);
+      wall.rotation.set(0, 0, 0);
+      wall.scale.set(l.spanX, yC - yF, 1);
+      wall.position.set(W / 2, yMid, l.zFar);
+    }
+    const side = room.side, zMid = (room.frontPx + room.layers[room.layers.length - 1].zFar) / 2;
     p.sideL.rotation.set(0, Math.PI / 2, 0);
-    p.sideL.scale.set(spanZ, yC - yF, 1);
-    p.sideL.position.set(-sidePx, (yF + yC) / 2, zMid);
+    p.sideL.scale.set(side.spanZ, yC - yF, 1);
+    p.sideL.position.set(side.x0, yMid, zMid);
     p.sideR.rotation.set(0, -Math.PI / 2, 0);
-    p.sideR.scale.set(spanZ, yC - yF, 1);
-    p.sideR.position.set(W + sidePx, (yF + yC) / 2, zMid);
+    p.sideR.scale.set(side.spanZ, yC - yF, 1);
+    p.sideR.position.set(side.x1, yMid, zMid);
     this._wallHeight = yC - yF;
-    if (p.wall.material.map) this._wallRepeat(p.wall.material.map);
+    for (const l of room.layers) {
+      const map = p["wall" + l.i].material.map;
+      if (map) this._wallRepeat(map);
+    }
   }
 }
+
+/** The file a plane's shipped picture is kept in: floor.png, floor-1.png, ... */
+Environment.fileFor = function (name) {
+  const { kind, i } = EnvGen.parsePlane(name);
+  return kind + (i ? "-" + i : "");
+};
 
 // The styles with pictures made offline under 3d/env/ (tools/env-gen.js
 // keeps the list in 3d/env/index.json); read once, so nothing is probed for.
