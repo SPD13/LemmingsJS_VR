@@ -4769,7 +4769,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     else if (!barLocked) placeBarBelowDiorama();
     barAutoPlace = false;
     // the room takes this placement and keeps it: the board moves inside it from here
-    environment.placeForXR(dioramaRoot);
+    environment.placeForXR(dioramaRoot, headPos);
     return true;
   }
 

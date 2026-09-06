@@ -15,9 +15,10 @@
  *    standing far behind it, from a generator seeded with the level's id so
  *    a level always gets the same place.
  *
- * The room goes back in layers (ROOM.LAYERS): each a band of floor and of
- * ceiling and, at its far end, a wall that is a cut-out skyline the next
- * layer shows through, the last one solid - the sky. Every picture is a
+ * The room is rings around the player (ROOM.RINGS): each a band of floor
+ * and of ceiling and, at its outer edge, a wall all the way round that is a
+ * cut-out skyline the next ring shows through, the last one solid - the
+ * sky. The pictures wrap: a band's runs round its rim, a wall's round. Every picture is a
  * Lemmix.Bitmap at its plane's own pixel size, coarser than the board's and
  * coarser with distance, so the environment reads as further away and never
  * competes with the play area; each layer is blended toward the fog by its
@@ -34,64 +35,83 @@
   // ------------------------------------------------------------ the room
   // Metres, turned into board pixels with the pixels-per-metre the headset
   // uses (1 / VR_PIXEL_SCALE), on the desktop too so the room keeps its
-  // proportions in both views. The room is a run of layers going back from
-  // the board: each one a band of floor and of ceiling and, at its far end,
-  // a wall - a cut-out skyline of the level's pieces the next layer shows
-  // through, the last one solid (the style's sky when it has one) - every
-  // layer wider than the one before so it fills the view, coarser, and
-  // blended further toward the fog. The stereo between them is the depth.
+  // proportions in both views. The room is a set of rings around the
+  // player: each ring a band of floor and of ceiling and, at its outer edge,
+  // a wall all the way round - a cut-out skyline of the level's pieces the
+  // next ring shows through, the last one solid, the sky - every ring
+  // coarser and blended further toward the fog. Looking any way, the world
+  // goes on; the stereo between the rings is the depth. The board stands
+  // inside the first ring, in front of the player.
   const ROOM = {
-    SIDE_M: 1.5,      // the first layer reaches this far past each end of the board
-    FRONT_M: 3.0,     // the floor and ceiling reach this far toward (and past) the player
+    EYE_M: 0.9,       // the player's distance from the board's face (placeDioramaForXR), the desktop's centre
     CEIL_M: 2.6,      // the ceiling's height above the physical floor
     FLOOR_DROP_M: 0.5, // the desktop's floor, this far below the board's bottom edge
-    LAYERS: [1.0, 3.0, 7.0, 16.0], // how far behind the slab's back face each layer's wall stands
+    RINGS: [2.0, 4.0, 8.0, 17.0], // each ring's radius from the player
+    CLEAR_M: 0.5,     // the first ring stands at least this far past the board's corners
     FOG_M: 7.0,       // the distance by which the fog has taken two thirds of a colour
-    SPREAD: 1.1,      // how much wider a layer is, per metre of its distance, each side
-    SKYLINE: [0.32, 0.42, 0.52, 0.6], // how high each layer's wall band rises, of the wall's height
-    TEX: { floor: [1024, 512], ceiling: [1024, 512], wall: [1024, 256], side: [256, 256] },
-    WALL_K: 1.5,      // the wall's pixels, coarser again than the floor's: it is further away
+    SKYLINE: [0.32, 0.42, 0.52, 0.6], // how high each ring's wall band rises, of the wall's height
+    TEX: { near: 1024, far: 2048, wallRows: 256, bandRows: 512 },
+    WALL_K: 1.5,      // a wall's pixels, coarser again than the floor's: it is further away
   };
 
-  /** The room's sizes in board pixels for a level `W` wide: its layers,
-   *  each with its pictures' sizes and pixel scales (`k` board pixels per
-   *  picture pixel), and the fog it sits in. */
-  function roomFor(W, H, pxPerMetre) {
+  /**
+   * The room's sizes in board pixels for a level `W` wide and `H` high:
+   * its rings, each with its pictures' sizes and pixel scales (`k` board
+   * pixels per picture pixel), around a centre `opts.center` ({x, z} in
+   * board pixels; the player's place, by default EYE_M in front of the
+   * board's middle).
+   */
+  function roomFor(W, H, pxPerMetre, opts) {
     const P = pxPerMetre;
-    const sidePx = Math.round(ROOM.SIDE_M * P), frontPx = Math.round(ROOM.FRONT_M * P);
     const floorDrop = Math.round(ROOM.FLOOR_DROP_M * P);
     const wallPx = Math.round(ROOM.CEIL_M * P) + floorDrop; // the nominal wall height
-    const pic = (k, w, h) => ({ k, w: Math.ceil(w / k), h: Math.ceil(h / k) });
+    const center = (opts && opts.center) || { x: W / 2, z: 16 + ROOM.EYE_M * P };
+    // the first ring clears the board's corners, wherever the player stands
+    const reach = Math.max(
+      Math.hypot(center.x, center.z), Math.hypot(W - center.x, center.z),
+      Math.hypot(center.x, center.z - 16), Math.hypot(W - center.x, center.z - 16));
     const fogAt = (d) => 1 - Math.exp(-d / ROOM.FOG_M);
-    const layers = ROOM.LAYERS.map((d, i) => {
-      const zFar = -Math.round(d * P);
-      const zNear = i === 0 ? frontPx : -Math.round(ROOM.LAYERS[i - 1] * P);
-      const spanX = W + 2 * (sidePx + Math.round(d * P * ROOM.SPREAD));
-      const depth = zNear - zFar;
-      const kFloor = Math.max(1, Math.ceil(Math.max(spanX / ROOM.TEX.floor[0], depth / ROOM.TEX.floor[1])));
-      const kWall = Math.max(1, Math.ceil(spanX / ROOM.TEX.wall[0] * ROOM.WALL_K));
+    const radii = [];
+    ROOM.RINGS.forEach((rm, i) => {
+      let r = rm * P;
+      if (i === 0) r = Math.max(r, reach + ROOM.CLEAR_M * P);
+      else r = Math.max(r, radii[i - 1] * 1.6);
+      radii.push(Math.round(r));
+    });
+    const layers = radii.map((rOut, i) => {
+      const rIn = i === 0 ? 0 : radii[i - 1];
+      const circ = Math.round(2 * Math.PI * rOut);
+      const texW = i >= 2 ? ROOM.TEX.far : ROOM.TEX.near;
+      const d = rOut / P; // the wall's distance
+      const kBand = Math.max(1, Math.ceil(circ / texW));
+      const kWall = Math.max(1, Math.ceil(circ / texW * ROOM.WALL_K));
       return {
-        i, d, zFar, zNear, depth, spanX, x0: -(spanX - W) / 2,
-        fog: fogAt(d), fogNear: i === 0 ? 0 : fogAt(ROOM.LAYERS[i - 1]),
+        i, rIn, rOut, circ, d,
+        fog: fogAt(d), fogNear: i === 0 ? 0 : fogAt(rIn / P),
         skyline: ROOM.SKYLINE[Math.min(i, ROOM.SKYLINE.length - 1)],
-        last: i === ROOM.LAYERS.length - 1,
-        floor: pic(kFloor, spanX, depth), ceiling: pic(kFloor, spanX, depth), wall: pic(kWall, spanX, wallPx),
+        last: i === radii.length - 1,
+        // a band's picture wraps round the outer rim (row 0) and runs in to the inner one
+        floor: { k: kBand, w: Math.ceil(circ / kBand), h: Math.min(ROOM.TEX.bandRows, Math.ceil((rOut - rIn) / kBand)) },
+        ceiling: { k: kBand, w: Math.ceil(circ / kBand), h: Math.min(ROOM.TEX.bandRows, Math.ceil((rOut - rIn) / kBand)) },
+        wall: { k: kWall, w: Math.ceil(circ / kWall), h: Math.min(ROOM.TEX.wallRows, Math.ceil(wallPx / kWall)) },
       };
     });
-    const far = layers[layers.length - 1];
-    return {
-      W, H, sidePx, frontPx, floorDrop, wallPx, layers,
-      behindPx: -layers[0].zFar,
-      side: { k: far.wall.k, w: ROOM.TEX.side[0], h: ROOM.TEX.side[1], spanZ: frontPx - far.zFar, x0: far.x0, x1: far.x0 + far.spanX },
-    };
+    return { W, H, P, floorDrop, wallPx, center, reach, layers };
   }
 
-  /** The plane names a room has: floor0, wall0, ceiling0, floor1, ..., side, backdrop. */
+  /** The plane names a room has: floor0, wall0, ceiling0, floor1, ..., backdrop. */
   function planeNames(room) {
     const out = [];
     for (const l of room.layers) out.push("floor" + l.i, "wall" + l.i, "ceiling" + l.i);
-    out.push("side", "backdrop");
+    out.push("backdrop");
     return out;
+  }
+
+  /** A band picture's pixel (u across, v down: rim to inner edge) in board pixels around the centre. */
+  function bandToWorld(room, layer, u, v, w, h) {
+    const r = layer.rOut - (layer.rOut - layer.rIn) * (v / Math.max(1, h));
+    const th = (u / w) * Math.PI * 2; // u = 0 straight behind the player, u = 0.5 toward the board
+    return { x: room.center.x + r * Math.sin(th), z: room.center.z + r * Math.cos(th), r, th };
   }
 
   // ------------------------------------------------------------- colours
@@ -441,9 +461,10 @@
     };
   }
 
-  /** A smooth wobble in -1..1 along u, three sines with seeded phases. */
+  /** A smooth wobble in -1..1 along u, three sines with seeded phases -
+   *  whole numbers of waves, so it meets itself where the picture wraps. */
   function noiseFn(rng) {
-    const f = [1.3, 2.9, 5.7], a = [0.5, 0.3, 0.2], ph = f.map(() => rng() * Math.PI * 2);
+    const f = [2, 5, 9], a = [0.5, 0.3, 0.2], ph = f.map(() => rng() * Math.PI * 2);
     return (u) => f.reduce((s, fi, i) => s + a[i] * Math.sin(2 * Math.PI * fi * u + ph[i]), 0);
   }
 
@@ -470,8 +491,23 @@
     return img;
   }
 
-  const stamp = (dst, img, x, y) =>
-    Pixels.blit(dst, x | 0, y | 0, img, 0, 0, img.width, img.height, Pixels.combineTerrainDefault);
+  /** A piece onto a picture that wraps round: what goes off one side comes in the other. */
+  function stamp(dst, img, x, y) {
+    x = Math.round(x); y = Math.round(y);
+    const W = dst.width;
+    x = ((x % W) + W) % W;
+    Pixels.blit(dst, x, y, img, 0, 0, img.width, img.height, Pixels.combineTerrainDefault);
+    if (x + img.width > W) Pixels.blit(dst, x - W, y, img, 0, 0, img.width, img.height, Pixels.combineTerrainDefault);
+  }
+
+  /** A piece stretched sideways by `fx` (a band's picture is narrower toward its inner edge). */
+  function stretched(img, fx) {
+    if (Math.abs(fx - 1) < 0.05) return img;
+    const w = Math.max(1, Math.round(img.width * fx)), h = img.height;
+    const out = new Bitmap(w, h), s = img.words(), d = out.words();
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = s[y * img.width + Math.min(img.width - 1, (x / fx) | 0)];
+    return out;
+  }
 
   // -------------------------------------------------------------- collage
   const TINT = { floor: 0xb4b4b4, ceiling: 0x8c8c8c, wall: 0x7a7a7a, prop: 0x666666, wallpaper: 0x909090 };
@@ -506,68 +542,50 @@
     }
   }
 
-  /** The board's shadow on the first floor band, and where the pieces may not go. */
-  function boardOnFloor(room, layer) {
-    const k = layer.floor.k;
-    return {
-      u0: -layer.x0 / k, u1: (-layer.x0 + room.W) / k,
-      v0: (0 - layer.zFar) / k, v1: (16 - layer.zFar) / k, soft: 12,
-    };
+  /** The board's footprint on the first band: is this pixel of the picture under (or `margin` px from) the slab? */
+  function boardDistance(room, layer, x, y, w, h) {
+    const p = bandToWorld(room, layer, x, y, w, h);
+    const dx = p.x < 0 ? -p.x : p.x > room.W ? p.x - room.W : 0;
+    const dz = p.z < 0 ? -p.z : p.z > 16 ? p.z - 16 : 0;
+    return Math.hypot(dx, dz);
   }
 
+  /** How much wider a piece is drawn on row `y` of a band, so it keeps its size on the ground. */
+  const bandStretch = (layer, h) => (y) => layer.rOut / Math.max(1, layer.rOut - (layer.rOut - layer.rIn) * (y / Math.max(1, h)));
+
   /**
-   * A floor band: the first one a ground strip packed from its far edge
-   * (row 0, where the first wall stands) toward the player under a wavy
-   * edge, with the board's shadow across it and decorations beyond; the
-   * further ones ground all over, coarser and deeper in the fog.
+   * A floor band: the first one - the disc the player and the board stand
+   * on - a ground strip packed round its rim (row 0, where the first wall
+   * stands) inward under a wavy edge, the board's shadow across it and
+   * decorations beyond; the further rings ground all over, coarser and
+   * deeper in the fog.
    */
   function drawFloor(bmp, room, layer, bk, mode, rng) {
     const W = bmp.width, H = bmp.height, noise = noiseFn(rng);
+    const stretch = bandStretch(layer, H);
     if (layer.i === 0) {
-      const hl = (u) => H * (0.55 + 0.15 * noise(u));
-      if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.08, 0.04);
-      else drawClumps(bmp, bk.floor, hl, rng, TINT.floor, false, 0);
-      const b = boardOnFloor(room, layer);
-      darken(bmp, 0.72, b.u0 - b.soft, b.v0 - b.soft, b.u1 + b.soft, b.v1 + b.soft, (x, y) => {
-        const dx = x < b.u0 ? b.u0 - x : x > b.u1 ? x - b.u1 : 0;
-        const dy = y < b.v0 ? b.v0 - y : y > b.v1 ? y - b.v1 : 0;
-        return 1 - smoothstep(0, b.soft, Math.sqrt(dx * dx + dy * dy));
-      });
-      const n = Math.round((W * H) / 12000);
-      scatter(bmp, bk.decor, n, rng, TINT.floor, (x, y) => y > hl(x / W) + 4 && !(x > b.u0 - b.soft && x < b.u1 + b.soft && y < b.v1 + b.soft));
-      // the far end, behind the player, sinks into the dark
-      darken(bmp, 0.1, 0, H * 0.85, W, H, (x, y) => smoothstep(0.85, 1, y / H));
+      const hl = (u) => H * (0.5 + 0.12 * noise(u));
+      if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.08, 0.04, stretch);
+      else drawClumps(bmp, bk.floor, hl, rng, TINT.floor, false, 0, stretch);
+      // the board's shadow, soft-edged, on the ground under and about it
+      const soft = 12 * layer.floor.k;
+      darken(bmp, 0.72, 0, 0, W, H, (x, y) => 1 - smoothstep(0, soft, boardDistance(room, layer, x, y, W, H)));
+      const n = Math.round((W * H) / 14000);
+      scatter(bmp, bk.decor, n, rng, TINT.floor, (x, y) => y > hl(x / W) + 4 && boardDistance(room, layer, x, y, W, H) > soft);
+      // under the player, the ground sinks into the dark
+      darken(bmp, 0.15, 0, H * 0.8, W, H, (x, y) => smoothstep(0.8, 1, y / H));
     } else {
       const hl = () => H + 64; // everything
-      if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.05, 0.04);
-      else drawClumps(bmp, bk.floor, hl, rng, TINT.floor, false, 0);
-    }
-  }
-
-  /** A ceiling band: the first one overhangs hanging from its far edge,
-   *  thick at the sides and thin over the board; the further ones a roof
-   *  of hanging pieces all over. Row 0 is the far edge. */
-  function drawCeiling(bmp, room, layer, bk, mode, rng) {
-    const W = bmp.width, H = bmp.height, noise = noiseFn(rng);
-    if (layer.i === 0) {
-      const uc = (-layer.x0 + room.W / 2) / layer.ceiling.k / W;
-      const bump = (u) => Math.exp(-Math.pow((u - uc) / 0.35, 2));
-      const hl = (u) => H * (0.5 - 0.3 * bump(u) + 0.1 * noise(u));
-      if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.ceiling, true, 0.08, 0.04);
-      else drawClumps(bmp, bk.ceiling, hl, rng, TINT.ceiling, true, 24);
-      darken(bmp, 0.1, 0, H * 0.8, W, H, (x, y) => smoothstep(0.8, 1, y / H));
-    } else {
-      const hl = () => H + 64;
-      if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.ceiling, true, 0.05, 0.04);
-      else drawClumps(bmp, bk.ceiling, hl, rng, TINT.ceiling, true, 0);
+      if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.05, 0.04, stretch);
+      else drawClumps(bmp, bk.floor, hl, rng, TINT.floor, false, 0, stretch);
     }
   }
 
   /**
-   * A wall: a band of the level's pieces standing along the floor line
-   * under a wavy skyline - distant ground, seen from the front - the next
-   * layer showing through above it. Higher on each layer back, so the far
-   * ones read as hills behind hills. The last layer is solid: the sky.
+   * A wall, all the way round: a band of the level's pieces standing along
+   * the floor line under a wavy skyline - distant ground, seen from the
+   * front - the next ring showing through above it. Higher on each ring
+   * out, so the far ones read as hills behind hills. The last is solid: the sky.
    */
   function drawWall(bmp, room, layer, bk, mode, rng) {
     const W = bmp.width, H = bmp.height, noise = noiseFn(rng);
@@ -576,17 +594,18 @@
     const sheet = new Bitmap(W, H);
     const top = layer.skyline;
     const hl = (u) => H * (top + 0.08 * noise(u) + (layer.i ? 0.06 * noise(u * 0.5 + 0.3) : 0));
-    if (mode === "tile") drawTiles(sheet, bk, hl, rng, TINT.wall, true, 0.06, 0.04);
-    else drawClumps(sheet, bk.wall.length ? bk.wall : bk.ground, hl, rng, TINT.wall, true, 0);
+    if (mode === "tile") drawTiles(sheet, bk, hl, rng, TINT.wall, true, 0.06, 0.04, null);
+    else drawClumps(sheet, bk.wall.length ? bk.wall : bk.ground, hl, rng, TINT.wall, true, 0, null);
     const up = sheet.flipVertical();
     Pixels.blit(bmp, 0, 0, up, 0, 0, W, H, Pixels.combineTerrainDefault);
     if (layer.i === 0) scatter(bmp, bk.decor, Math.round(W / 300), rng, TINT.wall, (x, y) => y > H - hl(x / W) - 8);
   }
 
   /** Pieces packed in rows from row 0 up to the wavy limit `hl(u)`. */
-  function drawClumps(bmp, list, hl, rng, tint, flipV, narrowing) {
+  function drawClumps(bmp, list, hl, rng, tint, flipV, narrowing, stretch) {
     if (!list.length) return;
     const W = bmp.width, H = bmp.height;
+    const fxAt = stretch || (() => 1);
     const heights = list.map((p) => p.bbox.h).sort((a, b) => a - b);
     const mh = heights[heights.length >> 1] || 8;
     const step = Math.max(2, mh * 0.6);
@@ -597,13 +616,14 @@
         const p = pickWeighted(list, rng, (q) => q.area * (1 + q.count));
         const top = rowY - rng() * 8;
         const limit = hl(Math.min(1, Math.max(0, (x + p.bbox.w / 2) / W)));
+        const fx = fxAt(Math.max(0, Math.min(H - 1, top + p.bbox.h / 2)));
         if (top + p.bbox.h * 0.5 <= limit) {
-          const img = dressed(p, rng() < 0.5, flipV, tint);
-          const bx = flipV ? p.w - p.bbox.x - p.bbox.w : p.bbox.x;
+          const img = stretched(dressed(p, rng() < 0.5, flipV, tint), fx);
+          const bx = (flipV ? p.w - p.bbox.x - p.bbox.w : p.bbox.x) * fx;
           const by = flipV ? p.h - p.bbox.y - p.bbox.h : p.bbox.y;
           stamp(bmp, img, x - bx, top - by);
         }
-        x += p.bbox.w * (0.55 + 0.15 * rng());
+        x += p.bbox.w * fx * (0.55 + 0.15 * rng());
       }
       rowY += step;
       row++;
@@ -623,18 +643,20 @@
   }
 
   /** Blocks on a grid under `hl(u)`, a few cells left empty, a few turned. */
-  function drawTiles(bmp, bk, hl, rng, tint, flipV, emptyP, turnP) {
+  function drawTiles(bmp, bk, hl, rng, tint, flipV, emptyP, turnP, stretch) {
     const tiles = tileSet(bk);
     if (!tiles.length) return;
     const cw = tiles[0].w, ch = tiles[0].h, W = bmp.width;
+    const fxAt = stretch || (() => 1);
     for (let y = 0; y < bmp.height; y += ch) {
-      for (let x = 0; x < W; x += cw) {
-        if (y + ch > hl((x + cw / 2) / W)) continue;
+      const fx = fxAt(y + ch / 2), step = Math.max(1, cw * fx);
+      for (let x = 0; x < W; x += step) {
+        if (y + ch > hl((x + step / 2) / W)) continue;
         if (rng() < emptyP) continue;
         const t = pickWeighted(tiles, rng, (p) => p.count);
         let img = dressed(t, rng() < 0.5, flipV, tint);
         if (cw === ch && rng() < turnP) img = img.rotate90();
-        stamp(bmp, img, x, y);
+        stamp(bmp, stretched(img, fx), x, y);
       }
     }
   }
@@ -665,7 +687,7 @@
    * `opts.full` whether the collage is drawn over the ambient gradients,
    * `opts.wallpaper` `{image, key, kind}` or null. Returns `{ palette, mode,
    * fog, planes, backdrop, pieces }` with each plane a Bitmap under its name
-   * (floor0, wall0, ceiling0, floor1, ..., side); `only` limits the planes
+   * (floor0, wall0, ceiling0, floor1, ...); `only` limits the planes
    * drawn (a list of names), so the caller can spread the work over frames.
    */
   function build(ctx, opts, only) {
@@ -694,18 +716,17 @@
         const stops = i === 0
           ? [{ t: 0, rgb: scale(dark, 0.55) }, { t: 0.45, rgb: scale(dark, 0.75) }, { t: 1, rgb: scale(dark, 0.3) }]
           : [{ t: 0, rgb: scale(dark, 0.5) }, { t: 1, rgb: scale(dark, 0.6) }];
-        paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: i === 0 ? 0.35 : 0 }));
+        paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: 0 }));
         if (opts.full) drawFloor(bmp, room, layer, bk, mode, seed("floor" + i));
         fogBlend(bmp, fog, layer.fog, layer.fogNear);
         planes["floor" + i] = bmp;
       }
       if (want("ceiling" + i)) {
+        // the ceiling is fog alone: a little darker overhead, the haze at the rim
         const bmp = new Bitmap(layer.ceiling.w, layer.ceiling.h);
-        const stops = i === 0
-          ? [{ t: 0, rgb: scale(dark, 0.3) }, { t: 1, rgb: scale(dark, 0.08) }]
-          : [{ t: 0, rgb: scale(dark, 0.3) }, { t: 1, rgb: scale(dark, 0.25) }];
-        paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: i === 0 ? 0.5 : 0 }));
-        if (opts.full) drawCeiling(bmp, room, layer, bk, mode, seed("ceiling" + i));
+        const overhead = scale(fog, i === 0 ? 0.55 : 0.8);
+        paintGradient(bmp, [{ t: 0, rgb: fog }, { t: 1, rgb: overhead }],
+          "v", { palette: [fog, scale(fog, 0.9), scale(fog, 0.8), scale(fog, 0.7), scale(fog, 0.6), scale(fog, 0.5)], dark: fog, cell: 2, vignette: 0 });
         fogBlend(bmp, fog, layer.fog, layer.fogNear);
         planes["ceiling" + i] = bmp;
       }
@@ -723,12 +744,6 @@
         planes["wall" + i] = bmp;
       }
     }
-    if (want("side")) {
-      const bmp = new Bitmap(room.side.w, room.side.h);
-      paintGradient(bmp, [{ t: 0, rgb: scale(fog, 0.5) }, { t: 1, rgb: scale(fog, 0.8) }],
-        "v", Object.assign(gradientOpts(2), { palette: [fog, scale(fog, 0.8), scale(fog, 0.6), scale(fog, 0.5)], vignette: 0 }));
-      planes.side = bmp;
-    }
     let backdrop = null;
     if (want("backdrop") && wp && wp.kind === "prop") backdrop = propBackdrop(ctx, wp.image, bg);
     return { palette, mode, fog, planes, backdrop, pieces: collected };
@@ -744,7 +759,7 @@
     const f = Math.max(1, Math.round(k / 2));
     const img = f > 1 ? shrink(wp.image, f) : wp.image;
     if (wp.kind === "prop") {
-      const x = ((-layer.x0 + room.W / 2) / k - img.width / 2) | 0;
+      const x = (bmp.width / 2 - img.width / 2) | 0; // toward the board
       const y = (room.wallPx - room.floorDrop) / k - img.height; // its feet at the board's bottom edge
       Pixels.blit(bmp, x, y | 0, img.tinted(TINT.prop), 0, 0, img.width, img.height, Pixels.combineGadget);
       return;
@@ -775,7 +790,7 @@
   }
 
   const EnvGen = {
-    ROOM, roomFor, planeNames, parsePlane, TINT, PROPS, meanColor, fogBlend, mix,
+    ROOM, roomFor, planeNames, parsePlane, bandToWorld, TINT, PROPS, meanColor, fogBlend, mix,
     derivePalette, paintGradient, quantPalette, darken, scale, luma,
     classifyBackground, opaqueFraction,
     collectPieces, buckets, chooseMode, measure, dosBitmap,

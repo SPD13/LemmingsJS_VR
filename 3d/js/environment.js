@@ -1,10 +1,10 @@
 "use strict";
 /**
- * The environment: a floor, a ceiling and a run of walls going back in
- * layers around the board - each layer a band of floor and ceiling and a
- * cut-out skyline the next shows through, the last one the sky, every one
- * deeper in the fog - so the diorama sits in a place with distance in it
- * rather than floating in the void. The pictures are envgen.js's; this
+ * The environment: rings around the player - each a band of floor and of
+ * ceiling and, at its outer edge, a wall all the way round that is a
+ * cut-out skyline the next ring shows through, the last one the sky, every
+ * one deeper in the fog - so the diorama sits in a place with distance in
+ * it, whichever way the player looks. The pictures are envgen.js's; this
  * hangs them in the scene and keeps them where they belong.
  *
  * The room lives under `envRoot`, a sibling of `dioramaRoot` in the same
@@ -18,8 +18,9 @@
  * units, the same proportions, so the whole thing can be looked at without
  * a headset.
  *
- * The room and its planes, their geometry and materials live for the
- * page; a level only brings its own textures (an EnvironmentSet), built off
+ * The room's meshes and materials live for the page; a level brings its
+ * own textures (an EnvironmentSet) and its own geometry (the rings' radii
+ * depend on the board's size and the player's place), built off
  * the critical path once the board is up - the ambient gradients first, in
  * one go, then the collage a plane per frame - and disposed with the level.
  * Three states, like the other 3D effects: "off" (nothing, the scene as it
@@ -50,28 +51,25 @@ class Environment {
     scene.add(root);
     this.root = root;
 
-    const geom = new THREE.PlaneGeometry(1, 1);
-    this.geometry = geom;
     const plane = (name, cutout) => {
-      // a wall that is not the last is a cut-out: what it leaves clear shows the layer behind
-      const mat = new THREE.MeshBasicMaterial({ color: ENV_SCENE_COLOR, side: THREE.FrontSide });
+      // a wall that is not the last is a cut-out: what it leaves clear shows the ring behind
+      const mat = new THREE.MeshBasicMaterial({ color: ENV_SCENE_COLOR, side: THREE.DoubleSide });
       if (cutout) { mat.transparent = true; mat.alphaTest = 0.5; }
-      const mesh = new THREE.Mesh(geom, mat);
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat); // the ring's own geometry comes with the level
       mesh.name = "env-" + name;
-      mesh.frustumCulled = false; // a plane the player stands on is cut by the near plane oddly otherwise
+      mesh.frustumCulled = false; // a ring the player stands in is cut by the near plane oddly otherwise
       root.add(mesh);
       return mesh;
     };
     this.planes = {};
-    const n = EnvGen.ROOM.LAYERS.length;
-    // far to near, so the nearer cut-outs are drawn over the further layers
+    const n = EnvGen.ROOM.RINGS.length;
+    // far to near, so the nearer cut-outs are drawn over the further rings
     for (let i = n - 1; i >= 0; i--) {
       this.planes["wall" + i] = plane("wall" + i, i < n - 1);
       this.planes["floor" + i] = plane("floor" + i, false);
       this.planes["ceiling" + i] = plane("ceiling" + i, false);
     }
-    this.planes.sideL = plane("sideL", false);
-    this.planes.sideR = plane("sideR", false);
+    this._center = null; // the player's place in the room's frame, board pixels
     // the slab's own backdrop, handed to app.js for the plane it puts behind the terrain
     this.backdropMaterial = new THREE.MeshBasicMaterial({ color: ENV_BACKDROP_COLOR });
   }
@@ -119,7 +117,7 @@ class Environment {
   async setLevel(ctx, styles) {
     this._disposeSet();
     const room = EnvGen.roomFor(ctx.width, ctx.height, this.pxPerMetre);
-    this.level = { ctx, room, styles };
+    this.level = { ctx, room, styles, geometries: [] };
     this._layout();
     this._applyVisibility();
     if (this.mode === "off") { this._applyBackdrop(); return; }
@@ -138,6 +136,7 @@ class Environment {
   clearLevel() {
     this._token++;
     this._disposeSet();
+    if (this.level) for (const g of this.level.geometries) g.dispose();
     this.level = null;
     this._applyBackdrop();
     this._applyScene();
@@ -169,7 +168,7 @@ class Environment {
     // the near layer and the sky in gradients, in one go, so the room is there at once
     let t = performance.now();
     const far = room.layers[room.layers.length - 1].i;
-    const first = ["floor0", "wall0", "ceiling0", "wall" + far, "side"];
+    const first = ["floor0", "wall0", "ceiling0", "wall" + far];
     const ambient = EnvGen.build(ctx, Object.assign({ full: false }, opts), first);
     set.fog = ambient.fog;
     this._applyScene();
@@ -180,7 +179,7 @@ class Environment {
     // then every plane, one per frame: the collage, or the shipped picture where there is one
     let pieces = null;
     for (const name of EnvGen.planeNames(room)) {
-      if (name === "side" || name === "backdrop") continue;
+      if (name === "backdrop") continue;
       if (!full && first.includes(name)) continue;
       await tick();
       if (stale()) return;
@@ -221,7 +220,7 @@ class Environment {
     // only asked for when an index says the folder is there: no probing 404s
     if (!Environment.shipped || !Environment.shipped.has(ctx.themeName)) return null;
     // floor.png is the first layer's, floor-1.png the next one's, and so on
-    const names = EnvGen.planeNames(this.level.room).filter((n) => n !== "side" && n !== "backdrop");
+    const names = EnvGen.planeNames(this.level.room).filter((n) => n !== "backdrop");
     const files = await Promise.all(names.map((n) => load(Environment.fileFor(n))));
     const out = {};
     let any = false;
@@ -260,16 +259,15 @@ class Environment {
     return tex;
   }
 
-  /** A plane's picture: row 0 is the far edge for a floor or ceiling band,
-   *  the top for a wall; the sides share one picture. */
+  /** A plane's picture: row 0 is the rim for a floor or ceiling band, the
+   *  top for a wall; every one wraps round. */
   _apply(name, bitmap) {
     if (!bitmap) return;
-    const targets = name === "side" ? [this.planes.sideL, this.planes.sideR] : [this.planes[name]];
+    const targets = [this.planes[name]];
     if (!targets[0]) return;
     const kind = EnvGen.parsePlane(name).kind;
-    // the ceiling faces down and its local +y runs toward the player, so the
-    // far edge (row 0) has to be at the bottom of its picture
-    const tex = this._texture(kind === "ceiling" ? bitmap.flipVertical() : bitmap, true);
+    const tex = this._texture(bitmap, true);
+    tex.wrapS = THREE.RepeatWrapping;
     if (kind === "wall") this._wallRepeat(tex);
     for (const mesh of targets) {
       const old = mesh.material.map;
@@ -350,7 +348,7 @@ class Environment {
    * one through the root's y and scale alone: the floor at the physical
    * floor, the ceiling CEIL_M above it.
    */
-  placeForXR(dioramaRoot) {
+  placeForXR(dioramaRoot, headPos) {
     this._placed = "xr";
     this.root.rotation.copy(dioramaRoot.rotation);
     this.root.scale.copy(dioramaRoot.scale);
@@ -358,11 +356,18 @@ class Environment {
     const s = this.root.scale.y || 1;
     this._yFloor = (0 - this.root.position.y) / s;
     this._yCeil = (EnvGen.ROOM.CEIL_M - this.root.position.y) / s;
+    // the rings go round the player: the head, in the room's own frame
+    if (headPos) {
+      this.root.updateMatrixWorld(true);
+      const local = this.root.worldToLocal(headPos.clone());
+      this._center = { x: local.x, z: local.z };
+    } else this._center = null;
     this._layout();
     this._applyVisibility();
   }
 
-  /** On the desktop: the identity, the floor a little below the board. */
+  /** On the desktop: the identity, the floor a little below the board, the
+   *  rings round the place a player would stand. */
   placeDesktop() {
     this._placed = "desktop";
     this.root.rotation.set(0, 0, 0);
@@ -370,6 +375,7 @@ class Environment {
     this.root.position.set(0, 0, 0);
     this._yFloor = -EnvGen.ROOM.FLOOR_DROP_M * this.pxPerMetre;
     this._yCeil = this._yFloor + EnvGen.ROOM.CEIL_M * this.pxPerMetre;
+    this._center = null;
     this._layout();
     this._applyVisibility();
   }
@@ -377,29 +383,18 @@ class Environment {
   _layout() {
     if (!this.level) return;
     if (this._yFloor === undefined) this.placeDesktop();
-    const room = this.level.room, W = room.W;
-    const yF = this._yFloor, yC = this._yCeil, yMid = (yF + yC) / 2;
+    const room = this.level.room;
+    const c = this._center || room.center;
+    const yF = this._yFloor, yC = this._yCeil;
     const p = this.planes;
+    for (const g of this.level.geometries) g.dispose();
+    this.level.geometries = [];
+    const keep = (g) => { this.level.geometries.push(g); return g; };
     for (const l of room.layers) {
-      const zMid = (l.zNear + l.zFar) / 2;
-      const floor = p["floor" + l.i], ceiling = p["ceiling" + l.i], wall = p["wall" + l.i];
-      floor.rotation.set(-Math.PI / 2, 0, 0);
-      floor.scale.set(l.spanX, l.depth, 1);
-      floor.position.set(W / 2, yF, zMid);
-      ceiling.rotation.set(Math.PI / 2, 0, 0);
-      ceiling.scale.set(l.spanX, l.depth, 1);
-      ceiling.position.set(W / 2, yC, zMid);
-      wall.rotation.set(0, 0, 0);
-      wall.scale.set(l.spanX, yC - yF, 1);
-      wall.position.set(W / 2, yMid, l.zFar);
+      p["floor" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yF));
+      p["ceiling" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yC));
+      p["wall" + l.i].geometry = keep(Environment.drumGeometry(c, l.rOut, yF, yC));
     }
-    const side = room.side, zMid = (room.frontPx + room.layers[room.layers.length - 1].zFar) / 2;
-    p.sideL.rotation.set(0, Math.PI / 2, 0);
-    p.sideL.scale.set(side.spanZ, yC - yF, 1);
-    p.sideL.position.set(side.x0, yMid, zMid);
-    p.sideR.rotation.set(0, -Math.PI / 2, 0);
-    p.sideR.scale.set(side.spanZ, yC - yF, 1);
-    p.sideR.position.set(side.x1, yMid, zMid);
     this._wallHeight = yC - yF;
     for (const l of room.layers) {
       const map = p["wall" + l.i].material.map;
@@ -407,6 +402,58 @@ class Environment {
     }
   }
 }
+
+const ENV_SEGMENTS = 96; // round a ring
+
+/**
+ * A flat ring (a disc when rIn is 0) at height y round centre `c`, its
+ * picture wrapping round: u runs round from straight behind the player
+ * (+z) through the board's side (-z) and back, v from the inner edge (0)
+ * to the rim (1) - the picture's row 0, flipped, is the rim.
+ */
+Environment.ringGeometry = function (c, rIn, rOut, y) {
+  const rows = 6, segs = ENV_SEGMENTS;
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j <= rows; j++) {
+    const v = j / rows, r = rIn + (rOut - rIn) * v;
+    for (let i = 0; i <= segs; i++) {
+      const u = i / segs, th = u * Math.PI * 2;
+      pos.push(c.x + r * Math.sin(th), y, c.z + r * Math.cos(th));
+      uv.push(u, v);
+    }
+  }
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < segs; i++) {
+      const a = j * (segs + 1) + i, b = a + segs + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+};
+
+/** An open drum of radius r round centre `c` from y0 up to y1, u round as the ring's, v up. */
+Environment.drumGeometry = function (c, r, y0, y1) {
+  const segs = ENV_SEGMENTS;
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j <= 1; j++) {
+    const y = j ? y1 : y0;
+    for (let i = 0; i <= segs; i++) {
+      const u = i / segs, th = u * Math.PI * 2;
+      pos.push(c.x + r * Math.sin(th), y, c.z + r * Math.cos(th));
+      uv.push(u, j);
+    }
+  }
+  for (let i = 0; i < segs; i++) idx.push(i, i + 1, i + segs + 1, i + 1, i + segs + 2, i + segs + 1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+};
 
 /** The file a plane's shipped picture is kept in: floor.png, floor-1.png, ... */
 Environment.fileFor = function (name) {

@@ -1,11 +1,11 @@
 # Environment pictures
 
-The pictures the 3D page hangs around the board - a floor, a wall and a
-ceiling per depth layer - made offline for a style, one folder per style
-name (`<style>/floor.png`, `wall.png`, `ceiling.png` for the first layer,
-`floor-1.png`, `wall-1.png`, `ceiling-1.png` for the next, and so on; a
-wall that is not the last keeps its cut-out skyline in its alpha) and
-listed in `index.json`,
+The pictures the 3D page hangs around the board - a floor band and a wall
+per ring - made offline for a style, one folder per style name
+(`<style>/floor.png` and `wall.png` for the first ring, `floor-1.png` and
+`wall-1.png` for the next, and so on; every picture wraps round its ring; a
+wall that is not the last keeps its cut-out skyline in its alpha; the
+ceiling is fog alone and has no picture) and listed in `index.json`,
 which the page reads once so it never asks for a picture that is not there.
 With a folder here the page shows these instead of the collage it draws
 itself from the level's pieces (`3d/js/envgen.js`, the "environment" effect
