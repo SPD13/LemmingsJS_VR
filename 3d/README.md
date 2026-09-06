@@ -99,6 +99,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   "rescan".
 - click a lemming = assign the selected skill; click the panel = exactly the
   original panel (release rate, skills, pause, nuke, speed)
+- rest the pointer on a panel button for a moment and its name pops up over
+  it (the skill's name; on a Lemmix panel a split cell names each half) - a
+  DOM label on a monitor, a strip in the bar's plane in a headset, the same
+  wait as the headset's icon labels; an empty skill slot gets none
 - on a NeoLemmix level, with a skill selected and a lemming under the
   pointer, a shadow shows what the skill would do, in the diorama's depth:
   the builder's bricks as blocks, the basher's, miner's or digger's tunnel

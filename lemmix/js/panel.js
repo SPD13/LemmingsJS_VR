@@ -125,6 +125,7 @@
       while (slots.length < SKILL_SLOTS) slots.push("empty");
       this.cells = ["rrminus", "rrplus"].concat(slots).concat(["pause", "nuke", "speed", "restart", "frameskip", "directional", "cpmreplay"]);
       this.layout = { buttons: this.cells.length, digitButtons: 2 + SKILL_SLOTS, width: PANEL_W, height: PANEL_H,
+        cells: this.cells, // what each cell does, for the label a resting pointer gets
         sharedBorder: false, // each cell is its own tile; nothing is drawn on a shared line
         minimap: { x: this.cells.length * CELL + REGION_X + MINIMAP.dx, y: REGION_Y + MINIMAP.dy, w: MINIMAP.w, h: MINIMAP.h,
           scaleX: MINIMAP.scale, scaleY: MINIMAP.scale, pad: 1 },
