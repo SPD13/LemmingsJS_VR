@@ -29,6 +29,11 @@
   #level-text-body { color: #8fa1bb; margin-top: 4px; white-space: pre-wrap; }
   #level-text-body[hidden] { display: none; }
   #hud-hover { bottom: 12px; left: 12px; color: #ffd866; min-height: 16px; }
+  /* the name of a toolbar button the mouse has rested on, hung over it */
+  #skill-tip { position: fixed; z-index: 11; pointer-events: none; transform: translate(-50%, -100%);
+    color: #f0f3f8; border: 1px solid #ffd866; border-radius: 6px; background: rgba(10, 14, 22, 0.96);
+    padding: 3px 10px; font-size: 12px; font-weight: bold; white-space: nowrap; }
+  #skill-tip[hidden] { display: none; }
   /* the red REPLAY over the play area while a NeoLemmix attempt is replaying */
   #replay-badge { position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
     color: #ff3b3b; border: 2px solid #ff3b3b; border-radius: 6px; background: rgba(40, 8, 8, 0.75);
@@ -315,6 +320,7 @@
 </div>
 
 <div id="hud-hover" class="hud">&nbsp;</div>
+<div id="skill-tip" hidden></div>
 <div id="replay-badge" hidden>REPLAY</div>
 <div id="version-warning" hidden></div>
 

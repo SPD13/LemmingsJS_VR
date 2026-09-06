@@ -209,6 +209,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     textToggle: document.getElementById("level-text-toggle"),
     textBody: document.getElementById("level-text-body"),
     hover: document.getElementById("hud-hover"),
+    skillTip: document.getElementById("skill-tip"),
     loading: document.getElementById("loading"),
     pauseBtn: document.getElementById("btn-pause"),
     title: document.getElementById("hud-title"),
@@ -1576,27 +1577,69 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     vrTip.visible = false;
   }
 
+  /** The label the beam has earned, if any: an icon button's, once the
+   *  beam has rested on it, or else the name of the skills bar button it
+   *  has rested on (the raised copy of the button is what to hang it over). */
+  function restedTip() {
+    const now = performance.now();
+    const button = vrTipName && iconButtons.find((b) => b.name === "vr-" + vrTipName);
+    if (button && button.visible) {
+      return now - vrTipSince < VR_TIP_DELAY ? null
+        : { text: vrTipTexts[vrTipName](), anchor: button };
+    }
+    const tip = session && session.gui.hoverTip();
+    if (!tip || now - tip.since < VR_TIP_DELAY) return null;
+    return { text: tip.text, anchor: tip.tile };
+  }
+
   /** Per frame in a session: show the label once the beam has rested, and
    *  keep it just above its button, in the button's plane. */
   function updateVrTip() {
-    const button = vrTipName && iconButtons.find((b) => b.name === "vr-" + vrTipName);
-    if (!button || !button.visible || performance.now() - vrTipSince < VR_TIP_DELAY) {
+    const tip = restedTip();
+    if (!tip) {
       vrTip.visible = false;
       return;
     }
-    const text = vrTipTexts[vrTipName]();
-    if (text !== vrTipText || !vrTip.visible) {
-      vrTipText = text;
-      vrTip.userData.paint(text);
+    if (tip.text !== vrTipText || !vrTip.visible) {
+      vrTipText = tip.text;
+      vrTip.userData.paint(tip.text);
     }
-    button.updateWorldMatrix(true, false);
-    const q = button.parent.getWorldQuaternion(new THREE.Quaternion());
+    const anchor = tip.anchor;
+    anchor.updateWorldMatrix(true, false);
+    const q = anchor.parent.getWorldQuaternion(new THREE.Quaternion());
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
-    const size = button.getWorldScale(new THREE.Vector3()).y;
-    vrTip.position.copy(button.getWorldPosition(new THREE.Vector3()))
+    const size = anchor.getWorldScale(new THREE.Vector3()).y;
+    vrTip.position.copy(anchor.getWorldPosition(new THREE.Vector3()))
       .addScaledVector(up, size / 2 + VR_TIP_HEIGHT / 2 + 0.012);
     vrTip.quaternion.copy(q);
     vrTip.visible = true;
+  }
+
+  // ---------------------------------------------- the same on a monitor
+  /**
+   * The skills bar's buttons carry pictures and counts but no words, so on
+   * a monitor too a mouse that rests on one gets its name: a small DOM
+   * label hung over the raised button, after the same wait as the headset's
+   * beam. It follows the button (the bar moves with the viewport and the
+   * flat/diorama swing) and goes the moment the mouse leaves it.
+   */
+  const SKILL_TIP_GAP = 6; // css px between the label and the button's top edge
+  function updateSkillTip() {
+    const el = hud.skillTip;
+    const tip = !renderer.xr.isPresenting && session && session.gui.hoverTip();
+    if (!tip || performance.now() - tip.since < VR_TIP_DELAY) {
+      if (!el.hidden) el.hidden = true;
+      return;
+    }
+    if (el.textContent !== tip.text) el.textContent = tip.text;
+    // the top edge of the raised button, on the screen
+    const top = tip.tile.localToWorld(new THREE.Vector3(0, 0.5, 0)).project(desktopEye());
+    const rect = renderer.domElement.getBoundingClientRect();
+    const x = rect.left + (top.x + 1) / 2 * rect.width;
+    const y = rect.top + (1 - top.y) / 2 * rect.height - SKILL_TIP_GAP;
+    el.style.left = x.toFixed(1) + "px";
+    el.style.top = y.toFixed(1) + "px";
+    if (el.hidden) el.hidden = false;
   }
 
   // ------------------------------------------------------ level text (VR)
@@ -5417,6 +5460,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
           { on: !session.game.getGameTimer().isRunning() });
       }
     }
+    updateSkillTip(); // the monitor's label on a bar button (gone with the level)
     // the in-scene windows are there with or without a level: the catalog
     // is how a level gets chosen in the first place
     if (renderer.xr.isPresenting) {
@@ -5694,6 +5738,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     vrCatalog: { load: loadVrCatalog, items: () => vrCatalogItems, cells: () => vrCatalogCells, panel: vrCatalogPanel },
     // the beam's label on an icon button, for the same: update() is the per-frame step
     vrTip: { update: updateVrTip, mesh: vrTip, text: () => vrTipText },
+    skillTip: { update: updateSkillTip, el: hud.skillTip }, // the monitor's label on a bar button
     get session() { return session; },
   };
 

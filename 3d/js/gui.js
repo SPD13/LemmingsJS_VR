@@ -58,6 +58,23 @@ const GUI_ORDER_BAR_TOOL = 55;  // the VR lock/move handles above the bar
 const GUI_ORDER_MODAL = 56;
 const GUI_ORDER_MODAL_BTN = 57;
 
+// What each button of the DOS panel is called, for the label a pointer
+// resting on it gets (see hoverTip): the release-rate pair, the eight
+// skills in panel order (getSkillByPanelIndex), then pause, nuke, speed.
+const GUI_DOS_LABELS = ["release rate down", "release rate up",
+  "climber", "floater", "bomber", "blocker", "builder", "basher", "miner", "digger",
+  "pause", "nuke", "speed"];
+// The same for a Lemmix panel's cells (layout.cells): a split cell has one
+// name per half. A skill slot is named by its skill ("skill:BUILDER"); an
+// empty one has no name, and gets no label.
+const GUI_LEMMIX_LABELS = {
+  rrminus: "release rate down", rrplus: "release rate up",
+  pause: "pause", nuke: "nuke", speed: "fast forward", restart: "restart",
+  frameskip: { upper: "frame back", lower: "frame forward" },
+  directional: { upper: "select facing left", lower: "select facing right" },
+  cpmreplay: { upper: "clear physics", lower: "load replay" },
+};
+
 // The panel ships as one composited bitmap - the button pictures are baked
 // into their tiles - but every tile's background is just the yellow/gray
 // dither, so the artwork color-keys out and can be extruded. Black counts as
@@ -124,6 +141,7 @@ class GuiPanel {
     this.resources = resources;
     this.hoverTile = null;     // the raised copy of the hovered button
     this.hoverIndex = null;
+    this.hoverSince = 0;       // when the pointer arrived on the hovered button
     this.tileReliefs = null;   // extruded artwork, one mesh per button
     this.hoverRelief = null;   // the hovered tile's figure, raised with it
     // Multiplies how far the artwork stands off the panel. The toolbar is an
@@ -575,6 +593,7 @@ class GuiPanel {
     const index = this._buttonIndexAt(uv);
     const half = index == null ? null : this._halfAt(index, (1 - uv.y) * this.canvas.height);
     if (index === this.hoverIndex && half === this.hoverHalf) return;
+    this.hoverSince = performance.now(); // a new button: its label waits again
     // put the previously raised button back in its slot
     this._setPartVisible(this.hoverIndex, this.hoverHalf, this.reliefOn);
     this.hoverIndex = index;
@@ -595,6 +614,34 @@ class GuiPanel {
     this._layoutHoverTile(index, half);
     this._layoutSocket(index, half);
     this._layoutHoverRelief(index, half);
+  }
+
+  /** What the button at `index` (and, on a split cell, `half`) is called,
+   *  or null for a button with no name (an empty Lemmix skill slot). */
+  buttonLabel(index, half) {
+    if (index == null) return null;
+    const layout = this.game.panelLayout || null;
+    if (!layout) return GUI_DOS_LABELS[index] || null;
+    const what = layout.cells ? layout.cells[index] : null;
+    if (!what) return null;
+    if (what.startsWith("skill:")) return what.slice(6).toLowerCase();
+    const label = GUI_LEMMIX_LABELS[what];
+    if (label && typeof label === "object") return half ? label[half] || null : null;
+    return label || null;
+  }
+
+  /**
+   * The label a pointer resting on a button earns: its name, when the
+   * pointer arrived on it, and the raised copy of the button to hang the
+   * label over (the page decides how long the pointer must rest, and draws
+   * the label in the DOM on a monitor or in the scene in a headset).
+   * Null while no named button is hovered.
+   */
+  hoverTip() {
+    if (this.hoverIndex == null || !this.hoverTile || !this.hoverTile.visible) return null;
+    const text = this.buttonLabel(this.hoverIndex, this.hoverHalf);
+    if (!text) return null;
+    return { text, since: this.hoverSince, tile: this.hoverTile };
   }
 
   _layoutHoverTile(index, half) {
