@@ -80,6 +80,12 @@ const GUI_LEMMIX_LABELS = {
 // dither, so the artwork color-keys out and can be extruded. Black counts as
 // artwork: it outlines the figures and *is* the pause/nuke/speed icons.
 const GUI_BG_COLORS = new Set(["240,240,0", "128,128,128"]);
+// "Flat skills": the dither swapped for one colour - the two colours' mean,
+// what the eye makes of the dither from a step back - so the pictures and
+// counts sit on a plain ground instead of a texture that competes with them.
+// A Lemmix panel paints its own tiles and does the same with theirs (see
+// GamePanel.setFlatBackground).
+const GUI_FLAT_BG = [184, 184, 64];
 const GUI_ICON_BOTTOM = 39;
 const GUI_ICON_DEPTH = 1;    // panel pixels of relief on the artwork
 // Buttons 0..9 carry a count drawn at y17..25 (it changes as skills are
@@ -154,7 +160,42 @@ class GuiPanel {
     // Whether the artwork and counters stand off the panel at all: off, the
     // bar is the flat original. See setRelief.
     this.reliefOn = true;
+    // Whether the buttons' textured background is swapped for one plain
+    // colour. See setFlatSkills.
+    this.flatSkills = false;
     this._tileGeoms = new Map();
+  }
+
+  /** A Lemmix panel paints its tiles itself, and flattens them itself. */
+  _ownsBackground() {
+    return !!(this.game.gui && typeof this.game.gui.setFlatBackground === "function");
+  }
+
+  /** The buttons' background as one colour, or the original texture. */
+  setFlatSkills(on) {
+    on = !!on;
+    if (this.flatSkills === on) return;
+    this.flatSkills = on;
+    if (this._ownsBackground()) this.game.gui.setFlatBackground(on);
+    else this.dirty = true; // the DOS panel is keyed on the canvas at the next update
+  }
+
+  /** The DOS dither under the buttons repainted as one colour, on the canvas
+   *  just filled from the game's buffer. Only the dither goes: the artwork,
+   *  the counts on their black boxes and the white selection frame are other
+   *  colours, and stay. */
+  _flattenBackground() {
+    const W = this.canvas.width, H = this.canvas.height;
+    const w = Math.min(GUI_BUTTONS * GUI_TILE_W, W), h = H - GUI_TILE_TOP;
+    if (w <= 0 || h <= 0) return;
+    const img = this.ctx.getImageData(0, GUI_TILE_TOP, w, h);
+    const d = img.data, [r, g, b] = GUI_FLAT_BG;
+    for (let i = 0; i < d.length; i += 4) {
+      if (GUI_BG_COLORS.has(d[i] + "," + d[i + 1] + "," + d[i + 2])) {
+        d[i] = r; d[i + 1] = g; d[i + 2] = b;
+      }
+    }
+    this.ctx.putImageData(img, 0, GUI_TILE_TOP);
   }
 
   /** A Lemmix panel says which pixels are pictures and which are digits
@@ -172,7 +213,8 @@ class GuiPanel {
     const W = this.canvas.width, H = this.canvas.height;
     // the button backgrounds to key the pictures out of: the DOS dither
     const bg = GUI_BG_COLORS;
-    const data = this.ctx.getImageData(0, 0, W, H).data;
+    // the game's own pixels: the canvas may hold the dither flattened (_flattenBackground)
+    const data = this.display.getImageData().data;
     const mask = new Uint8Array(W * H);
     for (let x = 0; x < GUI_BUTTONS * GUI_TILE_W && x < W; x++) {
       const col = x % GUI_TILE_W;
@@ -756,6 +798,7 @@ class GuiPanel {
     if (!this.dirty) return;
     this.dirty = false;
     this.ctx.putImageData(this.display.getImageData(), 0, 0);
+    if (this.flatSkills && !this._ownsBackground()) this._flattenBackground();
     this.texture.needsUpdate = true;
     if (this.hoverTexture) this.hoverTexture.needsUpdate = true; // shares the canvas
     if (this.reliefTexture) this.reliefTexture.needsUpdate = true;

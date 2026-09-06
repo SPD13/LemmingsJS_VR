@@ -156,6 +156,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     })(),
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
+    // the skill bar's buttons on one plain colour instead of their texture
+    flatSkills: setting("flatskills", "lem3d-flatskills", true),
     // The 2D view: the original's flat picture under an orthographic camera,
     // with everything else of this page. Off, the diorama.
     flat: setting("flat", "lem3d-flat", false),
@@ -820,6 +822,16 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     c.moveTo(14, 46); c.lineTo(58, 46); c.lineTo(58, 30); // the shadow of its thickness
     c.stroke();
   });
+  // the bar again, its cells filled plain: the buttons' background as one colour
+  const flatSkillsIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    c.fillStyle = st.on ? "rgba(111, 206, 126, 0.35)" : "rgba(90, 106, 124, 0.35)";
+    c.fillRect(10, 24, 44, 16);
+    c.beginPath();
+    c.rect(10, 24, 44, 16);
+    c.moveTo(24, 24); c.lineTo(24, 40);
+    c.moveTo(40, 24); c.lineTo(40, 40);
+    c.stroke();
+  });
   const hudIcons = {
     prev: iconizeHudButton(document.getElementById("btn-prev"), vrPrevBtn.userData.draw, "previous level"),
     restart: iconizeHudButton(document.getElementById("btn-restart"), vrRestartBtn.userData.draw, "restart the level"),
@@ -843,6 +855,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     smoothTerrain: iconizeHudButton(document.getElementById("btn-smooth-terrain"), smoothTerrainIcon, "edge smoothing"),
     colorBlend: iconizeHudButton(document.getElementById("btn-colorblend"), colorBlendIcon, "colour blend"),
     skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
+    flatSkills: iconizeHudButton(document.getElementById("btn-flatskills"), flatSkillsIcon, "flat skills"),
     // the world library's own tools, in the same dress
     libRescan: iconizeHudButton(document.getElementById("lib-rescan"), rescanIcon, "rescan the level packs"),
     libSetup: iconizeHudButton(document.getElementById("lib-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
@@ -1797,9 +1810,11 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   const colorBlendLevel = () =>
     COLOR_BLEND_LEVELS.find((l) => l.name === state.colorBlend) || COLOR_BLEND_LEVELS[1];
 
-  const VR_SET_W = 640, VR_SET_H = 536;   // canvas pixels (a row each, plus the title)
+  const VR_SET_W = 640;                   // canvas pixels
   const VR_SET_TOP = 96;                  // first row
   const VR_SET_ROW = 68;
+  const VR_SET_ROWS = 8;                  // vrSettingRows.length: the title, then a row each
+  const VR_SET_H = VR_SET_TOP + VR_SET_ROWS * VR_SET_ROW + 8;
 
   const vrSettingRows = [
     { label: "3D terrain", get: () => state.emboss, act: () => toggleEmboss() },
@@ -1809,6 +1824,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     { label: "colour blend", get: () => state.colorBlend !== "off",
       text: () => colorBlendLevel().label.toUpperCase(), act: () => toggleColorBlend() },
     { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
+    { label: "flat skills", get: () => state.flatSkills, act: () => toggleFlatSkills() },
     { label: "recentre the board", act: () => vr.recenterNow() },
   ];
   let vrSettingsHover = -1;
@@ -2408,21 +2424,45 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   renderColorBlendBtn();
 
   // the skill bar's own relief: its artwork and counters extruded off the
-  // panel. Off, the bar is the flat original.
+  // panel, in a headset only - on a flat screen the bar is always the flat
+  // original, whatever the switch says (see applySkillBarRelief). Off, the
+  // headset's bar is flat too.
   const skillBarBtn = document.getElementById("btn-skillbar");
   const renderSkillBarBtn = () => {
     hudIcons.skillBar({ on: state.skillBar });
-    skillBarBtn.title = "3D skills bar (the panel's artwork in relief): " + (state.skillBar ? "on" : "off");
+    skillBarBtn.title = "3D skills bar in VR (the panel's artwork in relief): " + (state.skillBar ? "on" : "off");
   };
+  /** The relief is a headset's: it stands off the panel only while presenting. */
+  function applySkillBarRelief() {
+    if (session) session.gui.setRelief(state.skillBar && renderer.xr.isPresenting);
+  }
   function toggleSkillBar() {
     state.skillBar = !state.skillBar;
     try { localStorage.setItem("lem3d-skillbar", state.skillBar ? "on" : "off"); } catch (e) {}
     renderSkillBarBtn();
-    if (session) session.gui.setRelief(state.skillBar && !flatActive);
+    applySkillBarRelief();
     paintVrSettings();
   }
   skillBarBtn.addEventListener("click", toggleSkillBar);
   renderSkillBarBtn();
+
+  // the skill bar's buttons on one plain colour: the DOS dither and a pack's
+  // skill_panels.png texture compete with the pictures on them. Off, the
+  // original texture.
+  const flatSkillsBtn = document.getElementById("btn-flatskills");
+  const renderFlatSkillsBtn = () => {
+    hudIcons.flatSkills({ on: state.flatSkills });
+    flatSkillsBtn.title = "flat skills (the buttons on one plain colour instead of their texture): " + (state.flatSkills ? "on" : "off");
+  };
+  function toggleFlatSkills() {
+    state.flatSkills = !state.flatSkills;
+    try { localStorage.setItem("lem3d-flatskills", state.flatSkills ? "on" : "off"); } catch (e) {}
+    renderFlatSkillsBtn();
+    if (session) session.gui.setFlatSkills(state.flatSkills);
+    paintVrSettings();
+  }
+  flatSkillsBtn.addEventListener("click", toggleFlatSkills);
+  renderFlatSkillsBtn();
 
   // The 2D view against the diorama. The switch is the page's, not a
   // headset's: inside a session the board is always the diorama, and the
@@ -2931,7 +2971,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const objCapture = new SpriteCapture();
 
     const gui = new GuiPanel(guiRoot, game, resources);
-    gui.setRelief(state.skillBar);
+    gui.setRelief(state.skillBar && renderer.xr.isPresenting); // a headset's; see applySkillBarRelief
+    gui.setFlatSkills(state.flatSkills);
     gui.onMinimapCenter = (p) => centerViewOn(p.x, p.y);
 
     if (game.states) {
@@ -3356,7 +3397,6 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
         terrain.setFlat(on, FLAT_TERRAIN_Z);
         if (session.editor) session.editor.setFlat(on);
         session.setPortalsVisible(!on);
-        gui.setRelief(state.skillBar && !on);
       },
     };
     session.editor = new PieceEditor(session, profileFiles, timer, { confirm: askConfirm });
@@ -3380,8 +3420,9 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   function layoutGuiPanel() {
     if (!session || !session.gui) return;
     if (renderer.xr.isPresenting) {
-      // deeper relief in a headset: on a flat screen the emboss is carried by
-      // its shading, but stereo wants parallax to go with it
+      // the relief is a headset's: its shading alone means little on a flat
+      // screen, and stereo wants parallax to go with it - so deeper, here only
+      session.gui.setRelief(state.skillBar);
       session.gui.setReliefDepth(GUI_VR_RELIEF_DEPTH);
       // a Lemmix panel is wider than the DOS one (its minimap frame comes
       // after the buttons): the bar grows with it so a panel pixel stays
@@ -3434,6 +3475,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       for (const b of vrWidgets) b.visible = false;
       vrVolumeSlider.visible = false;
       vrStatusPanel.visible = false;
+      session.gui.setRelief(false); // the flat original on a monitor, whatever the switch says
       session.gui.setReliefDepth(1);
       if (flatActive) {
         // the 2D view: the band along the bottom, sized in screen pixels

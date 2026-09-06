@@ -43,7 +43,7 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
-`?emboss=`, `?smooth=`, `?smoothterrain=`, `?doors=`, `?skillbar=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
+`?emboss=`, `?smooth=`, `?smoothterrain=`, `?doors=`, `?skillbar=`, `?flatskills=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
 `0`/`off`/`false`), and `?assets=static|server` - where `neolemmix/` and
 `levels/` come from: this browser's storage, filled on the setup page, or
 the web server (see "Setup" below). Those are normally toggled with the buttons and
@@ -272,8 +272,16 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   eye has to pick out of it, and none of them has a tag of its own, since
   none of them is a piece.
 - "3D skills bar" extrudes the skill panel's artwork and counters off the
-  panel, so they read as embossed; off, the bar is the flat original (a
-  hovered button still rises, since that is how the bar answers the pointer).
+  panel in a headset, so they read as embossed; off, the headset's bar is
+  the flat original. On a monitor the bar is always the flat original,
+  whatever the switch says: the relief is sold by parallax, which a flat
+  screen has none of. A hovered button still rises on either, since that is
+  how the bar answers the pointer.
+- "flat skills" (on by default) paints the skill panel's buttons on one plain
+  colour instead of their texture - the DOS dither, or a pack's
+  `skill_panels.png` - which competes with the pictures and counts on them.
+  The colour is the texture's mean, so the panel keeps its tone; off, the
+  original texture. Applies on the desktop and in a headset alike.
 - the pencil icon of the right panel, the piece-editor key (`J` by default) or
   `?edit=1` enters edit mode and opens the piece editor (which pauses the sim):
   click a terrain piece to

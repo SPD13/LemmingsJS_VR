@@ -26,7 +26,7 @@
 
   // localStorage keys that are preferences
   const PREFS_KEYS = [
-    "lem3d-emboss", "lem3d-smooth", "lem3d-doors", "lem3d-skillbar", "lem3d-flat", "lem3d-shadows",
+    "lem3d-emboss", "lem3d-smooth", "lem3d-doors", "lem3d-skillbar", "lem3d-flatskills", "lem3d-flat", "lem3d-shadows",
     "lem3d-music", "lem3d-sound", "lem3d-volume", "lem3d-bar", "lem3d-lib-order", "lem3d-lib-path",
     "lem3d-gal-open", "lem3d-favorites",
   ];
