@@ -284,19 +284,21 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   The colour is the texture's mean, so the panel keeps its tone; off, the
   original texture. Applies on the desktop and in a headset alike.
 - "environment" (full by default) puts the board in a place drawn in the
-  level's own pixel art, with distance in it: a floor in front of and below
-  it and a ceiling above, and behind it a run of layers going back - one,
-  three, seven and sixteen metres - each a wider band of floor and ceiling
-  and, at its far end, a wall that is a cut-out skyline of the level's
-  pieces the next layer shows through, the last one solid, the sky; every
-  layer sinks further into a fog in the level's own hue, and in a headset
-  the stereo between the layers is the depth (`3d/js/environment.js`, the
-  pictures from `3d/js/envgen.js`). It is a strength like the colour blend:
-  *full* lays the level's own terrain pieces as a ground strip, as overhangs
-  and as hills behind hills, from a generator seeded with the level's id,
-  over *ambient*, which is the same room in gradients dithered between the
-  level's colours (the style's theme colours, the colours the blend map
-  sampled from the picture, a DOS tileset's palette); then *off*. The
+  level's own pixel art, with distance in it, whichever way the player
+  looks: rings round the player - two, four, eight and seventeen metres
+  out - each a band of floor and, at its outer edge, a wall all the way
+  round that is a cut-out skyline of the level's pieces the next ring shows
+  through, the last one solid, the sky; a ceiling of fog alone; every ring
+  sinks further into a fog in the level's own hue, and in a headset the
+  stereo between the rings is the depth (`3d/js/environment.js`, the
+  pictures from `3d/js/envgen.js`). The board stands inside the first ring,
+  in front of the player, whose place at the moment the board is placed is
+  the rings' centre. It is a strength like the colour blend: *full* lays
+  the level's own terrain pieces as a ground strip round the first ring's
+  rim and as hills behind hills, from a generator seeded with the level's
+  id, over *ambient*, which is the same place in gradients dithered
+  between the level's colours (the style's theme colours, the colours the
+  blend map sampled from the picture, a DOS tileset's palette); then *off*. The
   style's background image, when the level names one (`$BACKGROUND`), is
   tiled behind the slab and is the sky of the last layer, which the fog
   then takes its colour from; a picture meant to be placed once rather than

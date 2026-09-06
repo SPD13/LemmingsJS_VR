@@ -15,7 +15,7 @@
  *   node tools/env-gen.js <style|level-id> [<style|level-id> ...] [options]
  *     --dry              the collages only, no model (default out: tmp/env-dry/)
  *     --out <dir>        where to write (default 3d/env/ unless --dry)
- *     --planes a,b,c     floor, wall, ceiling (default all three)
+ *     --planes a,b       floor, wall (default both; the ceiling is fog alone)
  *     --layers 0,1       which depth layers (default: every one the model can
  *                        work on; a far layer's picture too flat to send is
  *                        kept as its collage)
@@ -43,6 +43,9 @@
  *                        collage's (the tileset's exactly, but speckled)
  *     --dither           dither between neighbouring palette colours (off: nearest only)
  *     --requantise       redo the finish from the saved <plane>-raw.png, no model call
+ *   A picture wider than about four times its height goes through the model
+ *   in overlapping strips (the last running round into the first, since the
+ *   pictures wrap) that are blended back together.
  *     --keep-raw         also write the model's output as-is (<plane>-raw.png)
  *   Every run also writes contact.html next to the pictures: the collage,
  *   the model's answer and the finished picture side by side, with scores.
@@ -57,7 +60,7 @@ const PX_PER_METRE = 400; // 1 / VR_PIXEL_SCALE (vr.js)
 const KINDS = ["floor", "wall", "ceiling"];
 
 function parseArgs(argv) {
-  const o = { names: [], planes: KINDS, api: "http://127.0.0.1:7860", denoise: 0.45, steps: 24, cfg: 7, quantise: true };
+  const o = { names: [], planes: ["floor", "wall"], api: "http://127.0.0.1:7860", denoise: 0.45, steps: 24, cfg: 7, quantise: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], next = () => argv[++i];
     if (a === "--dry") o.dry = true;
@@ -319,9 +322,9 @@ const PLANE_WORDS = {
   ceiling: "cave ceiling seen from below, overhangs and stalactites, dark",
 };
 
-/** Can the model work on a picture this shape? The far layers are low and wide. */
+/** Can the model work on a picture this shape? A strip too low to scale up is left alone. */
 function modelable(bmp) {
-  return Math.min(bmp.width, bmp.height) >= 96 && Math.max(bmp.width, bmp.height) / Math.min(bmp.width, bmp.height) <= 5;
+  return Math.min(bmp.width, bmp.height) >= 64;
 }
 
 /** A cut-out (a wall that is not the last) over the fog, so the model sees a whole picture. */
@@ -342,21 +345,54 @@ function withAlphaOf(bmp, collage) {
   return out;
 }
 
-/** One plane through the model: the collage as the init image at a size the
- *  model likes (its short side at least 256, its long side 1024 at most,
- *  multiples of 64), back down to the plane's size afterwards. */
-async function polish(bmp, name, info, opts, seed) {
-  const { kind, i } = EnvGen.parsePlane(name);
+/** A column range of a picture that wraps round, as its own bitmap. */
+function wrappedCrop(bmp, x0, w) {
+  const out = new Lemmix.Bitmap(w, bmp.height), s = bmp.words(), d = out.words(), W = bmp.width;
+  for (let y = 0; y < bmp.height; y++) for (let x = 0; x < w; x++) d[y * w + x] = s[y * W + (((x0 + x) % W) + W) % W];
+  return out;
+}
+
+/**
+ * The strips a wide picture is cut into for the model - each about 3.5
+ * times as wide as high, overlapping its neighbours, the last one running
+ * round into the first since the picture wraps - and how they are laid
+ * back: blended across the overlaps.
+ */
+function stripsOf(bmp) {
+  const aspect = bmp.width / bmp.height;
+  if (aspect <= 4.5) return [{ x: 0, w: bmp.width, ov: 0 }];
+  const n = Math.ceil(aspect / 3.5), cw = Math.ceil(bmp.width / n), ov = Math.min(64, cw >> 2);
+  return Array.from({ length: n }, (_, i) => ({ x: i * cw - ov, w: Math.min(cw, bmp.width - i * cw) + 2 * ov, ov }));
+}
+
+function layStrips(strips, pieces, width, height) {
+  const acc = new Float32Array(width * height * 4), wsum = new Float32Array(width * height);
+  strips.forEach((st, i) => {
+    const pc = pieces[i], d = pc.data;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < st.w; x++) {
+        const wgt = st.ov ? Math.min(1, (x + 1) / st.ov, (st.w - x) / st.ov) : 1;
+        const gx = (((st.x + x) % width) + width) % width, o = y * width + gx, p = (y * st.w + x) * 4;
+        acc[o * 4] += d[p] * wgt; acc[o * 4 + 1] += d[p + 1] * wgt; acc[o * 4 + 2] += d[p + 2] * wgt;
+        wsum[o] += wgt;
+      }
+    }
+  });
+  const out = new Lemmix.Bitmap(width, height), od = out.data;
+  for (let o = 0; o < width * height; o++) {
+    const w = wsum[o] || 1;
+    od[o * 4] = acc[o * 4] / w; od[o * 4 + 1] = acc[o * 4 + 1] / w; od[o * 4 + 2] = acc[o * 4 + 2] / w; od[o * 4 + 3] = 255;
+  }
+  return out;
+}
+
+/** One strip through the model: the collage as the init image at a size
+ *  the model likes (its short side at least 256, its long side 1024 at
+ *  most, multiples of 64), back down to the strip's size afterwards. */
+async function polishStrip(bmp, prompt, opts, seed) {
   const sc = Math.max(1, 256 / Math.min(bmp.width, bmp.height));
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(v / 64) * 64));
   const gw = clamp(bmp.width * sc, 256, 1024), gh = clamp(bmp.height * sc, 256, 768);
-  const loraInPrompt = opts.lora && opts.lora !== "none" && !/\.(ckpt|safetensors)$/i.test(opts.lora.split(":")[0]);
-  const lora = loraInPrompt ? " <lora:" + (opts.lora.includes(":") ? opts.lora : opts.lora + ":0.8") + ">" : "";
-  const distance = i === 0 ? "" : i === 1 ? "middle distance" : "far away, hazy, atmospheric perspective";
-  const prompt = [
-    opts.trigger || "", "pixel art", "16-bit video game background", info.title + " tileset", PLANE_WORDS[kind], distance,
-    "flat shading, limited palette, crisp pixels, no text", opts.prompt || "",
-  ].filter(Boolean).join(", ") + lora;
   const body = {
     init_images: [pngBuffer(resizeNearest(bmp, gw, gh)).toString("base64")],
     prompt, negative_prompt: "blurry, photo, realistic, text, watermark, smooth gradient, 3d render, noise",
@@ -376,7 +412,30 @@ async function polish(bmp, name, info, opts, seed) {
   const json = await api(opts.api, "/sdapi/v1/img2img", body);
   if (!json.images || !json.images[0]) throw new Error("img2img: no image in the answer");
   const raw = fromPngBuffer(Buffer.from(json.images[0].split(",").pop(), "base64"));
-  return { raw, small: boxDown(raw, bmp.width, bmp.height), prompt };
+  return { raw, small: boxDown(raw, bmp.width, bmp.height) };
+}
+
+/** One plane through the model, in strips when it is wide, blended back together. */
+async function polish(bmp, name, info, opts, seed) {
+  const { kind, i } = EnvGen.parsePlane(name);
+  const loraInPrompt = opts.lora && opts.lora !== "none" && !/\.(ckpt|safetensors)$/i.test(opts.lora.split(":")[0]);
+  const lora = loraInPrompt ? " <lora:" + (opts.lora.includes(":") ? opts.lora : opts.lora + ":0.8") + ">" : "";
+  const distance = i === 0 ? "" : i === 1 ? "middle distance" : "far away, hazy, atmospheric perspective";
+  const prompt = [
+    opts.trigger || "", "pixel art", "16-bit video game background", info.title + " tileset", PLANE_WORDS[kind], distance,
+    "flat shading, limited palette, crisp pixels, no text", opts.prompt || "",
+  ].filter(Boolean).join(", ") + lora;
+  const strips = stripsOf(bmp);
+  const pieces = [];
+  for (let k = 0; k < strips.length; k++) {
+    const st = strips[k];
+    process.stdout.write(strips.length > 1 ? (k + 1) + "/" + strips.length + " " : "");
+    const { small } = await polishStrip(wrappedCrop(bmp, st.x, st.w), prompt, opts, seed + k * 7919);
+    pieces.push(small);
+  }
+  const small = strips.length === 1 ? pieces[0] : layStrips(strips, pieces, bmp.width, bmp.height);
+  // the raw picture kept is the answer laid back at the plane's size (the strips do not survive as one)
+  return { raw: small, small, prompt, strips: strips.length };
 }
 
 // --------------------------------------------------------------- the run
@@ -432,7 +491,7 @@ async function main() {
           rows.push(row);
           continue;
         }
-        let raw, small, prompt;
+        let raw, small, prompt, strips = 0;
         const init = cutout ? overFog(collage, built.fog) : collage;
         if (opts.requantise) {
           process.stdout.write("  " + plane + " from its raw picture... ");
@@ -441,12 +500,13 @@ async function main() {
           prompt = "(as before)";
         } else {
           process.stdout.write("  " + plane + " through the model... ");
-          ({ raw, small, prompt } = await polish(init, plane, { title }, opts, seedBase + names.indexOf(plane)));
+          ({ raw, small, prompt, strips } = await polish(init, plane, { title }, opts, seedBase + names.indexOf(plane)));
         }
         let finished = opts.quantise ? quantise(small, collage, palette, opts) : small;
         if (cutout) finished = withAlphaOf(finished, collage);
         row.prompt = prompt;
         if (opts.keepRaw) { row.raw = file + "-raw.png"; writePng(path.join(dir, row.raw), raw.width, raw.height, raw.data); }
+        if (strips) row.strips = strips;
         row.final = file + ".png";
         writePng(path.join(dir, row.final), finished.width, finished.height, finished.data);
         row.scores.final = score(finished, collage, palette);
