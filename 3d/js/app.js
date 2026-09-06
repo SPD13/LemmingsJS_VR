@@ -154,6 +154,16 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       const named = { off: "off", soft: "soft", smooth: "smooth", "0": "off", "1": "soft" };
       return named[String(raw)] || "soft";
     })(),
+    // the room around the board (environment.js): off, the ambient gradients,
+    // or the full collage of the level's own pieces
+    environment: (() => {
+      const p = params.get("environment");
+      const raw = p != null ? p : (() => {
+        try { return localStorage.getItem("lem3d-environment"); } catch (e) { return null; }
+      })();
+      const named = { off: "off", ambient: "ambient", full: "full", "0": "off", "1": "ambient", "2": "full", false: "off", true: "full", on: "full" };
+      return named[String(raw).toLowerCase()] || "full";
+    })(),
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
     skillBar: setting("skillbar", "lem3d-skillbar", true), // the skill bar's relief
     // the skill bar's buttons on one plain colour instead of their texture
@@ -270,6 +280,10 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   // (1 unit = 1 game pixel), scaled to meters and placed in reach in VR
   const dioramaRoot = new THREE.Group();
   scene.add(dioramaRoot);
+  // the room around it: the floor, the back wall, the ceiling (environment.js)
+  const environment = new Environment(scene, dioramaRoot, { pxPerMetre: 1 / VR_PIXEL_SCALE });
+  environment.setMode(state.environment);
+  Environment.loadShipped();
 
 
   const camera = new THREE.PerspectiveCamera(
@@ -814,6 +828,22 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     c.arc(32 + gap, 32, 13, 0, Math.PI * 2);
     c.stroke();
   });
+  // the room: a floor line and a ceiling line around a small slab, the back
+  // wall between them - filled in when the collage is on, an outline when
+  // only the gradients are
+  const environmentIcon = (cx, st) => switchIcon(cx, st, (c) => {
+    if (st.level === "full") {
+      c.fillStyle = st.on ? "rgba(111, 206, 126, 0.3)" : "rgba(90, 106, 124, 0.3)";
+      c.fillRect(16, 16, 32, 32);
+    }
+    c.beginPath();
+    c.rect(16, 16, 32, 32);          // the back wall
+    c.moveTo(8, 52); c.lineTo(56, 52); // the floor
+    c.moveTo(8, 12); c.lineTo(56, 12); // the ceiling
+    c.stroke();
+    c.fillStyle = st.on ? "#6fce7e" : "#5a6a7c";
+    c.fillRect(24, 30, 16, 5);        // the slab
+  });
   const skillBarIcon = (cx, st) => switchIcon(cx, st, (c) => {
     c.beginPath();
     c.rect(10, 24, 44, 16);
@@ -856,6 +886,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     colorBlend: iconizeHudButton(document.getElementById("btn-colorblend"), colorBlendIcon, "colour blend"),
     skillBar: iconizeHudButton(document.getElementById("btn-skillbar"), skillBarIcon, "3D skills bar"),
     flatSkills: iconizeHudButton(document.getElementById("btn-flatskills"), flatSkillsIcon, "flat skills"),
+    environment: iconizeHudButton(document.getElementById("btn-environment"), environmentIcon, "environment"),
     // the world library's own tools, in the same dress
     libRescan: iconizeHudButton(document.getElementById("lib-rescan"), rescanIcon, "rescan the level packs"),
     libSetup: iconizeHudButton(document.getElementById("lib-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
@@ -1813,7 +1844,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   const VR_SET_W = 640;                   // canvas pixels
   const VR_SET_TOP = 96;                  // first row
   const VR_SET_ROW = 68;
-  const VR_SET_ROWS = 8;                  // vrSettingRows.length: the title, then a row each
+  const VR_SET_ROWS = 9;                  // vrSettingRows.length: the title, then a row each
   const VR_SET_H = VR_SET_TOP + VR_SET_ROWS * VR_SET_ROW + 8;
 
   const vrSettingRows = [
@@ -1825,6 +1856,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       text: () => colorBlendLevel().label.toUpperCase(), act: () => toggleColorBlend() },
     { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
     { label: "flat skills", get: () => state.flatSkills, act: () => toggleFlatSkills() },
+    { label: "environment", get: () => state.environment !== "off",
+      text: () => state.environment.toUpperCase(), act: () => toggleEnvironment() },
     { label: "recentre the board", act: () => vr.recenterNow() },
   ];
   let vrSettingsHover = -1;
@@ -2423,6 +2456,25 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   colorBlendBtn.addEventListener("click", toggleColorBlend);
   renderColorBlendBtn();
 
+  // the room around the board: off, the ambient gradients, the full collage
+  // of the level's own pieces (environment.js). A strength, like the blend.
+  const environmentBtn = document.getElementById("btn-environment");
+  const renderEnvironmentBtn = () => {
+    hudIcons.environment({ on: state.environment !== "off", level: state.environment });
+    environmentBtn.title = "environment (a floor, a back wall and a ceiling in the level's own pixel art): "
+      + state.environment + " - press for " + Environment.MODES[(Environment.MODES.indexOf(state.environment) + 1) % Environment.MODES.length];
+  };
+  function toggleEnvironment() {
+    const i = Environment.MODES.indexOf(state.environment);
+    state.environment = Environment.MODES[(i + 1) % Environment.MODES.length];
+    try { localStorage.setItem("lem3d-environment", state.environment); } catch (e) {}
+    renderEnvironmentBtn();
+    environment.setMode(state.environment);
+    paintVrSettings();
+  }
+  environmentBtn.addEventListener("click", toggleEnvironment);
+  renderEnvironmentBtn();
+
   // the skill bar's own relief: its artwork and counters extruded off the
   // panel, in a headset only - on a flat screen the bar is always the flat
   // original, whatever the switch says (see applySkillBarRelief). Off, the
@@ -2494,6 +2546,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     cancelViewTween(); // an instant switch overrides one in progress
     flatActive = !!on && !presenting;
     document.body.classList.toggle("flat", flatActive);
+    environment.setVisible(!flatActive); // a room around a flat picture is no room
     controls.enabled = !flatActive && !presenting;
     if (session) session.setFlat(flatActive);
     resetBar(); // the bar onto the camera in force
@@ -2605,10 +2658,12 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       from = cameraPoseNow();
       to = flatPerspectivePose(level);
       session.setPortalsVisible(false); // they go at once
+      environment.setVisible(false);    // a room around a flat picture is no room
     } else {
       // the diorama takes over at once, collapsed flat under the far camera
       flatActive = false;
       document.body.classList.remove("flat");
+      environment.setVisible(true);
       session.setFlat(false);
       session.setPortalsVisible(false); // ...until the slab has half its depth
       session.terrain.setExtrusion(VIEW_TWEEN_COLLAPSE);
@@ -2729,6 +2784,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   function disposeSession() {
     if (!session) return;
     setReplayBadge(false);
+    environment.clearLevel();
     if (session.shadowOverlay) session.shadowOverlay.dispose(); // its geometries are rebuilt per hover, not tracked
     if (gameCursor) gameCursor.clear(renderer.domElement);
     if (mouseCursorSprite) mouseCursorSprite.visible = false;
@@ -2797,6 +2853,16 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     // which pixels may draw their neighbours' colours down the extrusion, and
     // where each of those colours is sampled from (depth.js)
     const blendMap = buildBlendMap(level, pieceMap, profile, groundData);
+    // what the room around the board is drawn from (environment.js, envgen.js)
+    const envCtx = {
+      engine: state.engine, levelId: state.levelId, width: level.width, height: level.height,
+      themeName: level.themeName || null, theme: level.theme || null,
+      background: level.background || null, backgroundName: level.info && level.info.background,
+      groundImage: level.groundImage, groundMask: level.groundMask && level.groundMask.groundMask,
+      donors: blendMap.donors, groundData, profile,
+      lemmixPieces: level.pieces || null, lemmixObjects: state.engine === "lemmix" ? level.objects : null,
+      dosPalette: level.groundPalette || null,
+    };
     // which pixels' colours run into their neighbours' (the tag and the switch)
     const colorMap = buildColorBlendMap(
       level, pieceMap, profile, state.colorBlend !== "off", groundData);
@@ -2839,10 +2905,12 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const decals = TerrainDecals.forLevel(level, resources, state.engine === "lemmix" ? level.physics : null);
     if (decals) terrain.setDecals(decals);
 
-    // dark backdrop behind the terrain so holes read as depth, not void
+    // dark backdrop behind the terrain so holes read as depth, not void - the
+    // environment's own material, which carries the level's colour or its
+    // wallpaper once the room is built (the page's dark colour with it off)
     const backdrop = new THREE.Mesh(
       resources.track(new THREE.PlaneGeometry(1, 1)),
-      resources.track(new THREE.MeshBasicMaterial({ color: 0x05070c }))
+      environment.backdropMaterial
     );
     backdrop.scale.set(level.width, level.height, 1);
     backdrop.position.set(level.width / 2, level.height / 2, -2);
@@ -3313,6 +3381,10 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       name: level.name.trim() || "(unnamed level)",
       meta, note: "", kind: "",
     });
+    // the room around the board, drawn after it is up and a plane per frame
+    if (!renderer.xr.isPresenting) environment.placeDesktop();
+    environment.setLevel(envCtx, state.engine === "lemmix" ? lemmixStyles : null)
+      .catch((err) => console.warn("[3d] environment:", err));
 
     session = {
       game, level, terrain, gui, worldGroup, pickPlane, ring,
@@ -4696,6 +4768,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     if (barAutoPlace) placeBarAtStart();
     else if (!barLocked) placeBarBelowDiorama();
     barAutoPlace = false;
+    // the room takes this placement and keeps it: the board moves inside it from here
+    environment.placeForXR(dioramaRoot);
     return true;
   }
 
@@ -4732,6 +4806,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     // an unlocked bar is a VR notion: on the desktop it rides the camera -
     // the one of whichever view the desktop had, put back here
     applyFlat(state.flat);
+    environment.placeDesktop();
   });
 
   /**
@@ -4886,6 +4961,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     // a recentre brings the windows to the new view along with the board
     onRecenter: (headPose) => placeVrWindows(headPose),
   });
+  environment.setVrGrid(vr.floor); // the headset's grid gives way to the room's floor
   // the monitor's view of a session: the board from where the head was when
   // it was placed, the bar along the bottom, the beam where it points
   const observer = new ObserverView(renderer, scene, guiRoot);
@@ -5771,6 +5847,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     stepViewTween, // one frame of a change of view, for checks without a frame loop
     audio, // audition SFX indexes: __lem3d.audio.playSfx(n)
     lemmixStyles,
+    environment, // the room around the board: .stats, .set, .rebuild(), .setMode()
     visibleLevelRect, centerViewOn, // the minimap's view rectangle and its click
     setReplayBadge, layoutGuiPanel, // for checks without a frame loop
     hotkeys, hotkeyDialog, runHotkey, // the key table, its dialog, a function by its binding

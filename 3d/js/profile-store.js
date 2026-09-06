@@ -145,6 +145,10 @@
           if (!out.objects) out.objects = { byId: {} };
           Object.assign(out.objects.byId, p.objects.byId);
         }
+        // the environment's hints (envgen.js): a later gallery's win per key
+        if (p.environment && typeof p.environment === "object") {
+          out.environment = Object.assign(out.environment || {}, p.environment);
+        }
       }
       return out;
     },
