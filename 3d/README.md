@@ -294,9 +294,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   with pieces of the level standing upright on every ring's floor between
   the walls, extruded like the sprites on the board so they have thickness,
   turned to the player and a little askew so it shows, taller the further
-  out; the first ring's floor is a bowl - a ledge under the player's feet,
-  a drop to a pit floor, a cliff of the rim's rocks up to the rim the rocks
-  stand on - and its ceiling a dome; a ceiling of fog alone; every ring sinks further into a fog in the level's
+  out; the first ring's floor is a lattice of the level's rocks, packed at
+  the rim, strewn ever thinner inward and open over the middle, with a
+  bowl sunk two metres into the ground beneath it, rubble down its sides,
+  seen through the gaps; its ceiling a dome; a ceiling of fog alone; every ring sinks further into a fog in the level's
   own hue, and in a headset the stereo between the rings is the depth. On
   the desktop the orbit cannot carry the camera far: the zoom stops at a
   quarter of its old reach and the camera stays inside the first ring,

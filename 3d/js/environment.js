@@ -70,11 +70,11 @@ class Environment {
     for (let i = n - 1; i >= 0; i--) {
       this.planes["wall" + i] = plane("wall" + i, i < n - 1);
       this.planes["band" + i] = plane("band" + i, true);
-      this.planes["floor" + i] = plane("floor" + i, false);
+      // the first floor is a lattice of rocks, the bowl beneath it seen through the gaps
+      this.planes["floor" + i] = plane("floor" + i, i === 0);
       this.planes["ceiling" + i] = plane("ceiling" + i, false);
     }
-    // the cliff from the pit floor up to the rim, wearing the rocks of the first floor's rim
-    this.cliff = plane("cliff", false);
+    this.planes.bowl0 = plane("bowl0", false);
     this._center = null; // the player's place in the room's frame, board pixels
     this.props = [];      // the pieces standing on the floor between the rings (meshes)
     this._propGeometry = new THREE.PlaneGeometry(1, 1);
@@ -347,14 +347,12 @@ class Environment {
   _placeProps() {
     if (!this.level) return;
     const c = this._center || this.level.room.center, yF = this._yFloor;
-    const room = this.level.room;
     for (const mesh of this.props) {
       const p = mesh.userData.prop, th = p.u * Math.PI * 2;
       const x = c.x + p.r * Math.sin(th), z = c.z + p.r * Math.cos(th);
       // the geometry's origin is the piece's bottom centre, in its own pixels, y down
       const k = p.h / p.bitmap.height;
-      const y = yF + Environment.floorProfile(room, 0, p.r);
-      mesh.position.set(x, y, z);
+      mesh.position.set(x, yF, z);
       mesh.rotation.set(0, Math.atan2(c.x - x, c.z - z) + (p.yaw || 0), 0); // its face to the centre, turned a little
       mesh.scale.set(k, -k, k);
     }
@@ -493,19 +491,6 @@ class Environment {
     mesh.material.map = tex;
     mesh.material.color.setHex(0xffffff);
     mesh.material.needsUpdate = true;
-    if (name === "floor0" && tex.image && tex.image.data) {
-      // the cliff wears the rim's rows of the same picture (its own texture
-      // over the same pixels), the rim at its foot, darker
-      const old = this.cliff.material.map;
-      const t = this._texture({ data: tex.image.data, width: tex.image.width, height: tex.image.height }, true);
-      t.wrapS = THREE.RepeatWrapping;
-      t.repeat.set(1, -0.5);
-      t.offset.set(0, 1);
-      this.cliff.material.map = t;
-      this.cliff.material.color.setHex(0x8a8a8a);
-      this.cliff.material.needsUpdate = true;
-      if (old) old.dispose();
-    }
   }
 
   /** The wall's picture is drawn for a nominal height; the plane's real
@@ -565,7 +550,6 @@ class Environment {
       mesh.material.needsUpdate = true;
     }
     if (this.backdropMaterial.map) { this.backdropMaterial.map.dispose(); this.backdropMaterial.map = null; this.backdropMaterial.needsUpdate = true; }
-    if (this.cliff.material.map) { this.cliff.material.map.dispose(); this.cliff.material.map = null; this.cliff.material.needsUpdate = true; }
     this.stats = {};
   }
 
@@ -623,16 +607,16 @@ class Environment {
     const P = this.pxPerMetre, B = EnvGen.ROOM.BOWL;
     for (const l of room.layers) {
       const first = l.i === 0;
-      // the first floor a bowl, the first ceiling a dome; the rest flat
-      p["floor" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yF,
-        first ? 32 : 6, first ? (r) => Environment.floorProfile(room, 0, r) : null));
+      // the first ceiling a dome; the floors flat, the first one a lattice over the bowl
+      p["floor" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yF, 6, null));
       p["ceiling" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yC,
         first ? 16 : 6, first ? (r) => B.DOME_M * P * (1 - Math.pow(r / l.rOut, 2)) : null));
       p["wall" + l.i].geometry = keep(Environment.drumGeometry(c, l.rOut, yF, yC));
       p["band" + l.i].geometry = keep(Environment.drumGeometry(c, l.rBand, yF, yC));
     }
+    // the bowl sunk into the ground under the first floor: level with it at the rim, deepest in the middle
     const l0 = room.layers[0];
-    this.cliff.geometry = keep(Environment.drumGeometry(c, l0.rOut * B.CLIFF + 1, yF - B.DEPTH_M * P, yF));
+    p.bowl0.geometry = keep(Environment.ringGeometry(c, 0, l0.rOut, yF - 1, 32, (r) => -B.DEPTH_M * P * (1 - Math.pow(r / l0.rOut, 2))));
     this._wallHeight = yC - yF;
     for (const l of room.layers) {
       const map = p["wall" + l.i].material.map;
@@ -674,22 +658,6 @@ Environment.ringGeometry = function (c, rIn, rOut, y, rows, profile) {
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   return g;
-};
-
-/**
- * The first floor's height at radius r, below the floor: flat under the
- * player (the ledge), a drop to the pit floor, flat, a cliff up to the rim
- * the rocks stand on (ROOM.BOWL). Zero on the other rings.
- */
-Environment.floorProfile = function (room, ring, r) {
-  if (ring !== 0) return 0;
-  const B = EnvGen.ROOM.BOWL, f = r / room.layers[0].rOut, D = B.DEPTH_M * room.P;
-  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  if (f <= B.LEDGE) return 0;
-  if (f < B.DROP) return -D * smooth(B.LEDGE, B.DROP, f);
-  if (f < B.FLOOR) return -D;
-  if (f < B.CLIFF) return -D * (1 - smooth(B.FLOOR, B.CLIFF, f));
-  return 0;
 };
 
 /** A standing piece extruded like a sprite on the board, its origin at its bottom centre. */
