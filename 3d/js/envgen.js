@@ -49,7 +49,10 @@
     RINGS: [2.0, 4.0, 8.0, 17.0], // each ring's radius from the player
     CLEAR_M: 0.5,     // the first ring stands at least this far past the board's corners
     FOG_M: 7.0,       // the distance by which the fog has taken two thirds of a colour
-    SKYLINE: [0.32, 0.42, 0.52, 0.6], // how high each ring's wall band rises, of the wall's height
+    SKYLINE: [0.38, 0.6, 0.8, 0.95], // how high each ring's wall band rises, of the wall's height: the far ones tower
+    SWELL: [0.1, 0.18, 0.2, 0.2],    // and how much it rises and falls round the ring
+    PROPS: [6, 10, 14, 16],          // pieces standing on each ring's floor, between the walls
+    PROP_M: [[0.5, 1.1], [0.9, 2.0], [1.6, 3.2], [2.4, 5.0]], // how tall they stand, metres, per ring
     TEX: { near: 1024, far: 2048, wallRows: 256, bandRows: 512 },
     WALL_K: 1.5,      // a wall's pixels, coarser again than the floor's: it is further away
   };
@@ -89,6 +92,7 @@
         i, rIn, rOut, circ, d,
         fog: fogAt(d), fogNear: i === 0 ? 0 : fogAt(rIn / P),
         skyline: ROOM.SKYLINE[Math.min(i, ROOM.SKYLINE.length - 1)],
+        swell: ROOM.SWELL[Math.min(i, ROOM.SWELL.length - 1)],
         last: i === radii.length - 1,
         // a band's picture wraps round the outer rim (row 0) and runs in to the inner one
         floor: { k: kBand, w: Math.ceil(circ / kBand), h: Math.min(ROOM.TEX.bandRows, Math.ceil((rOut - rIn) / kBand)) },
@@ -592,8 +596,12 @@
     // drawn hanging from row 0 on a sheet that is then turned over, so the
     // pieces stand on the wall's bottom edge the right way up
     const sheet = new Bitmap(W, H);
-    const top = layer.skyline;
-    const hl = (u) => H * (top + 0.08 * noise(u) + (layer.i ? 0.06 * noise(u * 0.5 + 0.3) : 0));
+    const top = layer.skyline, swell = layer.swell;
+    // the first ring's band dips behind the board (u = 0.5), so the board is
+    // seen against the rings beyond it and the depth, not against a ridge
+    const away = (u) => Math.min(Math.abs(u - 0.5), 1 - Math.abs(u - 0.5));
+    const dip = layer.i === 0 ? (u) => 1 - 0.55 * Math.exp(-Math.pow(away(u) / 0.16, 2)) : () => 1;
+    const hl = (u) => H * Math.min(1, (top + swell * noise(u)) * dip(u));
     if (mode === "tile") drawTiles(sheet, bk, hl, rng, TINT.wall, true, 0.06, 0.04, null);
     else drawClumps(sheet, bk.wall.length ? bk.wall : bk.ground, hl, rng, TINT.wall, true, 0, null);
     const up = sheet.flipVertical();
@@ -674,6 +682,47 @@
     }
   }
 
+  /**
+   * The pieces standing on each ring's floor between the walls - rocks,
+   * pillars, clumps of the level's own art, upright and facing the player -
+   * so there is something at every distance to move against. Each is
+   * `{ ring, u, r, w, h, bitmap }`: its place round the ring and out from
+   * the centre, its size in board pixels, its picture (the piece's opaque
+   * box, dimmed and fogged for its distance).
+   */
+  function buildProps(ctx, opts, collected, palette, fog) {
+    const room = opts.room, P = room.P;
+    const env = (ctx.profile && ctx.profile.environment) || {};
+    const bk = buckets(collected, env);
+    const list = bk.floor.length ? bk.floor : bk.usable;
+    if (!list.length) return [];
+    const tall = list.filter((p) => p.bbox.h >= p.bbox.w * 0.6);
+    const pool = tall.length >= 3 ? tall : list;
+    const rng = seededRandom("props:" + (ctx.levelId || "level"));
+    const fogAt = (d) => 1 - Math.exp(-d / ROOM.FOG_M);
+    const out = [];
+    room.layers.forEach((layer, i) => {
+      const n = ROOM.PROPS[Math.min(i, ROOM.PROPS.length - 1)];
+      const [hLo, hHi] = ROOM.PROP_M[Math.min(i, ROOM.PROP_M.length - 1)];
+      const rLo = layer.rIn + (layer.rOut - layer.rIn) * (i === 0 ? 0.62 : 0.15);
+      const rHi = layer.rIn + (layer.rOut - layer.rIn) * 0.9;
+      for (let k = 0, tries = 0; k < n && tries < n * 4; tries++) {
+        const u = rng(), r = rLo + (rHi - rLo) * rng();
+        // not in the way of the board on the first ring: the sector it stands in
+        if (i === 0 && Math.abs(u - 0.5) < 0.2) continue;
+        const p = pickWeighted(pool, rng, (q) => q.area);
+        const hPx = (hLo + (hHi - hLo) * rng()) * P;
+        const scale = hPx / p.bbox.h;
+        const img = dressed(p, rng() < 0.5, false, TINT.floor);
+        const bmp = img.crop(p.bbox.x, p.bbox.y, p.bbox.w, p.bbox.h);
+        fogBlend(bmp, fog, fogAt(r / P), fogAt(r / P));
+        out.push({ ring: i, u, r, w: p.bbox.w * scale, h: hPx, bitmap: bmp });
+        k++;
+      }
+    });
+    return out;
+  }
+
   // ------------------------------------------------------------- the build
   /** The plane name's parts: { kind: "floor"|"wall"|"ceiling"|"side"|"backdrop", i }. */
   function parsePlane(name) {
@@ -746,7 +795,8 @@
     }
     let backdrop = null;
     if (want("backdrop") && wp && wp.kind === "prop") backdrop = propBackdrop(ctx, wp.image, bg);
-    return { palette, mode, fog, planes, backdrop, pieces: collected };
+    const props = opts.full && want("props") ? buildProps(ctx, opts, collected, palette, fog) : null;
+    return { palette, mode, fog, planes, backdrop, props, pieces: collected };
   }
 
   /** The style's background on the far wall: a sky tiled at the wall's own
@@ -795,7 +845,7 @@
     classifyBackground, opaqueFraction,
     collectPieces, buckets, chooseMode, measure, dosBitmap,
     seededRandom, noiseFn,
-    build, drawWallpaper, propBackdrop, shrink,
+    build, buildProps, drawWallpaper, propBackdrop, shrink,
   };
   root.EnvGen = EnvGen;
   if (isNode) module.exports = EnvGen;

@@ -288,9 +288,12 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   looks: rings round the player - two, four, eight and seventeen metres
   out - each a band of floor and, at its outer edge, a wall all the way
   round that is a cut-out skyline of the level's pieces the next ring shows
-  through, the last one solid, the sky; a ceiling of fog alone; every ring
-  sinks further into a fog in the level's own hue, and in a headset the
-  stereo between the rings is the depth (`3d/js/environment.js`, the
+  through, the last one solid, the sky - the far rings' skylines tower to
+  the ceiling, the first one's dips behind the board so the depth shows
+  past it - with pieces of the level standing upright on every ring's
+  floor between the walls, turned to the player, taller the further out; a
+  ceiling of fog alone; every ring sinks further into a fog in the level's
+  own hue, and in a headset the stereo between the rings is the depth (`3d/js/environment.js`, the
   pictures from `3d/js/envgen.js`). The board stands inside the first ring,
   in front of the player, whose place at the moment the board is placed is
   the rings' centre. It is a strength like the colour blend: *full* lays

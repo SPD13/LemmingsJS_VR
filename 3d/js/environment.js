@@ -70,6 +70,8 @@ class Environment {
       this.planes["ceiling" + i] = plane("ceiling" + i, false);
     }
     this._center = null; // the player's place in the room's frame, board pixels
+    this.props = [];      // the pieces standing on the floor between the rings (meshes)
+    this._propGeometry = new THREE.PlaneGeometry(1, 1);
     // the slab's own backdrop, handed to app.js for the plane it puts behind the terrain
     this.backdropMaterial = new THREE.MeshBasicMaterial({ color: ENV_BACKDROP_COLOR });
   }
@@ -195,8 +197,49 @@ class Environment {
       this._apply(name, bitmap);
       stats.ms[name] = Math.round(performance.now() - t);
     }
+    // the pieces standing between the rings
+    if (full) {
+      await tick();
+      if (stale()) return;
+      t = performance.now();
+      const built = EnvGen.build(ctx, Object.assign({ full, pieces }, opts), ["props"]);
+      this._applyProps(built.props || []);
+      stats.ms.props = Math.round(performance.now() - t);
+    }
     stats.totalMs = Math.round(performance.now() - t0);
     this.stats = stats;
+  }
+
+  /** The standing pieces: a cut-out quad each, on its ring's floor, turned to the player. */
+  _applyProps(list) {
+    this._clearProps();
+    for (const p of list) {
+      const tex = this._texture(p.bitmap, true);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(this._propGeometry, mat);
+      mesh.name = "env-prop";
+      mesh.userData.prop = p;
+      this.root.add(mesh);
+      this.props.push(mesh);
+    }
+    this._placeProps();
+  }
+
+  _placeProps() {
+    if (!this.level) return;
+    const c = this._center || this.level.room.center, yF = this._yFloor;
+    for (const mesh of this.props) {
+      const p = mesh.userData.prop, th = p.u * Math.PI * 2;
+      const x = c.x + p.r * Math.sin(th), z = c.z + p.r * Math.cos(th);
+      mesh.position.set(x, yF + p.h / 2, z);
+      mesh.rotation.set(0, Math.atan2(c.x - x, c.z - z), 0); // its face to the centre
+      mesh.scale.set(p.w, p.h, 1);
+    }
+  }
+
+  _clearProps() {
+    for (const mesh of this.props) { this.root.remove(mesh); mesh.material.dispose(); }
+    this.props = [];
   }
 
   /** Pictures made offline for the level's style (tools/env-gen.js), or null. */
@@ -329,6 +372,7 @@ class Environment {
 
   _disposeSet() {
     this._token++;
+    this._clearProps();
     if (!this.set) return;
     for (const tex of this.set.textures) tex.dispose();
     this.set = null;
@@ -400,6 +444,7 @@ class Environment {
       const map = p["wall" + l.i].material.map;
       if (map) this._wallRepeat(map);
     }
+    this._placeProps();
   }
 }
 
