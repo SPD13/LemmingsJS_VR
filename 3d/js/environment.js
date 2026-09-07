@@ -350,9 +350,9 @@ class Environment {
 
   // ------------------------------------------------------ every frame
   /**
-   * The camera kept inside the room - within the last ring, between the
-   * floor and the ceiling - on the desktop, where the orbit could otherwise
-   * carry it out through the decor; and whatever stands between the eye
+   * The camera kept inside the first ring, between the floor and the
+   * ceiling, on the desktop, where the orbit could otherwise carry it out
+   * through the decor or far enough for the rings' perspective to go wrong; and whatever stands between the eye
    * and the board hidden - a ring's wall the line from one to the other
    * crosses, a standing piece it passes through - until it no longer does.
    */
@@ -371,9 +371,10 @@ class Environment {
     const eye = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld).applyMatrix4(inv);
     const last = room.layers[room.layers.length - 1];
     if (!presenting) {
-      // inside the last ring, a step in from its wall, and between floor and ceiling
+      // inside the first ring, a step in from its wall - the pictures are
+      // drawn for an eye there - and between floor and ceiling
       const margin = 0.3 * this.pxPerMetre;
-      const dx = eye.x - c.x, dz = eye.z - c.z, d = Math.hypot(dx, dz), rMax = last.rOut - margin;
+      const dx = eye.x - c.x, dz = eye.z - c.z, d = Math.hypot(dx, dz), rMax = room.layers[0].rOut - margin;
       let moved = false;
       if (d > rMax) { eye.x = c.x + dx * rMax / d; eye.z = c.z + dz * rMax / d; moved = true; }
       const yLo = this._yFloor + margin * 0.5, yHi = this._yCeil - margin * 0.5;

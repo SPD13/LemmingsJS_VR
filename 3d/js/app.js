@@ -2275,7 +2275,10 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
-  controls.maxDistance = 3000;
+  // a quarter of what it was: the room's pictures are drawn for an eye
+  // inside its first ring, and a camera orbiting out past it sees them in
+  // the wrong perspective (environment.js keeps it in the ring as well)
+  controls.maxDistance = 750;
 
   window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
