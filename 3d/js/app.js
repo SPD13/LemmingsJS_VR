@@ -2857,6 +2857,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const envCtx = {
       engine: state.engine, levelId: state.levelId, width: level.width, height: level.height,
       themeName: level.themeName || null, theme: level.theme || null,
+      pack: state.engine !== "lemmix" ? String((config && config.path) || "game").split("/").pop().replace(/[^a-z0-9]/gi, "").toLowerCase() : null,
       background: level.background || null, backgroundName: level.info && level.info.background,
       groundImage: level.groundImage, groundMask: level.groundMask && level.groundMask.groundMask,
       donors: blendMap.donors, groundData, profile,

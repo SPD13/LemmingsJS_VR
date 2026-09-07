@@ -46,7 +46,8 @@
     EYE_M: 0.9,       // the player's distance from the board's face (placeDioramaForXR), the desktop's centre
     CEIL_M: 2.6,      // the ceiling's height above the physical floor
     FLOOR_DROP_M: 0.5, // the desktop's floor, this far below the board's bottom edge
-    RINGS: [2.0, 4.0, 8.0, 17.0], // each ring's radius from the player
+    RINGS: [2.8, 4.5, 8.0, 17.0], // each ring's radius from the player
+    NOMINAL: { W: 1600, H: 160 }, // the level the rings are drawn for: a classic one fits the first ring
     CLEAR_M: 0.5,     // the first ring stands at least this far past the board's corners
     FOG_M: 7.0,       // the distance by which the fog has taken two thirds of a colour
     SKYLINE: [0.38, 0.6, 0.8, 0.95], // how high each ring's wall band rises, of the wall's height: the far ones tower
@@ -102,6 +103,23 @@
       };
     });
     return { W, H, P, floorDrop, wallPx, center, reach, layers };
+  }
+
+  /** The room every gallery's pictures are drawn for: a classic level's. */
+  function canonicalRoom(pxPerMetre) {
+    return roomFor(ROOM.NOMINAL.W, ROOM.NOMINAL.H, pxPerMetre);
+  }
+
+  /** The pieces side by side on a transparent sheet, a picture to read a palette from. */
+  function sheetOf(images) {
+    const list = images.filter((i) => i && i.width && i.height);
+    if (!list.length) return new Bitmap(1, 1);
+    const cols = Math.ceil(Math.sqrt(list.length));
+    const cw = Math.max.apply(null, list.map((i) => i.width)), ch = Math.max.apply(null, list.map((i) => i.height));
+    const rows = Math.ceil(list.length / cols);
+    const sheet = new Bitmap(cols * cw, rows * ch);
+    list.forEach((img, i) => Pixels.blit(sheet, (i % cols) * cw, Math.floor(i / cols) * ch, img, 0, 0, img.width, img.height, Pixels.combineGadget));
+    return sheet;
   }
 
   /** The plane names a room has: floor0, wall0, ceiling0, floor1, ..., backdrop. */
@@ -250,6 +268,23 @@
     const vig = opts.vignette || 0, cell = Math.max(1, opts.cell | 0);
     const alongV = axis !== "u";
     const cache = new Map(); // target colour -> [nearest, second, fraction]
+    const pick = (c) => { let q = cache.get(c); if (!q) { q = nearestPair(pal, c); cache.set(c, q); } return q; };
+    if (alongV && !vig) {
+      // the usual case - a colour per row, no vignette: the row's eight
+      // dither columns worked out once and laid across it as words
+      const words = bmp.words(), pattern = new Uint32Array(8);
+      for (let y = 0; y < h; y++) {
+        const v = h > 1 ? y / (h - 1) : 0;
+        const q = pick(stopColor(stops, v)), row = BAYER[((y / cell) | 0) & 7];
+        for (let i = 0; i < 8; i++) {
+          const c = q[2] > row[i] / 64 ? q[1] : q[0];
+          pattern[i] = (0xff000000 | (B(c) << 16) | (G(c) << 8) | R(c)) >>> 0; // ABGR, little-endian RGBA
+        }
+        const base = y * w;
+        for (let x = 0; x < w; x++) words[base + x] = pattern[((x / cell) | 0) & 7];
+      }
+      return bmp;
+    }
     for (let y = 0; y < h; y++) {
       const v = h > 1 ? y / (h - 1) : 0;
       for (let x = 0; x < w; x++) {
@@ -259,8 +294,7 @@
           const e = 2 * Math.max(Math.abs(u - 0.5), Math.abs(v - 0.5));
           c = scale(c, 1 - vig * smoothstep(0.55, 1, e));
         }
-        let q = cache.get(c);
-        if (!q) { q = nearestPair(pal, c); cache.set(c, q); }
+        const q = pick(c);
         const th = BAYER[((y / cell) | 0) & 7][((x / cell) | 0) & 7] / 64;
         const out = q[2] > th ? q[1] : q[0];
         const p = (y * w + x) * 4;
@@ -383,13 +417,16 @@
         if (!p.drawn || p.erase) continue;
         note(p.drawn.key, p.drawn.image, p.drawn.steel);
       }
-    } else if (ctx.groundData && ctx.groundData.terraImages && ctx.groundData.lr) {
+    } else if (ctx.groundData && ctx.groundData.terraImages && (ctx.groundData.lr || ctx.gallery)) {
+      // a gallery counts every image of the tileset once; a level, its placements
       const counts = new Map();
-      for (const t of ctx.groundData.lr.terrains || []) counts.set(t.id, (counts.get(t.id) || 0) + 1);
+      if (!ctx.gallery) for (const t of ctx.groundData.lr.terrains || []) counts.set(t.id, (counts.get(t.id) || 0) + 1);
       ctx.groundData.terraImages.forEach((img, id) => {
-        if (!img || !img.frames || !img.frames[0] || !counts.get(id)) return;
+        if (!img || !img.frames || !img.frames[0]) return;
+        const n = ctx.gallery ? 1 : (counts.get(id) || 0);
+        if (!n) return;
         const bmp = dosBitmap(img);
-        for (let i = 0; i < counts.get(id); i++) note(id, bmp, false);
+        for (let i = 0; i < n; i++) note(id, bmp, false);
       });
     }
     const pieces = [];
@@ -547,14 +584,6 @@
     }
   }
 
-  /** The board's footprint on the first band: is this pixel of the picture under (or `margin` px from) the slab? */
-  function boardDistance(room, layer, x, y, w, h) {
-    const p = bandToWorld(room, layer, x, y, w, h);
-    const dx = p.x < 0 ? -p.x : p.x > room.W ? p.x - room.W : 0;
-    const dz = p.z < 0 ? -p.z : p.z > 16 ? p.z - 16 : 0;
-    return Math.hypot(dx, dz);
-  }
-
   /** How much wider a piece is drawn on row `y` of a band, so it keeps its size on the ground. */
   const bandStretch = (layer, h) => (y) => layer.rOut / Math.max(1, layer.rOut - (layer.rOut - layer.rIn) * (y / Math.max(1, h)));
 
@@ -572,11 +601,10 @@
       const hl = (u) => H * (0.5 + 0.12 * noise(u));
       if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.08, 0.04, stretch);
       else drawClumps(bmp, bk.floor, hl, rng, TINT.floor, false, 0, stretch);
-      // the board's shadow, soft-edged, on the ground under and about it
-      const soft = 12 * layer.floor.k;
-      darken(bmp, 0.72, 0, 0, W, H, (x, y) => 1 - smoothstep(0, soft, boardDistance(room, layer, x, y, W, H)));
+      // decorations on the bare ground, clear of the sector the board stands in (u = 0.5)
+      const away = (u) => Math.min(Math.abs(u - 0.5), 1 - Math.abs(u - 0.5));
       const n = Math.round((W * H) / 14000);
-      scatter(bmp, bk.decor, n, rng, TINT.floor, (x, y) => y > hl(x / W) + 4 && boardDistance(room, layer, x, y, W, H) > soft);
+      scatter(bmp, bk.decor, n, rng, TINT.floor, (x, y) => y > hl(x / W) + 4 && !(away(x / W) < 0.14 && y < H * 0.75));
       // under the player, the ground sinks into the dark
       darken(bmp, 0.15, 0, H * 0.8, W, H, (x, y) => smoothstep(0.8, 1, y / H));
     } else {
@@ -841,7 +869,7 @@
   }
 
   const EnvGen = {
-    ROOM, roomFor, planeNames, parsePlane, bandToWorld, TINT, PROPS, meanColor, fogBlend, mix,
+    ROOM, roomFor, canonicalRoom, sheetOf, planeNames, parsePlane, bandToWorld, TINT, PROPS, meanColor, fogBlend, mix,
     derivePalette, paintGradient, quantPalette, darken, scale, luma,
     classifyBackground, opaqueFraction,
     collectPieces, buckets, chooseMode, measure, dosBitmap,

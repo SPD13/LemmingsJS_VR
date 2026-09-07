@@ -129,6 +129,7 @@ class Environment {
   /** The room's pictures again, for the state in force (a profile edited, the state moved). */
   rebuild() {
     if (!this.level) return Promise.resolve();
+    Environment.evictGallery(this._galleryKey(this.level.ctx) + "|" + this.mode);
     this._disposeSet();
     if (this.mode === "off") { this._applyBackdrop(); this._applyScene(); return Promise.resolve(); }
     return this._build();
@@ -145,77 +146,187 @@ class Environment {
     this._applyVisibility();
   }
 
+  /** The gallery a level's environment belongs to: its theme style, or its DOS tileset. */
+  _galleryKey(ctx) {
+    if (ctx.engine === "lemmix") return "nx:" + (ctx.themeName || "default");
+    const gd = ctx.groundData, set = gd && gd.lr && gd.lr.graphicSet1 != null ? gd.lr.graphicSet1 : "x";
+    return "dos:" + (ctx.pack || "game") + "-g" + set;
+  }
+
   async _build() {
     const token = ++this._token;
-    const { ctx, room, styles } = this.level;
+    const { ctx, styles } = this.level;
     const t0 = performance.now();
     const stats = { mode: this.mode, ms: {} };
-    const set = { textures: [], palette: null, wallpaper: null, fog: null, planes: {}, source: "collage" };
-    this.set = set;
-    const tick = () => new Promise((r) => setTimeout(r, 0));
     const stale = () => token !== this._token;
+    const set = { textures: [], gallery: null, wallpaper: null, source: "collage" };
+    this.set = set;
+    const key = this._galleryKey(ctx) + "|" + this.mode;
+    stats.gallery = key;
+    // the gallery's pictures, built once for every level of the style and kept
+    let g = Environment.galleries.get(key);
+    stats.cached = !!g;
+    if (!g) {
+      g = { key, mode: this.mode, textures: new Map(), props: [], palette: null, fog: null, source: "collage", room: null, done: false, ready: null };
+      Environment.galleries.set(key, g);
+      Environment.evictGalleries(3);
+      g.ready = this._buildGallery(g, ctx, styles, token);
+    }
+    set.gallery = g;
+    // the level's own part: its backdrop behind the slab
+    set.wallpaper = await this._wallpaper(ctx);
+    if (stale()) return;
+    if (g.palette) { this._applyScene(); this._applyBackdrop(); }
+    // whatever the gallery has so far, then the rest as it comes
+    for (const [name, tex] of g.textures) this._applyTexture(name, tex);
+    if (g.done) this._applyProps(g.props);
+    else {
+      try { await g.ready; } catch (e) { console.warn("[env] gallery:", e); }
+      if (stale()) return;
+      for (const [name, tex] of g.textures) this._applyTexture(name, tex);
+      this._applyProps(g.props);
+    }
+    this._applyScene();
+    this._applyBackdrop();
+    set.source = g.source;
+    stats.paletteSource = g.palette && g.palette.source;
+    stats.collageMode = g.collageMode;
+    Object.assign(stats.ms, g.ms || {});
+    stats.totalMs = Math.round(performance.now() - t0);
+    this.stats = stats;
+  }
 
-    await tick();
-    if (stale()) return;
-    const palette = EnvGen.derivePalette(ctx);
-    set.palette = palette;
-    stats.paletteSource = palette.source;
-    // the wallpaper first: a sky is what the far layers dissolve into
-    set.wallpaper = await this._wallpaper(ctx, styles);
-    if (stale()) return;
-    const files = await this._files(ctx);
-    if (stale()) return;
-    if (files) set.source = "file";
-    const opts = { room, palette, wallpaper: set.wallpaper };
-    // the near layer and the sky in gradients, in one go, so the room is there at once
+  /**
+   * A gallery's pictures: the whole style's pieces (or the whole DOS
+   * tileset's) laid round rings of the canonical size, the palette and
+   * the fog from them, the standing pieces between the rings - built off
+   * the critical path, a picture per frame, the textures kept until the
+   * gallery is evicted. `token` is the level's: the pictures go up on the
+   * planes as they come while that level is still the one shown.
+   */
+  async _buildGallery(g, ctx, styles, token) {
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+    const live = () => token === this._token;
+    const ms = g.ms = {};
     let t = performance.now();
+    const gctx = await this._galleryContext(ctx, styles);
+    ms.pieces = Math.round(performance.now() - t);
+    const room = EnvGen.canonicalRoom(this.pxPerMetre);
+    g.room = room;
+    const palette = EnvGen.derivePalette(gctx);
+    g.palette = palette;
+    g.wallpaper = await this._galleryWallpaper(gctx, styles);
+    const files = await this._files(gctx, room);
+    if (files) g.source = "file";
+    const opts = { room, palette, wallpaper: g.wallpaper };
+    const full = g.mode === "full";
+    // the near ring and the sky in gradients, in one go, so the room is there at once
+    t = performance.now();
     const far = room.layers[room.layers.length - 1].i;
     const first = ["floor0", "wall0", "ceiling0", "wall" + far];
-    const ambient = EnvGen.build(ctx, Object.assign({ full: false }, opts), first);
-    set.fog = ambient.fog;
-    this._applyScene();
-    for (const name of first) this._apply(name, ambient.planes[name]);
-    this._applyBackdrop();
-    stats.ms.ambient = Math.round(performance.now() - t);
-    const full = this.mode === "full";
-    // then every plane, one per frame: the collage, or the shipped picture where there is one
+    const ambient = EnvGen.build(gctx, Object.assign({ full: false }, opts), first);
+    g.fog = ambient.fog;
+    for (const name of first) {
+      g.textures.set(name, this._textureFor(name, ambient.planes[name]));
+      if (live()) this._applyTexture(name, g.textures.get(name));
+    }
+    if (live()) { this._applyScene(); this._applyBackdrop(); }
+    ms.ambient = Math.round(performance.now() - t);
+    // then every picture, one per frame: the collage, or the shipped picture where there is one
     let pieces = null;
     for (const name of EnvGen.planeNames(room)) {
       if (name === "backdrop") continue;
       if (!full && first.includes(name)) continue;
       await tick();
-      if (stale()) return;
       t = performance.now();
       let bitmap = files && files[name];
       if (!bitmap) {
-        const built = EnvGen.build(ctx, Object.assign({ full, pieces }, opts), [name, name === "wall0" ? "backdrop" : ""]);
+        const built = EnvGen.build(gctx, Object.assign({ full, pieces }, opts), [name]);
         pieces = built.pieces;
         bitmap = built.planes[name];
-        if (built.mode) stats.collageMode = built.mode;
-        if (built.backdrop) this._applyBackdropProp(built.backdrop);
+        if (built.mode) g.collageMode = built.mode;
       }
-      this._apply(name, bitmap);
-      stats.ms[name] = Math.round(performance.now() - t);
+      const old = g.textures.get(name);
+      if (old) old.dispose();
+      g.textures.set(name, this._textureFor(name, bitmap));
+      if (live()) this._applyTexture(name, g.textures.get(name));
+      ms[name] = Math.round(performance.now() - t);
     }
-    // the pieces standing between the rings
     if (full) {
       await tick();
-      if (stale()) return;
       t = performance.now();
-      const built = EnvGen.build(ctx, Object.assign({ full, pieces }, opts), ["props"]);
-      this._applyProps(built.props || []);
-      stats.ms.props = Math.round(performance.now() - t);
+      const built = EnvGen.build(gctx, Object.assign({ full, pieces }, opts), ["props"]);
+      g.props = (built.props || []).map((p) => Object.assign(p, { tex: this._textureFor("prop", p.bitmap) }));
+      ms.props = Math.round(performance.now() - t);
     }
-    stats.totalMs = Math.round(performance.now() - t0);
-    this.stats = stats;
+    g.done = true;
   }
 
-  /** The standing pieces: a cut-out quad each, on its ring's floor, turned to the player. */
+  /**
+   * What a gallery is drawn from: every terrain piece of the level's theme
+   * style (the styles index says which, the style manager loads them), or
+   * every image of its DOS tileset; a contact sheet of them stands in for
+   * a level's picture, the palette being read from it. Without an index,
+   * the level's own pieces.
+   */
+  async _galleryContext(ctx, styles) {
+    const base = {
+      engine: ctx.engine, levelId: "gallery:" + this._galleryKey(ctx), gallery: true,
+      themeName: ctx.themeName, theme: ctx.theme, background: null, backgroundName: null,
+      donors: null, profile: ctx.profile, lemmixObjects: null, dosPalette: ctx.dosPalette || null,
+    };
+    let images = [], pieces = null, groundData = null;
+    if (ctx.engine === "lemmix" && styles && ctx.themeName) {
+      try {
+        const index = await styles.index();
+        const entry = index && index.get(ctx.themeName);
+        if (entry && entry.pieces && entry.pieces.length) {
+          const steel = new Set(entry.steel || []);
+          const metas = await Promise.all(entry.pieces.map((piece) => styles.terrain(ctx.themeName, piece).catch(() => null)));
+          pieces = [];
+          metas.forEach((meta, i) => {
+            if (!meta || !meta.base || !meta.base.image) return;
+            const image = meta.base.image, piece = entry.pieces[i];
+            pieces.push({ x: 0, y: 0, drawn: { key: ctx.themeName + ":" + piece, variantKey: "", image, width: image.width, height: image.height, steel: meta.steel || steel.has(piece) } });
+            images.push(image);
+          });
+        }
+      } catch (e) { pieces = null; }
+    }
+    if (!pieces && ctx.engine === "lemmix") {
+      pieces = ctx.lemmixPieces || [];
+      images = pieces.filter((p) => p.drawn && p.drawn.image).map((p) => p.drawn.image);
+    }
+    if (ctx.engine !== "lemmix") {
+      groundData = ctx.groundData;
+      const list = (groundData && groundData.terraImages) || [];
+      list.forEach((img) => { if (img && img.frames && img.frames[0]) images.push(EnvGen.dosBitmap(img)); });
+    }
+    const sheet = EnvGen.sheetOf(images);
+    return Object.assign(base, {
+      width: sheet.width, height: sheet.height, groundImage: sheet.data, groundMask: null,
+      lemmixPieces: ctx.engine === "lemmix" ? pieces : null, groundData,
+    });
+  }
+
+  /** The gallery's sky: the wallpaper its profile names, when it names one. */
+  async _galleryWallpaper(gctx, styles) {
+    const profile = gctx.profile || {}, env = profile.environment || {};
+    if (!env.wallpaper || !styles || typeof Lemmix === "undefined" || !Lemmix.splitIdentifier) return null;
+    const id = Lemmix.splitIdentifier(String(env.wallpaper).toLowerCase(), gctx.themeName || "default");
+    let image = null;
+    try { image = await styles.background(id.gs, id.piece); } catch (e) { image = null; }
+    if (!image) return null;
+    const key = id.gs + ":" + id.piece;
+    return { image, key, kind: EnvGen.classifyBackground(image, key, profile) };
+  }
+
+  /** The standing pieces: a cut-out quad each, on its ring's floor, turned
+   *  to the player - the gallery's pictures, the meshes the level's. */
   _applyProps(list) {
     this._clearProps();
     for (const p of list) {
-      const tex = this._texture(p.bitmap, true);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+      const mat = new THREE.MeshBasicMaterial({ map: p.tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
       const mesh = new THREE.Mesh(this._propGeometry, mat);
       mesh.name = "env-prop";
       mesh.userData.prop = p;
@@ -301,10 +412,10 @@ class Environment {
     this.props = [];
   }
 
-  /** Pictures made offline for the level's style (tools/env-gen.js), or null. */
-  async _files(ctx) {
-    if (this.mode !== "full" || !ctx.themeName) return null;
-    const dir = "3d/env/" + ctx.themeName + "/";
+  /** Pictures made offline for a gallery's style (tools/env-gen.js), or null. */
+  async _files(gctx, room) {
+    if (gctx.engine !== "lemmix" || !gctx.themeName) return null;
+    const dir = "3d/env/" + gctx.themeName + "/";
     const load = async (name) => {
       try {
         const res = await fetch(dir + name + ".png");
@@ -320,9 +431,9 @@ class Environment {
       } catch (e) { return null; }
     };
     // only asked for when an index says the folder is there: no probing 404s
-    if (!Environment.shipped || !Environment.shipped.has(ctx.themeName)) return null;
-    // floor.png is the first layer's, floor-1.png the next one's, and so on
-    const names = EnvGen.planeNames(this.level.room).filter((n) => n !== "backdrop");
+    if (!Environment.shipped || !Environment.shipped.has(gctx.themeName)) return null;
+    // floor.png is the first ring's, floor-1.png the next one's, and so on
+    const names = EnvGen.planeNames(room).filter((n) => n !== "backdrop");
     const files = await Promise.all(names.map((n) => load(Environment.fileFor(n))));
     const out = {};
     let any = false;
@@ -330,21 +441,13 @@ class Environment {
     return any ? out : null;
   }
 
-  async _wallpaper(ctx, styles) {
-    const profile = ctx.profile || {};
-    const env = profile.environment || {};
-    let image = null, key = null;
-    if (ctx.background && ctx.background.image) {
-      image = ctx.background.image;
-      key = String(ctx.backgroundName || "").toLowerCase();
-      if (key && !key.includes(":")) key = ctx.themeName + ":" + key;
-    } else if (env.wallpaper && styles && typeof Lemmix !== "undefined" && Lemmix.splitIdentifier) {
-      const id = Lemmix.splitIdentifier(String(env.wallpaper).toLowerCase(), ctx.themeName || "default");
-      try { image = await styles.background(id.gs, id.piece); } catch (e) { image = null; }
-      key = id.gs + ":" + id.piece;
-    }
-    if (!image) return null;
-    return { image, key, kind: EnvGen.classifyBackground(image, key, profile) };
+  /** The level's own background, for the backdrop behind its slab. */
+  async _wallpaper(ctx) {
+    if (!ctx.background || !ctx.background.image) return null;
+    const image = ctx.background.image;
+    let key = String(ctx.backgroundName || "").toLowerCase();
+    if (key && !key.includes(":")) key = ctx.themeName + ":" + key;
+    return { image, key, kind: EnvGen.classifyBackground(image, key, ctx.profile || {}) };
   }
 
   // ------------------------------------------------------------- textures
@@ -357,28 +460,26 @@ class Environment {
     tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.flipY = !!flipY;
     tex.needsUpdate = true;
-    if (this.set) this.set.textures.push(tex);
     return tex;
   }
 
-  /** A plane's picture: row 0 is the rim for a floor or ceiling band, the
-   *  top for a wall; every one wraps round. */
-  _apply(name, bitmap) {
-    if (!bitmap) return;
-    const targets = [this.planes[name]];
-    if (!targets[0]) return;
-    const kind = EnvGen.parsePlane(name).kind;
+  /** A gallery's texture for a plane: row 0 is the rim for a floor or
+   *  ceiling band, the top for a wall; every one wraps round. */
+  _textureFor(name, bitmap) {
     const tex = this._texture(bitmap, true);
     tex.wrapS = THREE.RepeatWrapping;
-    if (kind === "wall") this._wallRepeat(tex);
-    for (const mesh of targets) {
-      const old = mesh.material.map;
-      mesh.material.map = tex;
-      mesh.material.color.setHex(0xffffff);
-      mesh.material.needsUpdate = true;
-      if (old && this.set) { const i = this.set.textures.indexOf(old); if (i >= 0) { this.set.textures.splice(i, 1); old.dispose(); } }
-    }
-    if (this.set) this.set.planes[name] = bitmap;
+    tex.userData.bitmap = bitmap;
+    return tex;
+  }
+
+  /** A plane dressed with a gallery texture. */
+  _applyTexture(name, tex) {
+    const mesh = this.planes[name];
+    if (!mesh || !tex) return;
+    if (EnvGen.parsePlane(name).kind === "wall") this._wallRepeat(tex);
+    mesh.material.map = tex;
+    mesh.material.color.setHex(0xffffff);
+    mesh.material.needsUpdate = true;
   }
 
   /** The wall's picture is drawn for a nominal height; the plane's real
@@ -391,20 +492,22 @@ class Environment {
   }
 
   _applyScene() {
-    const on = this.active && this.set && this.set.palette;
-    // past the last layer there is only the fog
-    const hex = on ? (this.set.fog !== null ? this.set.fog : EnvGen.scale(this.set.palette.dark, 0.35)) : this._sceneColor;
+    const g = this.active && this.set && this.set.gallery;
+    // past the last ring there is only the fog
+    const hex = g && g.palette ? (g.fog !== null ? g.fog : EnvGen.scale(g.palette.dark, 0.35)) : this._sceneColor;
     if (this.scene.background && this.scene.background.isColor) this.scene.background.setHex(hex);
     else this.scene.background = new THREE.Color(hex);
   }
 
-  /** The slab's backdrop: the page's colour, the level's, or its wallpaper tiled 1:1 behind the terrain. */
+  /** The slab's backdrop: the page's colour, the gallery's, or the level's
+   *  own wallpaper tiled 1:1 behind the terrain (a prop placed once). */
   _applyBackdrop() {
     const m = this.backdropMaterial;
     const old = m.map;
     m.map = null;
-    if (old) { old.dispose(); if (this.set) { const i = this.set.textures.indexOf(old); if (i >= 0) this.set.textures.splice(i, 1); } }
-    if (!this.active || !this.set || !this.set.palette) { m.color.setHex(ENV_BACKDROP_COLOR); m.needsUpdate = true; return; }
+    if (old) old.dispose();
+    const g = this.set && this.set.gallery;
+    if (!this.active || !g || !g.palette) { m.color.setHex(ENV_BACKDROP_COLOR); m.needsUpdate = true; return; }
     const wp = this.set.wallpaper;
     if (wp && wp.kind === "wallpaper") {
       // the worldGroup is flipped in y, so row 0 (v = 0, no flip) lands at the top - the picture's own way up
@@ -414,33 +517,28 @@ class Environment {
       tex.repeat.set(this.level.ctx.width / wp.image.width, this.level.ctx.height / wp.image.height);
       m.map = tex;
       m.color.setHex(0x999999); // behind the slab, tonally: the holes must still read as depth
+    } else if (wp && wp.kind === "prop") {
+      const prop = EnvGen.propBackdrop(this.level.ctx, wp.image, g.palette.bg);
+      m.map = this._texture(prop.bitmap, false);
+      m.color.setHex(0xb0b0b0);
     } else {
-      m.color.setHex(EnvGen.scale(this.set.palette.bg, 0.7));
+      m.color.setHex(EnvGen.scale(g.palette.bg, 0.7));
     }
     m.needsUpdate = true;
   }
 
-  /** A prop background as the whole backdrop picture (envgen propBackdrop). */
-  _applyBackdropProp(prop) {
-    const m = this.backdropMaterial;
-    if (m.map) { m.map.dispose(); }
-    m.map = this._texture(prop.bitmap, false);
-    m.color.setHex(0xb0b0b0);
-    m.needsUpdate = true;
-  }
-
+  /** The level's part let go; the gallery's textures stay for the next level of the style. */
   _disposeSet() {
     this._token++;
     this._clearProps();
     if (!this.set) return;
-    for (const tex of this.set.textures) tex.dispose();
     this.set = null;
     for (const mesh of Object.values(this.planes)) {
       mesh.material.map = null;
       mesh.material.color.setHex(ENV_SCENE_COLOR);
       mesh.material.needsUpdate = true;
     }
-    if (this.backdropMaterial.map) { this.backdropMaterial.map = null; this.backdropMaterial.needsUpdate = true; }
+    if (this.backdropMaterial.map) { this.backdropMaterial.map.dispose(); this.backdropMaterial.map = null; this.backdropMaterial.needsUpdate = true; }
     this.stats = {};
   }
 
@@ -565,6 +663,22 @@ Environment.drumGeometry = function (c, r, y0, y1) {
 Environment.fileFor = function (name) {
   const { kind, i } = EnvGen.parsePlane(name);
   return kind + (i ? "-" + i : "");
+};
+
+// The galleries built so far - one per style (or DOS tileset) and state,
+// their textures kept - the last few, so a pack's levels cost nothing to
+// move between.
+Environment.galleries = new Map();
+Environment.evictGallery = function (key) {
+  const g = Environment.galleries.get(key);
+  if (!g) return;
+  Environment.galleries.delete(key);
+  for (const tex of g.textures.values()) tex.dispose();
+  for (const p of g.props) if (p.tex) p.tex.dispose();
+};
+Environment.evictGalleries = function (keep) {
+  const keys = Array.from(Environment.galleries.keys());
+  while (keys.length > keep) Environment.evictGallery(keys.shift());
 };
 
 // The styles with pictures made offline under 3d/env/ (tools/env-gen.js
