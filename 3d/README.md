@@ -285,10 +285,11 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   original texture. Applies on the desktop and in a headset alike.
 - "environment" (full by default) puts the board in a place drawn in the
   level's own pixel art, with distance in it, whichever way the player
-  looks: rings round the player - two, four, eight and seventeen metres
+  looks: rings round the player - three, four and a half and eight metres
   out - each a band of floor and, at its outer edge, a wall all the way
   round that is a cut-out skyline of the level's pieces the next ring shows
-  through, the last one solid, the sky - the far rings' skylines tower to
+  through, and round it all, seventeen metres out, a sphere of fog, the
+  world's far shell, tinted from the average colour of the style's pieces - the far rings' skylines tower to
   the ceiling, the first one's dips behind the board so the depth shows
   past it, and a second, lower skyline stands a little in from each wall -
   with pieces of the level standing upright on every ring's floor between
@@ -319,12 +320,12 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   generator seeded with the style's name, over gradients dithered between
   the style's colours (its theme colours, the colours of its pieces, a DOS
   tileset's palette); *none* leaves the board in the void as before. A
-  style with nothing to build from - not installed, a special picture -
-  gets the fog alone: the sky, the haze on the floor and overhead, no
-  stitching of the level's own sprites. The
+  style without pictures made for it (`3d/env/<style>/`, see below), or
+  with nothing to build from - not installed, a special picture - gets the
+  fog alone: the sphere, the floor bowl and the dome in the haze, no
+  stitching of the style's own sprites. The
   style's background image, when the level names one (`$BACKGROUND`), is
-  tiled behind the slab and is the sky of the last layer, which the fog
-  then takes its colour from; a picture meant to be placed once rather than
+  tiled behind the slab and hinted across the sphere's horizon; a picture meant to be placed once rather than
   tiled (the dirt style's monster) stands once behind the board. The pictures are
   coarser than the board's pixels - two to eight of them per environment
   pixel, more with distance - so the room reads as further away and never

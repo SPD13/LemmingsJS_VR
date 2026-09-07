@@ -62,6 +62,7 @@ class Environment {
       if (cutout) mat.alphaTest = 0.5;
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat); // the ring's own geometry comes with the level
       mesh.name = "env-" + name;
+      mesh.visible = false; // until it has a picture
       mesh.frustumCulled = false; // a ring the player stands in is cut by the near plane oddly otherwise
       root.add(mesh);
       return mesh;
@@ -69,8 +70,11 @@ class Environment {
     this.planes = {};
     const n = EnvGen.ROOM.RINGS.length;
     // far to near, so the nearer cut-outs are drawn over the further rings
+    // the fog sphere round it all, seen from inside
+    this.planes.sky = plane("sky", false);
+    this.planes.sky.material.side = THREE.BackSide;
     for (let i = n - 1; i >= 0; i--) {
-      this.planes["wall" + i] = plane("wall" + i, i < n - 1);
+      this.planes["wall" + i] = plane("wall" + i, true);
       this.planes["band" + i] = plane("band" + i, true);
       // the first floor is a lattice of rocks, the bowl beneath it seen through the gaps
       this.planes["floor" + i] = plane("floor" + i, i === 0);
@@ -227,14 +231,14 @@ class Environment {
     const files = await this._files(gctx, room);
     if (files) g.source = "file";
     const opts = { room, palette, wallpaper: g.wallpaper };
-    // nothing to build a place from: the fog alone, no stitching of a level's own sprites
+    // no pictures made for the style: the fog alone - the sphere, the
+    // floor bowl and the dome in the haze - no stitching of its pieces
     const collected = EnvGen.collectPieces(gctx);
-    g.fogOnly = !collected.pieces.some((p) => !p.excluded);
+    g.fogOnly = !files || !collected.pieces.some((p) => !p.excluded);
     const full = g.mode === "full" && !g.fogOnly;
-    // the near ring and the sky in gradients, in one go, so the room is there at once
+    // the sphere and the near ring's floor and dome in the haze first, so the place is there at once
     t = performance.now();
-    const far = room.layers[room.layers.length - 1].i;
-    const first = ["floor0", "wall0", "ceiling0", "wall" + far];
+    const first = ["sky", "floor0", "bowl0", "ceiling0"];
     for (const name of first) {
       const ambient = EnvGen.build(gctx, Object.assign({ full: false }, opts), [name]);
       g.fog = ambient.fog;
@@ -243,10 +247,11 @@ class Environment {
       await tick();
     }
     ms.ambient = Math.round(performance.now() - t);
-    // then every picture, one per frame: the collage, or the shipped picture where there is one
+    if (g.fogOnly) { g.done = true; return; }
+    // then every picture, one per frame: the shipped picture, or the collage where there is none
     let pieces = null;
     for (const name of EnvGen.planeNames(room)) {
-      if (name === "backdrop") continue;
+      if (name === "backdrop" || name === "sky") continue;
       if (!full && first.includes(name)) continue;
       await tick();
       t = performance.now();
@@ -403,8 +408,9 @@ class Environment {
     const t = len2 > 0 ? Math.max(0, Math.min(1, -(ex * vx + ez * vz) / len2)) : 0;
     const dMin = Math.hypot(ex + vx * t, ez + vz * t); // the line's closest approach to the centre
     for (const l of room.layers) {
-      this.planes["wall" + l.i].visible = !((dEye > l.rOut || dBoard > l.rOut) && dMin < l.rOut);
-      this.planes["band" + l.i].visible = !((dEye > l.rBand || dBoard > l.rBand) && dMin < l.rBand);
+      const wall = this.planes["wall" + l.i], band = this.planes["band" + l.i];
+      wall.visible = !!wall.material.map && !((dEye > l.rOut || dBoard > l.rOut) && dMin < l.rOut);
+      band.visible = !!band.material.map && !((dEye > l.rBand || dBoard > l.rBand) && dMin < l.rBand);
     }
     // a standing piece is in the way when the line passes through its quad
     const pad = 0.1 * this.pxPerMetre;
@@ -445,7 +451,7 @@ class Environment {
     // only asked for when an index says the folder is there: no probing 404s
     if (!Environment.shipped || !Environment.shipped.has(gctx.themeName)) return null;
     // floor.png is the first ring's, floor-1.png the next one's, and so on
-    const names = EnvGen.planeNames(room).filter((n) => ["floor", "wall"].includes(EnvGen.parsePlane(n).kind));
+    const names = EnvGen.planeNames(room).filter((n) => ["floor", "wall"].includes(EnvGen.parsePlane(n).kind) && EnvGen.parsePlane(n).i < room.layers.length);
     const files = await Promise.all(names.map((n) => load(Environment.fileFor(n))));
     const out = {};
     let any = false;
@@ -490,9 +496,11 @@ class Environment {
     const mesh = this.planes[name];
     if (!mesh || !tex) return;
     if (EnvGen.parsePlane(name).kind === "wall") this._wallRepeat(tex);
+    if (name === "sky") { tex.repeat.set(1, 1); tex.offset.set(0, 0); }
     mesh.material.map = tex;
     mesh.material.color.setHex(0xffffff);
     mesh.material.needsUpdate = true;
+    mesh.visible = true; // a plane shows once it has its picture, not before
   }
 
   /** The wall's picture is drawn for a nominal height; the plane's real
@@ -548,8 +556,8 @@ class Environment {
     this.set = null;
     for (const mesh of Object.values(this.planes)) {
       mesh.material.map = null;
-      mesh.material.color.setHex(ENV_SCENE_COLOR);
       mesh.material.needsUpdate = true;
+      mesh.visible = false; // until the next gallery's picture for it is up
     }
     if (this.backdropMaterial.map) { this.backdropMaterial.map.dispose(); this.backdropMaterial.map = null; this.backdropMaterial.needsUpdate = true; }
     this.stats = {};
@@ -619,6 +627,10 @@ class Environment {
     // the bowl sunk into the ground under the first floor: level with it at the rim, deepest in the middle
     const l0 = room.layers[0];
     p.bowl0.geometry = keep(Environment.ringGeometry(c, 0, l0.rOut, yF - 1, 32, (r) => -B.DEPTH_M * P * (1 - Math.pow(r / l0.rOut, 2))));
+    // the fog sphere, its equator at the height of the eyes
+    const sphere = new THREE.SphereGeometry(room.sphere.r, 48, 32);
+    sphere.translate(c.x, yF + 1.6 * P, c.z);
+    p.sky.geometry = keep(sphere);
     this._wallHeight = yC - yF;
     for (const l of room.layers) {
       const map = p["wall" + l.i].material.map;

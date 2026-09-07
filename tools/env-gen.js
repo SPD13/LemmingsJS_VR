@@ -451,7 +451,7 @@ async function main() {
       return KINDS.includes(kind) && opts.planes.includes(kind) && (!opts.layers || opts.layers.includes(i));
     });
     const built = EnvGen.build(ctx, { room, full: true, palette, wallpaper }, names.concat(["backdrop"]));
-    const lastWall = "wall" + (room.layers.length - 1);
+    const lastWall = null; // every wall is a cut-out: the far shell is the fog sphere, never a picture
     const dir = path.join(outRoot, outName);
     fs.mkdirSync(dir, { recursive: true });
     const rows = [];
