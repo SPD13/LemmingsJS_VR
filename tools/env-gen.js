@@ -13,6 +13,8 @@
  *
  * Usage:
  *   node tools/env-gen.js <style|level-id> [<style|level-id> ...] [options]
+ *   (a level id names its theme style: the pictures are a gallery's, one set
+ *   for every level of the style)
  *     --dry              the collages only, no model (default out: tmp/env-dry/)
  *     --out <dir>        where to write (default 3d/env/ unless --dry)
  *     --planes a,b       floor, wall (default both; the ceiling is fog alone)
@@ -115,11 +117,11 @@ async function styleContext(repoRoot, styles, name) {
     pieces.push({ x: 0, y: 0, drawn: { key: name + ":" + piece, variantKey: "", image, width: image.width, height: image.height, steel: meta.steel || steel.has(piece) } });
   }
   // a contact sheet of the pieces stands in for the level's picture (the palette is read from it)
-  const sheet = contactSheet(pieces.map((p) => p.drawn.image));
+  const sheet = EnvGen.sheetOf(pieces.map((p) => p.drawn.image));
   const wallpaper = await findWallpaper(repoRoot, styles, name, profile);
   return {
     ctx: {
-      engine: "lemmix", levelId: "style:" + name, width: sheet.width, height: sheet.height,
+      engine: "lemmix", levelId: "gallery:nx:" + name, gallery: true, width: sheet.width, height: sheet.height,
       theme: style.theme, background: null, backgroundName: null,
       groundImage: sheet.data, groundMask: null, donors: null, groundData: null, profile,
       lemmixPieces: pieces, lemmixObjects: null, dosPalette: null,
@@ -128,28 +130,13 @@ async function styleContext(repoRoot, styles, name) {
   };
 }
 
-/** A level's environment context, from the level as the game builds it. */
-async function levelContext(repoRoot, styles, id) {
+/** A level id's style: the environment is the gallery's, so a level names its theme. */
+function styleOfLevel(repoRoot, id) {
   const entry = listLevels(repoRoot).find((l) => l.id === id || l.id.startsWith(id));
   if (!entry) throw new Error("no such level: " + id);
   const text = fs.readFileSync(path.join(repoRoot, entry.url), "utf8");
-  const data = Lemmix.LevelBuilder.parseLevel(text);
-  const level = await Lemmix.LevelBuilder.build(data, styles, { seed: entry.id });
-  const profile = loadProfile(repoRoot, level.themeName);
-  let wallpaper = null;
-  if (level.background && level.background.image) {
-    const key = level.info.background || "";
-    wallpaper = { image: level.background.image, key, kind: EnvGen.classifyBackground(level.background.image, key, profile) };
-  } else wallpaper = await findWallpaper(repoRoot, styles, level.themeName, profile);
-  return {
-    ctx: {
-      engine: "lemmix", levelId: entry.id, width: level.width, height: level.height,
-      theme: level.theme, background: level.background, backgroundName: level.info.background,
-      groundImage: level.groundImage, groundMask: level.groundMask.groundMask, donors: null, groundData: null, profile,
-      lemmixPieces: level.pieces, lemmixObjects: level.objects, dosPalette: null,
-    },
-    wallpaper, title: level.name, name: entry.id.replace(/[^a-z0-9]+/gi, "_"), sheet: null,
-  };
+  const m = /^\s*THEME\s+(.+?)\s*$/mi.exec(text);
+  return (m ? m[1] : "default").toLowerCase();
 }
 
 /** The profile's wallpaper, else the first background the style folder has. */
@@ -167,18 +154,6 @@ async function findWallpaper(repoRoot, styles, style, profile) {
   const image = await styles.background(id.gs, id.piece);
   if (!image) return null;
   return { image, key, kind: EnvGen.classifyBackground(image, key, profile) };
-}
-
-/** The pieces side by side on a transparent sheet. */
-function contactSheet(images) {
-  const cols = Math.ceil(Math.sqrt(images.length)) || 1;
-  const cw = Math.max(1, ...images.map((i) => i.width)), ch = Math.max(1, ...images.map((i) => i.height));
-  const rows = Math.ceil(images.length / cols) || 1;
-  const sheet = new Lemmix.Bitmap(cols * cw, rows * ch);
-  images.forEach((img, i) => {
-    Lemmix.Pixels.blit(sheet, (i % cols) * cw, Math.floor(i / cols) * ch, img, 0, 0, img.width, img.height, Lemmix.Pixels.combineGadget);
-  });
-  return sheet;
 }
 
 // ------------------------------------------------------------ the model
@@ -464,10 +439,12 @@ async function main() {
   for (const name of opts.names) {
     const isLevel = /\.nxlv$/i.test(name) || name.includes("/");
     const t0 = Date.now();
-    const loaded = isLevel ? await levelContext(repoRoot, styles, name) : await styleContext(repoRoot, styles, name);
+    const styleName = isLevel ? styleOfLevel(repoRoot, name) : name;
+    if (isLevel) console.log(name + ": the gallery of its theme, " + styleName);
+    const loaded = await styleContext(repoRoot, styles, styleName);
     const { ctx, wallpaper, title } = loaded;
     const outName = opts.as || loaded.name;
-    const room = EnvGen.roomFor(isLevel ? ctx.width : 1600, isLevel ? ctx.height : 160, PX_PER_METRE);
+    const room = EnvGen.canonicalRoom(PX_PER_METRE);
     const palette = EnvGen.derivePalette(ctx);
     const names = EnvGen.planeNames(room).filter((n) => {
       const { kind, i } = EnvGen.parsePlane(n);
@@ -524,7 +501,7 @@ async function main() {
       writePng(path.join(dir, "backdrop.png"), b.width, b.height, b.data);
     }
     const meta = {
-      name: outName, title, level: isLevel ? name : null, style: isLevel ? ctx.theme && ctx.levelId : name,
+      name: outName, title, level: isLevel ? name : null, style: styleName,
       generated: new Date().toISOString(), mode: built.mode, palette: {
         source: palette.source, material: palette.material.map((c) => "#" + c.toString(16).padStart(6, "0")),
         bg: "#" + palette.bg.toString(16).padStart(6, "0"), dark: "#" + palette.dark.toString(16).padStart(6, "0"),
