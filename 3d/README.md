@@ -293,7 +293,12 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   past it - with pieces of the level standing upright on every ring's
   floor between the walls, turned to the player, taller the further out; a
   ceiling of fog alone; every ring sinks further into a fog in the level's
-  own hue, and in a headset the stereo between the rings is the depth (`3d/js/environment.js`, the
+  own hue, and in a headset the stereo between the rings is the depth. On
+  the desktop the orbit cannot carry the camera out of the room - it stops
+  inside the last ring, between the floor and the ceiling - and whatever
+  stands between the eye and the board, a ring's wall or a standing piece,
+  is hidden while it does (in a headset too, should the board be dollied
+  out past a ring) (`3d/js/environment.js`, the
   pictures from `3d/js/envgen.js`). The board stands inside the first ring,
   in front of the player, whose place at the moment the board is placed is
   the rings' centre. It is a strength like the colour blend: *full* lays

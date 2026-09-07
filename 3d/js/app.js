@@ -5606,6 +5606,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       else if (!flatActive) controls.update();
       vrWarningSign.visible = false;
     }
+    // the camera kept inside the room, and whatever stands between it and the board out of the way
+    if (session && !flatActive && !viewTween) environment.update(camera, dioramaRoot, renderer.xr.isPresenting);
     if (!vrMouseFallback()) {
       mouseCursor.visible = false;
       vrPan = null;

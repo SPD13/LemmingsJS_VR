@@ -237,6 +237,58 @@ class Environment {
     }
   }
 
+  // ------------------------------------------------------ every frame
+  /**
+   * The camera kept inside the room - within the last ring, between the
+   * floor and the ceiling - on the desktop, where the orbit could otherwise
+   * carry it out through the decor; and whatever stands between the eye
+   * and the board hidden - a ring's wall the line from one to the other
+   * crosses, a standing piece it passes through - until it no longer does.
+   */
+  update(camera, dioramaRoot, presenting) {
+    if (!this.active || !this.level) return;
+    const room = this.level.room, c = this._center || room.center;
+    this.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(this.root.matrixWorld).invert();
+    const eye = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld).applyMatrix4(inv);
+    const last = room.layers[room.layers.length - 1];
+    if (!presenting) {
+      // inside the last ring, a step in from its wall, and between floor and ceiling
+      const margin = 0.3 * this.pxPerMetre;
+      const dx = eye.x - c.x, dz = eye.z - c.z, d = Math.hypot(dx, dz), rMax = last.rOut - margin;
+      let moved = false;
+      if (d > rMax) { eye.x = c.x + dx * rMax / d; eye.z = c.z + dz * rMax / d; moved = true; }
+      const yLo = this._yFloor + margin * 0.5, yHi = this._yCeil - margin * 0.5;
+      if (eye.y < yLo) { eye.y = yLo; moved = true; }
+      if (eye.y > yHi) { eye.y = yHi; moved = true; }
+      if (moved) camera.position.copy(this.root.localToWorld(eye.clone()));
+    }
+    // the board's middle, in the room's frame
+    dioramaRoot.updateMatrixWorld(true);
+    const board = new THREE.Vector3(room.W / 2, room.H / 2, 8).applyMatrix4(dioramaRoot.matrixWorld).applyMatrix4(inv);
+    // a wall is in the way when the eye-to-board line crosses its drum
+    const ex = eye.x - c.x, ez = eye.z - c.z, bx = board.x - c.x, bz = board.z - c.z;
+    const dEye = Math.hypot(ex, ez), dBoard = Math.hypot(bx, bz);
+    const vx = bx - ex, vz = bz - ez, len2 = vx * vx + vz * vz;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, -(ex * vx + ez * vz) / len2)) : 0;
+    const dMin = Math.hypot(ex + vx * t, ez + vz * t); // the line's closest approach to the centre
+    for (const l of room.layers) {
+      const wall = this.planes["wall" + l.i];
+      const blocks = (dEye > l.rOut || dBoard > l.rOut) && dMin < l.rOut;
+      wall.visible = !blocks;
+    }
+    // a standing piece is in the way when the line passes through its quad
+    const pad = 0.1 * this.pxPerMetre;
+    const seg = new THREE.Vector3().subVectors(board, eye), segLen2 = seg.lengthSq();
+    for (const mesh of this.props) {
+      const p = mesh.position;
+      const tp = segLen2 > 0 ? Math.max(0, Math.min(1, new THREE.Vector3().subVectors(p, eye).dot(seg) / segLen2)) : 0;
+      const near = new THREE.Vector3().copy(eye).addScaledVector(seg, tp);
+      const horiz = Math.hypot(near.x - p.x, near.z - p.z), vert = Math.abs(near.y - p.y);
+      mesh.visible = !(tp > 0 && tp < 1 && horiz < mesh.scale.x / 2 + pad && vert < mesh.scale.y / 2 + pad);
+    }
+  }
+
   _clearProps() {
     for (const mesh of this.props) { this.root.remove(mesh); mesh.material.dispose(); }
     this.props = [];
