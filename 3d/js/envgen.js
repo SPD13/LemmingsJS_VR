@@ -54,10 +54,11 @@
     SWELL: [0.1, 0.18, 0.2, 0.2],    // and how much it rises and falls round the ring
     PROPS: [6, 10, 14, 16],          // pieces standing on each ring's floor, between the walls
     PROP_M: [[0.5, 1.1], [0.9, 2.0], [1.6, 3.2], [2.4, 5.0]], // how tall they stand, metres, per ring
-    // the first ring's floor is a bowl: a ledge under the player, a drop to
-    // a pit floor, a cliff up to the rim the rocks stand on; its ceiling a
-    // dome. Fractions of the ring's radius, depths in metres.
-    BOWL: { LEDGE: 0.2, DROP: 0.38, FLOOR: 0.585, CLIFF: 0.6, DEPTH_M: 0.5, DOME_M: 0.8 },
+    // the first ring's floor is a lattice of the level's rocks over a bowl
+    // sunk into the ground: dense at the rim, thinning inward, open at the
+    // centre, the bowl seen through the gaps; its ceiling a dome. DENSE and
+    // THIN are fractions of the ring's radius in from the rim, depths metres.
+    BOWL: { DENSE: 0.35, THIN: 0.72, DEPTH_M: 2.0, DOME_M: 0.8 },
     BAND_IN: 0.18,    // each ring's second skyline, this far in from its wall (of the ring's width)
     BAND_SKY: 0.65,   // and this much lower
     THICK: 0.12,      // a standing piece's thickness, of its width
@@ -130,9 +131,9 @@
     return sheet;
   }
 
-  /** The plane names a room has: floor0, wall0, band0, ceiling0, floor1, ..., backdrop. */
+  /** The plane names a room has: bowl0, floor0, wall0, band0, ceiling0, floor1, ..., backdrop. */
   function planeNames(room) {
-    const out = [];
+    const out = ["bowl0"];
     for (const l of room.layers) out.push("floor" + l.i, "wall" + l.i, "band" + l.i, "ceiling" + l.i);
     out.push("backdrop");
     return out;
@@ -618,15 +619,18 @@
     const W = bmp.width, H = bmp.height, noise = noiseFn(rng);
     const stretch = bandStretch(layer, H);
     if (layer.i === 0) {
-      const hl = (u) => H * (0.5 + 0.12 * noise(u));
+      // a lattice over the bowl: packed at the rim, then rocks strewn ever
+      // thinner inward, nothing over the middle - the bowl shows through
+      const B = ROOM.BOWL;
+      const hl = (u) => H * (B.DENSE + 0.08 * noise(u));
       if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.08, 0.04, stretch);
       else drawClumps(bmp, bk.floor, hl, rng, TINT.floor, false, 0, stretch);
-      // decorations on the bare ground, clear of the sector the board stands in (u = 0.5)
+      const list = bk.floor.length ? bk.floor : bk.usable;
+      const n = Math.round((W * H) / 3000);
+      const thinning = (y) => 1 - smoothstep(B.DENSE, B.THIN, y / H);
+      scatterStretched(bmp, list, n, rng, TINT.floor, (x, y) => y > hl(x / W) - 8 && rng() < thinning(y), stretch);
       const away = (u) => Math.min(Math.abs(u - 0.5), 1 - Math.abs(u - 0.5));
-      const n = Math.round((W * H) / 14000);
-      scatter(bmp, bk.decor, n, rng, TINT.floor, (x, y) => y > hl(x / W) + 4 && !(away(x / W) < 0.14 && y < H * 0.75));
-      // under the player, the ground sinks into the dark
-      darken(bmp, 0.15, 0, H * 0.8, W, H, (x, y) => smoothstep(0.8, 1, y / H));
+      scatter(bmp, bk.decor, Math.round((W * H) / 20000), rng, TINT.floor, (x, y) => y > hl(x / W) && y < H * B.THIN && !(away(x / W) < 0.14 && y < H * 0.75));
     } else {
       const hl = () => H + 64; // everything
       if (mode === "tile") drawTiles(bmp, bk, hl, rng, TINT.floor, false, 0.05, 0.04, stretch);
@@ -718,6 +722,20 @@
     }
   }
 
+  /** `n` pieces of `list` dropped where `ok(x, y)` allows, stretched for their row. */
+  function scatterStretched(bmp, list, n, rng, tint, ok, stretch) {
+    if (!list.length || n <= 0) return;
+    for (let i = 0, tries = 0; i < n && tries < n * 4; tries++) {
+      const p = pickWeighted(list, rng, (q) => q.area);
+      const x = rng() * bmp.width, y = rng() * bmp.height;
+      if (!ok(x, y)) continue;
+      const fx = stretch ? stretch(y) : 1;
+      const img = stretched(dressed(p, rng() < 0.5, false, tint), fx);
+      stamp(bmp, img, x - p.bbox.x * fx - p.bbox.w * fx / 2, y - p.bbox.y - p.bbox.h / 2);
+      i++;
+    }
+  }
+
   /** `n` decorations dropped where `ok(x, y)` allows. */
   function scatter(bmp, decor, n, rng, tint, ok) {
     if (!decor.length || n <= 0) return;
@@ -779,7 +797,7 @@
   // ------------------------------------------------------------- the build
   /** The plane name's parts: { kind: "floor"|"wall"|"ceiling"|"side"|"backdrop", i }. */
   function parsePlane(name) {
-    const m = /^(floor|wall|band|ceiling)(\d+)$/.exec(name);
+    const m = /^(floor|wall|band|ceiling|bowl)(\d+)$/.exec(name);
     return m ? { kind: m[1], i: parseInt(m[2], 10) } : { kind: name, i: 0 };
   }
 
@@ -811,6 +829,21 @@
     }
     const seed = (name) => seededRandom(name + ":" + (ctx.levelId || "level"));
 
+    if (want("bowl0")) {
+      // the bowl under the first floor: the ground falling away into the
+      // dark toward the middle, rubble strewn down its sides
+      const layer = room.layers[0];
+      const bmp = new Bitmap(layer.floor.w, layer.floor.h);
+      paintGradient(bmp, [{ t: 0, rgb: scale(dark, 0.45) }, { t: 0.5, rgb: scale(dark, 0.18) }, { t: 1, rgb: 0x000000 }],
+        "v", Object.assign(gradientOpts(1), { vignette: 0 }));
+      if (opts.full) {
+        const rng = seed("bowl0"), H = bmp.height, W = bmp.width;
+        const list = bk.floor.length ? bk.floor : bk.usable;
+        scatterStretched(bmp, list, Math.round((W * H) / 6000), rng, 0x6a6a6a, (x, y) => rng() < 1 - smoothstep(0.2, 0.85, y / H), bandStretch(layer, H));
+        darken(bmp, 0, 0, H * 0.7, W, H, (x, y) => smoothstep(0.7, 1, y / H));
+      }
+      planes.bowl0 = bmp;
+    }
     for (const layer of room.layers) {
       const i = layer.i;
       if (want("floor" + i)) {
@@ -818,7 +851,8 @@
         const stops = i === 0
           ? [{ t: 0, rgb: scale(dark, 0.55) }, { t: 0.45, rgb: scale(dark, 0.75) }, { t: 1, rgb: scale(dark, 0.3) }]
           : [{ t: 0, rgb: scale(dark, 0.5) }, { t: 1, rgb: scale(dark, 0.6) }];
-        paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: 0 }));
+        // the first floor in full is a lattice: clear where nothing stands, the bowl beneath showing
+        if (!(i === 0 && opts.full)) paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: 0 }));
         if (opts.full) drawFloor(bmp, room, layer, bk, mode, seed("floor" + i));
         fogBlend(bmp, fog, layer.fog, layer.fogNear);
         planes["floor" + i] = bmp;

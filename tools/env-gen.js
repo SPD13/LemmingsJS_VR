@@ -459,7 +459,7 @@ async function main() {
     for (const plane of names) {
       const file = fileFor(plane);
       const collage = built.planes[plane];
-      const cutout = EnvGen.parsePlane(plane).kind === "wall" && plane !== lastWall;
+      const cutout = (EnvGen.parsePlane(plane).kind === "wall" && plane !== lastWall) || plane === "floor0";
       const row = { plane, w: collage.width, h: collage.height, collage: file + "-collage.png", scores: {} };
       writePng(path.join(dir, row.collage), collage.width, collage.height, collage.data);
       row.scores.collage = score(collage, collage, palette);
