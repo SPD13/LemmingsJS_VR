@@ -154,14 +154,14 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       const named = { off: "off", soft: "soft", smooth: "smooth", "0": "off", "1": "soft" };
       return named[String(raw)] || "soft";
     })(),
-    // the room around the board (environment.js): off, the ambient gradients,
-    // or the full collage of the level's own pieces
+    // the room around the board (environment.js): none, or the full place
+    // built from the level's style (older saved states named more)
     environment: (() => {
       const p = params.get("environment");
       const raw = p != null ? p : (() => {
         try { return localStorage.getItem("lem3d-environment"); } catch (e) { return null; }
       })();
-      const named = { off: "off", ambient: "ambient", full: "full", "0": "off", "1": "ambient", "2": "full", false: "off", true: "full", on: "full" };
+      const named = { none: "none", off: "none", "0": "none", false: "none", full: "full", ambient: "full", "1": "full", "2": "full", true: "full", on: "full" };
       return named[String(raw).toLowerCase()] || "full";
     })(),
     doors: setting("doors", "lem3d-doors", true),    // entrances/exits as openings
@@ -1856,7 +1856,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       text: () => colorBlendLevel().label.toUpperCase(), act: () => toggleColorBlend() },
     { label: "3D skills bar", get: () => state.skillBar, act: () => toggleSkillBar() },
     { label: "flat skills", get: () => state.flatSkills, act: () => toggleFlatSkills() },
-    { label: "environment", get: () => state.environment !== "off",
+    { label: "environment", get: () => state.environment !== "none",
       text: () => state.environment.toUpperCase(), act: () => toggleEnvironment() },
     { label: "recentre the board", act: () => vr.recenterNow() },
   ];
@@ -2459,12 +2459,12 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   colorBlendBtn.addEventListener("click", toggleColorBlend);
   renderColorBlendBtn();
 
-  // the room around the board: off, the ambient gradients, the full collage
-  // of the level's own pieces (environment.js). A strength, like the blend.
+  // the room around the board: none, or the full place built from the
+  // level's style (environment.js)
   const environmentBtn = document.getElementById("btn-environment");
   const renderEnvironmentBtn = () => {
-    hudIcons.environment({ on: state.environment !== "off", level: state.environment });
-    environmentBtn.title = "environment (a floor, a back wall and a ceiling in the level's own pixel art): "
+    hudIcons.environment({ on: state.environment !== "none", level: state.environment });
+    environmentBtn.title = "environment (the place around the board, in the level's own pixel art): "
       + state.environment + " - press for " + Environment.MODES[(Environment.MODES.indexOf(state.environment) + 1) % Environment.MODES.length];
   };
   function toggleEnvironment() {

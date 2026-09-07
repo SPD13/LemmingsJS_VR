@@ -44,7 +44,7 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
 `.nxrp` replay, for a Lemmix level), and the render settings
 `?emboss=`, `?smooth=`, `?smoothterrain=`, `?doors=`, `?skillbar=`, `?flatskills=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
-`0`/`off`/`false`), `?environment=off|ambient|full` (the room around the board, see
+`0`/`off`/`false`), `?environment=none|full` (the place around the board, see
 the 3D effects below), and `?assets=static|server` - where `neolemmix/` and
 `levels/` come from: this browser's storage, filled on the setup page, or
 the web server (see "Setup" below). Those are normally toggled with the buttons and
@@ -314,12 +314,14 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   textures across the levels of the style, so every dirt level sits in the
   same cave and the next level of a pack costs nothing; a level brings
   only its own backdrop behind the slab, and a board too wide for the
-  first ring enlarges it. It is a strength like the colour blend: *full* lays
-  the level's own terrain pieces as a ground strip round the first ring's
-  rim and as hills behind hills, from a generator seeded with the level's
-  id, over *ambient*, which is the same place in gradients dithered
-  between the level's colours (the style's theme colours, the colours the
-  blend map sampled from the picture, a DOS tileset's palette); then *off*. The
+  first ring enlarges it. *Full* lays the style's terrain pieces as a
+  ground strip round the first ring's rim and as hills behind hills, from a
+  generator seeded with the style's name, over gradients dithered between
+  the style's colours (its theme colours, the colours of its pieces, a DOS
+  tileset's palette); *none* leaves the board in the void as before. A
+  style with nothing to build from - not installed, a special picture -
+  gets the fog alone: the sky, the haze on the floor and overhead, no
+  stitching of the level's own sprites. The
   style's background image, when the level names one (`$BACKGROUND`), is
   tiled behind the slab and is the sky of the last layer, which the fog
   then takes its colour from; a picture meant to be placed once rather than
