@@ -290,9 +290,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   round that is a cut-out skyline of the level's pieces the next ring shows
   through, the last one solid, the sky - the far rings' skylines tower to
   the ceiling, the first one's dips behind the board so the depth shows
-  past it - with pieces of the level standing upright on every ring's
-  floor between the walls, turned to the player, taller the further out; a
-  ceiling of fog alone; every ring sinks further into a fog in the level's
+  past it, and a second, lower skyline stands a little in from each wall -
+  with pieces of the level standing upright on every ring's floor between
+  the walls, extruded like the sprites on the board so they have thickness,
+  turned to the player and a little askew so it shows, taller the further
+  out; the first ring's floor is a bowl - a ledge under the player's feet,
+  a drop to a pit floor, a cliff of the rim's rocks up to the rim the rocks
+  stand on - and its ceiling a dome; a ceiling of fog alone; every ring sinks further into a fog in the level's
   own hue, and in a headset the stereo between the rings is the depth. On
   the desktop the orbit cannot carry the camera far: the zoom stops at a
   quarter of its old reach and the camera stays inside the first ring,

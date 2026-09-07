@@ -66,9 +66,12 @@ class Environment {
     // far to near, so the nearer cut-outs are drawn over the further rings
     for (let i = n - 1; i >= 0; i--) {
       this.planes["wall" + i] = plane("wall" + i, i < n - 1);
+      this.planes["band" + i] = plane("band" + i, true);
       this.planes["floor" + i] = plane("floor" + i, false);
       this.planes["ceiling" + i] = plane("ceiling" + i, false);
     }
+    // the cliff from the pit floor up to the rim, wearing the rocks of the first floor's rim
+    this.cliff = plane("cliff", false);
     this._center = null; // the player's place in the room's frame, board pixels
     this.props = [];      // the pieces standing on the floor between the rings (meshes)
     this._propGeometry = new THREE.PlaneGeometry(1, 1);
@@ -256,7 +259,9 @@ class Environment {
       await tick();
       t = performance.now();
       const built = EnvGen.build(gctx, Object.assign({ full, pieces }, opts), ["props"]);
-      g.props = (built.props || []).map((p) => Object.assign(p, { tex: this._textureFor("prop", p.bitmap) }));
+      // a standing piece is extruded like a sprite on the board (bridge.js):
+      // its texture unflipped, the mesher's UVs run down the picture
+      g.props = (built.props || []).map((p) => Object.assign(p, { tex: this._texture(p.bitmap, false), geometry: Environment.pieceGeometry(p) }));
       ms.props = Math.round(performance.now() - t);
     }
     g.done = true;
@@ -326,8 +331,8 @@ class Environment {
   _applyProps(list) {
     this._clearProps();
     for (const p of list) {
-      const mat = new THREE.MeshBasicMaterial({ map: p.tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
-      const mesh = new THREE.Mesh(this._propGeometry, mat);
+      const mat = new THREE.MeshBasicMaterial({ map: p.tex, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(p.geometry || this._propGeometry, mat);
       mesh.name = "env-prop";
       mesh.userData.prop = p;
       this.root.add(mesh);
@@ -339,12 +344,16 @@ class Environment {
   _placeProps() {
     if (!this.level) return;
     const c = this._center || this.level.room.center, yF = this._yFloor;
+    const room = this.level.room;
     for (const mesh of this.props) {
       const p = mesh.userData.prop, th = p.u * Math.PI * 2;
       const x = c.x + p.r * Math.sin(th), z = c.z + p.r * Math.cos(th);
-      mesh.position.set(x, yF + p.h / 2, z);
-      mesh.rotation.set(0, Math.atan2(c.x - x, c.z - z), 0); // its face to the centre
-      mesh.scale.set(p.w, p.h, 1);
+      // the geometry's origin is the piece's bottom centre, in its own pixels, y down
+      const k = p.h / p.bitmap.height;
+      const y = yF + Environment.floorProfile(room, 0, p.r);
+      mesh.position.set(x, y, z);
+      mesh.rotation.set(0, Math.atan2(c.x - x, c.z - z) + (p.yaw || 0), 0); // its face to the centre, turned a little
+      mesh.scale.set(k, -k, k);
     }
   }
 
@@ -391,9 +400,8 @@ class Environment {
     const t = len2 > 0 ? Math.max(0, Math.min(1, -(ex * vx + ez * vz) / len2)) : 0;
     const dMin = Math.hypot(ex + vx * t, ez + vz * t); // the line's closest approach to the centre
     for (const l of room.layers) {
-      const wall = this.planes["wall" + l.i];
-      const blocks = (dEye > l.rOut || dBoard > l.rOut) && dMin < l.rOut;
-      wall.visible = !blocks;
+      this.planes["wall" + l.i].visible = !((dEye > l.rOut || dBoard > l.rOut) && dMin < l.rOut);
+      this.planes["band" + l.i].visible = !((dEye > l.rBand || dBoard > l.rBand) && dMin < l.rBand);
     }
     // a standing piece is in the way when the line passes through its quad
     const pad = 0.1 * this.pxPerMetre;
@@ -403,7 +411,8 @@ class Environment {
       const tp = segLen2 > 0 ? Math.max(0, Math.min(1, new THREE.Vector3().subVectors(p, eye).dot(seg) / segLen2)) : 0;
       const near = new THREE.Vector3().copy(eye).addScaledVector(seg, tp);
       const horiz = Math.hypot(near.x - p.x, near.z - p.z), vert = Math.abs(near.y - p.y);
-      mesh.visible = !(tp > 0 && tp < 1 && horiz < mesh.scale.x / 2 + pad && vert < mesh.scale.y / 2 + pad);
+      const pr = mesh.userData.prop;
+      mesh.visible = !(tp > 0 && tp < 1 && horiz < pr.w / 2 + pad && Math.abs(near.y - (p.y + pr.h / 2)) < pr.h / 2 + pad);
     }
   }
 
@@ -433,7 +442,7 @@ class Environment {
     // only asked for when an index says the folder is there: no probing 404s
     if (!Environment.shipped || !Environment.shipped.has(gctx.themeName)) return null;
     // floor.png is the first ring's, floor-1.png the next one's, and so on
-    const names = EnvGen.planeNames(room).filter((n) => n !== "backdrop");
+    const names = EnvGen.planeNames(room).filter((n) => ["floor", "wall"].includes(EnvGen.parsePlane(n).kind));
     const files = await Promise.all(names.map((n) => load(Environment.fileFor(n))));
     const out = {};
     let any = false;
@@ -468,7 +477,8 @@ class Environment {
   _textureFor(name, bitmap) {
     const tex = this._texture(bitmap, true);
     tex.wrapS = THREE.RepeatWrapping;
-    tex.userData.bitmap = bitmap;
+    // (nothing of the bitmap on the texture: three.js copies a texture's
+    // user data through JSON when it clones one)
     return tex;
   }
 
@@ -480,6 +490,19 @@ class Environment {
     mesh.material.map = tex;
     mesh.material.color.setHex(0xffffff);
     mesh.material.needsUpdate = true;
+    if (name === "floor0" && tex.image && tex.image.data) {
+      // the cliff wears the rim's rows of the same picture (its own texture
+      // over the same pixels), the rim at its foot, darker
+      const old = this.cliff.material.map;
+      const t = this._texture({ data: tex.image.data, width: tex.image.width, height: tex.image.height }, true);
+      t.wrapS = THREE.RepeatWrapping;
+      t.repeat.set(1, -0.5);
+      t.offset.set(0, 1);
+      this.cliff.material.map = t;
+      this.cliff.material.color.setHex(0x8a8a8a);
+      this.cliff.material.needsUpdate = true;
+      if (old) old.dispose();
+    }
   }
 
   /** The wall's picture is drawn for a nominal height; the plane's real
@@ -539,6 +562,7 @@ class Environment {
       mesh.material.needsUpdate = true;
     }
     if (this.backdropMaterial.map) { this.backdropMaterial.map.dispose(); this.backdropMaterial.map = null; this.backdropMaterial.needsUpdate = true; }
+    if (this.cliff.material.map) { this.cliff.material.map.dispose(); this.cliff.material.map = null; this.cliff.material.needsUpdate = true; }
     this.stats = {};
   }
 
@@ -593,11 +617,19 @@ class Environment {
     for (const g of this.level.geometries) g.dispose();
     this.level.geometries = [];
     const keep = (g) => { this.level.geometries.push(g); return g; };
+    const P = this.pxPerMetre, B = EnvGen.ROOM.BOWL;
     for (const l of room.layers) {
-      p["floor" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yF));
-      p["ceiling" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yC));
+      const first = l.i === 0;
+      // the first floor a bowl, the first ceiling a dome; the rest flat
+      p["floor" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yF,
+        first ? 32 : 6, first ? (r) => Environment.floorProfile(room, 0, r) : null));
+      p["ceiling" + l.i].geometry = keep(Environment.ringGeometry(c, l.rIn, l.rOut, yC,
+        first ? 16 : 6, first ? (r) => B.DOME_M * P * (1 - Math.pow(r / l.rOut, 2)) : null));
       p["wall" + l.i].geometry = keep(Environment.drumGeometry(c, l.rOut, yF, yC));
+      p["band" + l.i].geometry = keep(Environment.drumGeometry(c, l.rBand, yF, yC));
     }
+    const l0 = room.layers[0];
+    this.cliff.geometry = keep(Environment.drumGeometry(c, l0.rOut * B.CLIFF + 1, yF - B.DEPTH_M * P, yF));
     this._wallHeight = yC - yF;
     for (const l of room.layers) {
       const map = p["wall" + l.i].material.map;
@@ -615,14 +647,16 @@ const ENV_SEGMENTS = 96; // round a ring
  * (+z) through the board's side (-z) and back, v from the inner edge (0)
  * to the rim (1) - the picture's row 0, flipped, is the rim.
  */
-Environment.ringGeometry = function (c, rIn, rOut, y) {
-  const rows = 6, segs = ENV_SEGMENTS;
+Environment.ringGeometry = function (c, rIn, rOut, y, rows, profile) {
+  rows = rows || 6;
+  const segs = ENV_SEGMENTS;
   const pos = [], uv = [], idx = [];
   for (let j = 0; j <= rows; j++) {
     const v = j / rows, r = rIn + (rOut - rIn) * v;
+    const yy = y + (profile ? profile(r) : 0);
     for (let i = 0; i <= segs; i++) {
       const u = i / segs, th = u * Math.PI * 2;
-      pos.push(c.x + r * Math.sin(th), y, c.z + r * Math.cos(th));
+      pos.push(c.x + r * Math.sin(th), yy, c.z + r * Math.cos(th));
       uv.push(u, v);
     }
   }
@@ -636,6 +670,32 @@ Environment.ringGeometry = function (c, rIn, rOut, y) {
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
+  return g;
+};
+
+/**
+ * The first floor's height at radius r, below the floor: flat under the
+ * player (the ledge), a drop to the pit floor, flat, a cliff up to the rim
+ * the rocks stand on (ROOM.BOWL). Zero on the other rings.
+ */
+Environment.floorProfile = function (room, ring, r) {
+  if (ring !== 0) return 0;
+  const B = EnvGen.ROOM.BOWL, f = r / room.layers[0].rOut, D = B.DEPTH_M * room.P;
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  if (f <= B.LEDGE) return 0;
+  if (f < B.DROP) return -D * smooth(B.LEDGE, B.DROP, f);
+  if (f < B.FLOOR) return -D;
+  if (f < B.CLIFF) return -D * (1 - smooth(B.FLOOR, B.CLIFF, f));
+  return 0;
+};
+
+/** A standing piece extruded like a sprite on the board, its origin at its bottom centre. */
+Environment.pieceGeometry = function (p) {
+  const bmp = p.bitmap, w = bmp.width, h = bmp.height, d = bmp.data;
+  const solid = (x, y) => d[(y * w + x) * 4 + 3] >= 0x80;
+  const g = typeof buildExtrudedSpriteGeometry === "function" ? buildExtrudedSpriteGeometry(solid, w, h, p.depth || 2) : null;
+  if (!g) return null;
+  g.translate(-w / 2, -h, -(p.depth || 2) / 2);
   return g;
 };
 
@@ -674,7 +734,7 @@ Environment.evictGallery = function (key) {
   if (!g) return;
   Environment.galleries.delete(key);
   for (const tex of g.textures.values()) tex.dispose();
-  for (const p of g.props) if (p.tex) p.tex.dispose();
+  for (const p of g.props) { if (p.tex) p.tex.dispose(); if (p.geometry) p.geometry.dispose(); }
 };
 Environment.evictGalleries = function (keep) {
   const keys = Array.from(Environment.galleries.keys());
