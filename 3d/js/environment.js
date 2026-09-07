@@ -247,6 +247,13 @@ class Environment {
    */
   update(camera, dioramaRoot, presenting) {
     if (!this.active || !this.level) return;
+    // a session the room was never placed for (the placement hook missed,
+    // a level loaded mid-session): placed now, round the head, at the
+    // board's scale - a room left at the desktop's pixel scale is
+    // kilometres wide, and all a headset sees of it is the fog
+    if (presenting && (this._placed !== "xr" || Math.abs(this.root.scale.y - dioramaRoot.scale.y) > 1e-6)) {
+      this.placeForXR(dioramaRoot, new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld));
+    } else if (!presenting && this._placed !== "desktop") this.placeDesktop();
     const room = this.level.room, c = this._center || room.center;
     this.root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(this.root.matrixWorld).invert();
@@ -460,6 +467,8 @@ class Environment {
     } else this._center = null;
     this._layout();
     this._applyVisibility();
+    console.log("[env] placed for the session: scale " + s.toFixed(4) + ", floor at local y " + Math.round(this._yFloor)
+      + ", centre " + (this._center ? Math.round(this._center.x) + "," + Math.round(this._center.z) : "nominal"));
   }
 
   /** On the desktop: the identity, the floor a little below the board, the
