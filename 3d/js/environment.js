@@ -52,9 +52,12 @@ class Environment {
     this.root = root;
 
     const plane = (name, cutout) => {
-      // a wall that is not the last is a cut-out: what it leaves clear shows the ring behind
+      // a wall that is not the last is a cut-out: what it leaves clear shows
+      // the ring behind. An alpha test alone, not a transparent material:
+      // three.js draws transparent things after everything else, the skill
+      // bar's overlay included, and a wall would paint over the bar
       const mat = new THREE.MeshBasicMaterial({ color: ENV_SCENE_COLOR, side: THREE.DoubleSide });
-      if (cutout) { mat.transparent = true; mat.alphaTest = 0.5; }
+      if (cutout) mat.alphaTest = 0.5;
       const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat); // the ring's own geometry comes with the level
       mesh.name = "env-" + name;
       mesh.frustumCulled = false; // a ring the player stands in is cut by the near plane oddly otherwise
