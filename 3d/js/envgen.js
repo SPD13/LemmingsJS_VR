@@ -53,8 +53,8 @@
     SWELL: [0.1, 0.18, 0.2, 0.2],    // and how much it rises and falls round the ring
     PROPS: [6, 10, 14, 16],          // pieces standing on each ring's floor, between the walls
     PROP_M: [[0.5, 1.1], [0.9, 2.0], [1.6, 3.2], [2.4, 5.0]], // how tall they stand, metres, per ring
-    TEX: { near: 1024, far: 2048, wallRows: 256, bandRows: 512 },
-    WALL_K: 1.5,      // a wall's pixels, coarser again than the floor's: it is further away
+    TEX: { first: 4096, near: 2048, far: 2048, wallRows: 1024, bandRows: 1024 }, // picture widths per ring, and row caps
+    WALL_K: 1.25,     // a wall's pixels, coarser again than the floor's: it is further away
   };
 
   /**
@@ -84,7 +84,8 @@
     const layers = radii.map((rOut, i) => {
       const rIn = i === 0 ? 0 : radii[i - 1];
       const circ = Math.round(2 * Math.PI * rOut);
-      const texW = i >= 2 ? ROOM.TEX.far : ROOM.TEX.near;
+      // the first ring is close: its pixels are near the board's own; the far ones coarser
+      const texW = i === 0 ? ROOM.TEX.first : i === 1 ? ROOM.TEX.near : ROOM.TEX.far;
       const d = rOut / P; // the wall's distance
       const kBand = Math.max(1, Math.ceil(circ / texW));
       const kWall = Math.max(1, Math.ceil(circ / texW * ROOM.WALL_K));

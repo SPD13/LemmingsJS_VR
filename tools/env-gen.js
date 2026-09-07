@@ -360,8 +360,13 @@ function wrappedCrop(bmp, x0, w) {
  */
 function stripsOf(bmp) {
   const aspect = bmp.width / bmp.height;
-  if (aspect <= 4.5) return [{ x: 0, w: bmp.width, ov: 0 }];
-  const n = Math.ceil(aspect / 3.5), cw = Math.ceil(bmp.width / n), ov = Math.min(64, cw >> 2);
+  // a strip must also fit the model's 1024 width once its height is brought to the model's
+  const sc = Math.max(1, 256 / Math.min(bmp.width, bmp.height));
+  const gh = Math.min(768, Math.max(256, Math.round(bmp.height * sc / 64) * 64));
+  const maxW = Math.floor(1024 * bmp.height / gh);
+  if (aspect <= 4.5 && bmp.width <= maxW) return [{ x: 0, w: bmp.width, ov: 0 }];
+  const n = Math.max(Math.ceil(aspect / 3.5), Math.ceil(bmp.width / maxW));
+  const cw = Math.ceil(bmp.width / n), ov = Math.min(64, cw >> 2);
   return Array.from({ length: n }, (_, i) => ({ x: i * cw - ov, w: Math.min(cw, bmp.width - i * cw) + 2 * ov, ov }));
 }
 
