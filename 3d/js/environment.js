@@ -23,20 +23,22 @@
  * depend on the board's size and the player's place), built off
  * the critical path once the board is up - the ambient gradients first, in
  * one go, then the collage a plane per frame - and disposed with the level.
- * Three states, like the other 3D effects: "off" (nothing, the scene as it
- * was), "ambient" (the gradients), "full" (the collage as well).
+ * Two states, like the other 3D effects: "none" (nothing, the scene as it
+ * was) and "full". A gallery with no pieces to build from - a style not
+ * installed, a special picture - gets the fog alone: the sky, the haze on
+ * the floor and overhead, nothing stitched from a level's own sprites.
  */
 
 const ENV_SCENE_COLOR = 0x10141c;  // the page's own background, restored when the room is off
 const ENV_BACKDROP_COLOR = 0x05070c; // the slab's backdrop without an environment (app.js)
-const ENV_MODES = ["off", "ambient", "full"];
+const ENV_MODES = ["none", "full"];
 
 class Environment {
   constructor(scene, dioramaRoot, opts) {
     this.scene = scene;
     this.dioramaRoot = dioramaRoot;
     this.pxPerMetre = opts.pxPerMetre;
-    this.mode = "off";
+    this.mode = "none";
     this.level = null;      // { ctx, room, styles } while a level is loaded
     this.set = null;        // the level's textures
     this.grid = null;       // the headset's floor grid, hidden while the floor shows
@@ -87,18 +89,17 @@ class Environment {
   /** The floor grid the headset shows: hidden while the room's floor is up. */
   setVrGrid(grid) { this.grid = grid; this._applyVisibility(); }
 
-  get active() { return this.mode !== "off" && !!this.level; }
+  get active() { return this.mode !== "none" && !!this.level; }
 
-  /** The state: off, ambient or full. A level already up is rebuilt for it. */
+  /** The state: none or full. A level already up is rebuilt for it. */
   setMode(mode) {
     if (!ENV_MODES.includes(mode)) mode = "full";
     if (mode === this.mode) return;
-    const was = this.mode;
     this.mode = mode;
     this._applyVisibility();
     if (!this.level) return;
-    if (mode === "off") { this._disposeSet(); this._applyBackdrop(); this._applyScene(); return; }
-    if (was === "off" || (mode === "full") !== (was === "full")) this.rebuild();
+    if (mode === "none") { this._disposeSet(); this._applyBackdrop(); this._applyScene(); return; }
+    this.rebuild();
   }
 
   /** Shown or hidden as a whole (the 2D view hides it); the state still counts. */
@@ -128,7 +129,7 @@ class Environment {
     this.level = { ctx, room, styles, geometries: [] };
     this._layout();
     this._applyVisibility();
-    if (this.mode === "off") { this._applyBackdrop(); return; }
+    if (this.mode === "none") { this._applyBackdrop(); return; }
     await this._build();
   }
 
@@ -137,7 +138,7 @@ class Environment {
     if (!this.level) return Promise.resolve();
     Environment.evictGallery(this._galleryKey(this.level.ctx) + "|" + this.mode);
     this._disposeSet();
-    if (this.mode === "off") { this._applyBackdrop(); this._applyScene(); return Promise.resolve(); }
+    if (this.mode === "none") { this._applyBackdrop(); this._applyScene(); return Promise.resolve(); }
     return this._build();
   }
 
@@ -197,6 +198,7 @@ class Environment {
     set.source = g.source;
     stats.paletteSource = g.palette && g.palette.source;
     stats.collageMode = g.collageMode;
+    stats.fogOnly = !!g.fogOnly;
     Object.assign(stats.ms, g.ms || {});
     stats.totalMs = Math.round(performance.now() - t0);
     this.stats = stats;
@@ -225,7 +227,10 @@ class Environment {
     const files = await this._files(gctx, room);
     if (files) g.source = "file";
     const opts = { room, palette, wallpaper: g.wallpaper };
-    const full = g.mode === "full";
+    // nothing to build a place from: the fog alone, no stitching of a level's own sprites
+    const collected = EnvGen.collectPieces(gctx);
+    g.fogOnly = !collected.pieces.some((p) => !p.excluded);
+    const full = g.mode === "full" && !g.fogOnly;
     // the near ring and the sky in gradients, in one go, so the room is there at once
     t = performance.now();
     const far = room.layers[room.layers.length - 1].i;
@@ -247,7 +252,7 @@ class Environment {
       t = performance.now();
       let bitmap = files && files[name];
       if (!bitmap) {
-        const built = EnvGen.build(gctx, Object.assign({ full, pieces }, opts), [name]);
+        const built = EnvGen.build(gctx, Object.assign({ full, pieces: pieces || collected }, opts), [name]);
         pieces = built.pieces;
         bitmap = built.planes[name];
         if (built.mode) g.collageMode = built.mode;
@@ -261,7 +266,7 @@ class Environment {
     if (full) {
       await tick();
       t = performance.now();
-      const built = EnvGen.build(gctx, Object.assign({ full, pieces }, opts), ["props"]);
+      const built = EnvGen.build(gctx, Object.assign({ full, pieces: pieces || collected }, opts), ["props"]);
       // a standing piece is extruded like a sprite on the board (bridge.js):
       // its texture unflipped, the mesher's UVs run down the picture
       g.props = (built.props || []).map((p) => Object.assign(p, { tex: this._texture(p.bitmap, false), geometry: Environment.pieceGeometry(p) }));
@@ -301,10 +306,7 @@ class Environment {
         }
       } catch (e) { pieces = null; }
     }
-    if (!pieces && ctx.engine === "lemmix") {
-      pieces = ctx.lemmixPieces || [];
-      images = pieces.filter((p) => p.drawn && p.drawn.image).map((p) => p.drawn.image);
-    }
+    if (!pieces && ctx.engine === "lemmix") pieces = []; // no style to build from: the fog alone
     if (ctx.engine !== "lemmix") {
       groundData = ctx.groundData;
       const list = (groundData && groundData.terraImages) || [];
