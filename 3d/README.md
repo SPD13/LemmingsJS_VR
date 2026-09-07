@@ -294,8 +294,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   floor between the walls, turned to the player, taller the further out; a
   ceiling of fog alone; every ring sinks further into a fog in the level's
   own hue, and in a headset the stereo between the rings is the depth. On
-  the desktop the orbit cannot carry the camera out of the room - it stops
-  inside the last ring, between the floor and the ceiling - and whatever
+  the desktop the orbit cannot carry the camera far: the zoom stops at a
+  quarter of its old reach and the camera stays inside the first ring,
+  between the floor and the ceiling, since the pictures are drawn for an
+  eye there and go wrong in perspective from further out; and whatever
   stands between the eye and the board, a ring's wall or a standing piece,
   is hidden while it does (in a headset too, should the board be dollied
   out past a ring) (`3d/js/environment.js`, the
