@@ -54,6 +54,13 @@
     SWELL: [0.1, 0.18, 0.2, 0.2],    // and how much it rises and falls round the ring
     PROPS: [6, 10, 14, 16],          // pieces standing on each ring's floor, between the walls
     PROP_M: [[0.5, 1.1], [0.9, 2.0], [1.6, 3.2], [2.4, 5.0]], // how tall they stand, metres, per ring
+    // the first ring's floor is a bowl: a ledge under the player, a drop to
+    // a pit floor, a cliff up to the rim the rocks stand on; its ceiling a
+    // dome. Fractions of the ring's radius, depths in metres.
+    BOWL: { LEDGE: 0.2, DROP: 0.38, FLOOR: 0.585, CLIFF: 0.6, DEPTH_M: 0.5, DOME_M: 0.8 },
+    BAND_IN: 0.18,    // each ring's second skyline, this far in from its wall (of the ring's width)
+    BAND_SKY: 0.65,   // and this much lower
+    THICK: 0.12,      // a standing piece's thickness, of its width
     TEX: { first: 4096, near: 2048, far: 2048, wallRows: 1024, bandRows: 1024 }, // picture widths per ring, and row caps
     WALL_K: 1.25,     // a wall's pixels, coarser again than the floor's: it is further away
   };
@@ -90,8 +97,9 @@
       const d = rOut / P; // the wall's distance
       const kBand = Math.max(1, Math.ceil(circ / texW));
       const kWall = Math.max(1, Math.ceil(circ / texW * ROOM.WALL_K));
+      const rBand = rOut - ROOM.BAND_IN * (rOut - rIn);
       return {
-        i, rIn, rOut, circ, d,
+        i, rIn, rOut, circ, d, rBand, fogBand: fogAt(rBand / P),
         fog: fogAt(d), fogNear: i === 0 ? 0 : fogAt(rIn / P),
         skyline: ROOM.SKYLINE[Math.min(i, ROOM.SKYLINE.length - 1)],
         swell: ROOM.SWELL[Math.min(i, ROOM.SWELL.length - 1)],
@@ -122,10 +130,10 @@
     return sheet;
   }
 
-  /** The plane names a room has: floor0, wall0, ceiling0, floor1, ..., backdrop. */
+  /** The plane names a room has: floor0, wall0, band0, ceiling0, floor1, ..., backdrop. */
   function planeNames(room) {
     const out = [];
-    for (const l of room.layers) out.push("floor" + l.i, "wall" + l.i, "ceiling" + l.i);
+    for (const l of room.layers) out.push("floor" + l.i, "wall" + l.i, "band" + l.i, "ceiling" + l.i);
     out.push("backdrop");
     return out;
   }
@@ -542,9 +550,20 @@
     if (x + img.width > W) Pixels.blit(dst, x - W, y, img, 0, 0, img.width, img.height, Pixels.combineTerrainDefault);
   }
 
-  /** A piece stretched sideways by `fx` (a band's picture is narrower toward its inner edge). */
+  /** A piece stretched sideways by `fx` (a band's picture is narrower
+   *  toward its inner edge), kept on the picture by the stretch to a
+   *  twentieth: a stamp is one of a few widths, not a fresh copy each time. */
   function stretched(img, fx) {
     if (Math.abs(fx - 1) < 0.05) return img;
+    fx = Math.round(fx * 20) / 20;
+    img._stretched = img._stretched || new Map();
+    const hit = img._stretched.get(fx);
+    if (hit) return hit;
+    const out = stretchedNow(img, fx);
+    img._stretched.set(fx, out);
+    return out;
+  }
+  function stretchedNow(img, fx) {
     const w = Math.max(1, Math.round(img.width * fx)), h = img.height;
     const out = new Bitmap(w, h), s = img.words(), d = out.words();
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = s[y * img.width + Math.min(img.width - 1, (x / fx) | 0)];
@@ -575,11 +594,12 @@
     const fr = R(fog), fg = G(fog), fb = B(fog);
     for (let y = 0; y < h; y++) {
       const f = h > 1 ? fFar + (fNear - fFar) * (y / (h - 1)) : fFar;
-      if (f <= 0) continue;
-      for (let x = 0; x < w; x++) {
-        const p = (y * w + x) * 4;
+      const fi = Math.round(f * 256);
+      if (fi <= 0) continue;
+      const end = (y + 1) * w * 4;
+      for (let p = y * w * 4; p < end; p += 4) {
         if (d[p + 3] === 0) continue;
-        d[p] += (fr - d[p]) * f; d[p + 1] += (fg - d[p + 1]) * f; d[p + 2] += (fb - d[p + 2]) * f;
+        d[p] += ((fr - d[p]) * fi) >> 8; d[p + 1] += ((fg - d[p + 1]) * fi) >> 8; d[p + 2] += ((fb - d[p + 2]) * fi) >> 8;
       }
     }
   }
@@ -745,7 +765,11 @@
         const img = dressed(p, rng() < 0.5, false, TINT.floor);
         const bmp = img.crop(p.bbox.x, p.bbox.y, p.bbox.w, p.bbox.h);
         fogBlend(bmp, fog, fogAt(r / P), fogAt(r / P));
-        out.push({ ring: i, u, r, w: p.bbox.w * scale, h: hPx, bitmap: bmp });
+        out.push({
+          ring: i, u, r, w: p.bbox.w * scale, h: hPx, bitmap: bmp,
+          depth: Math.max(2, Math.round(p.bbox.w * ROOM.THICK)), // in the piece's own pixels
+          yaw: (rng() - 0.5) * Math.PI / 3.6,                     // up to 25 degrees off facing the player: its thickness shows
+        });
         k++;
       }
     });
@@ -755,7 +779,7 @@
   // ------------------------------------------------------------- the build
   /** The plane name's parts: { kind: "floor"|"wall"|"ceiling"|"side"|"backdrop", i }. */
   function parsePlane(name) {
-    const m = /^(floor|wall|ceiling)(\d+)$/.exec(name);
+    const m = /^(floor|wall|band|ceiling)(\d+)$/.exec(name);
     return m ? { kind: m[1], i: parseInt(m[2], 10) } : { kind: name, i: 0 };
   }
 
@@ -807,6 +831,14 @@
           "v", { palette: [fog, scale(fog, 0.9), scale(fog, 0.8), scale(fog, 0.7), scale(fog, 0.6), scale(fog, 0.5)], dark: fog, cell: 2, vignette: 0 });
         fogBlend(bmp, fog, layer.fog, layer.fogNear);
         planes["ceiling" + i] = bmp;
+      }
+      if (want("band" + i)) {
+        // a second skyline a little in from the wall, lower: hills before the hills
+        const bmp = new Bitmap(layer.wall.w, layer.wall.h);
+        const inner = Object.assign({}, layer, { skyline: layer.skyline * ROOM.BAND_SKY, swell: layer.swell * 0.7 });
+        if (opts.full) drawWall(bmp, room, inner, bk, mode, seed("band" + i));
+        fogBlend(bmp, fog, layer.fogBand, layer.fogBand);
+        planes["band" + i] = bmp;
       }
       if (want("wall" + i)) {
         const bmp = new Bitmap(layer.wall.w, layer.wall.h);
