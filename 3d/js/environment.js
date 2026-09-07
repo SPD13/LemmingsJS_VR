@@ -224,13 +224,13 @@ class Environment {
     t = performance.now();
     const far = room.layers[room.layers.length - 1].i;
     const first = ["floor0", "wall0", "ceiling0", "wall" + far];
-    const ambient = EnvGen.build(gctx, Object.assign({ full: false }, opts), first);
-    g.fog = ambient.fog;
     for (const name of first) {
+      const ambient = EnvGen.build(gctx, Object.assign({ full: false }, opts), [name]);
+      g.fog = ambient.fog;
       g.textures.set(name, this._textureFor(name, ambient.planes[name]));
-      if (live()) this._applyTexture(name, g.textures.get(name));
+      if (live()) { this._applyTexture(name, g.textures.get(name)); this._applyScene(); this._applyBackdrop(); }
+      await tick();
     }
-    if (live()) { this._applyScene(); this._applyBackdrop(); }
     ms.ambient = Math.round(performance.now() - t);
     // then every picture, one per frame: the collage, or the shipped picture where there is one
     let pieces = null;

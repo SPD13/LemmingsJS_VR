@@ -301,7 +301,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   out past a ring) (`3d/js/environment.js`, the
   pictures from `3d/js/envgen.js`). The board stands inside the first ring,
   in front of the player, whose place at the moment the board is placed is
-  the rings' centre. It is a strength like the colour blend: *full* lays
+  the rings' centre. The place is the gallery's, not the level's: it is
+  drawn from every terrain piece of the level's theme style (or of its DOS
+  tileset), round rings of one canonical size, once, and kept with its
+  textures across the levels of the style, so every dirt level sits in the
+  same cave and the next level of a pack costs nothing; a level brings
+  only its own backdrop behind the slab, and a board too wide for the
+  first ring enlarges it. It is a strength like the colour blend: *full* lays
   the level's own terrain pieces as a ground strip round the first ring's
   rim and as hills behind hills, from a generator seeded with the level's
   id, over *ambient*, which is the same place in gradients dithered
