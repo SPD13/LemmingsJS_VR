@@ -369,7 +369,6 @@ class Environment {
     this.root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(this.root.matrixWorld).invert();
     const eye = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld).applyMatrix4(inv);
-    const last = room.layers[room.layers.length - 1];
     if (!presenting) {
       // inside the first ring, a step in from its wall - the pictures are
       // drawn for an eye there - and between floor and ceiling
