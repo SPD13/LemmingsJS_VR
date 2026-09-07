@@ -46,7 +46,8 @@
     EYE_M: 0.9,       // the player's distance from the board's face (placeDioramaForXR), the desktop's centre
     CEIL_M: 2.6,      // the ceiling's height above the physical floor
     FLOOR_DROP_M: 0.5, // the desktop's floor, this far below the board's bottom edge
-    RINGS: [2.8, 4.5, 8.0, 17.0], // each ring's radius from the player
+    RINGS: [2.8, 4.5, 8.0],       // each ring's radius from the player
+    SPHERE_M: 17.0,               // the fog sphere round it all, the world's far shell
     NOMINAL: { W: 1600, H: 160 }, // the level the rings are drawn for: a classic one fits the first ring
     CLEAR_M: 0.5,     // the first ring stands at least this far past the board's corners
     FOG_M: 7.0,       // the distance by which the fog has taken two thirds of a colour
@@ -104,14 +105,17 @@
         fog: fogAt(d), fogNear: i === 0 ? 0 : fogAt(rIn / P),
         skyline: ROOM.SKYLINE[Math.min(i, ROOM.SKYLINE.length - 1)],
         swell: ROOM.SWELL[Math.min(i, ROOM.SWELL.length - 1)],
-        last: i === radii.length - 1,
+        last: false,
         // a band's picture wraps round the outer rim (row 0) and runs in to the inner one
         floor: { k: kBand, w: Math.ceil(circ / kBand), h: Math.min(ROOM.TEX.bandRows, Math.ceil((rOut - rIn) / kBand)) },
         ceiling: { k: kBand, w: Math.ceil(circ / kBand), h: Math.min(ROOM.TEX.bandRows, Math.ceil((rOut - rIn) / kBand)) },
         wall: { k: kWall, w: Math.ceil(circ / kWall), h: Math.min(ROOM.TEX.wallRows, Math.ceil(wallPx / kWall)) },
       };
     });
-    return { W, H, P, floorDrop, wallPx, center, reach, layers };
+    return {
+      W, H, P, floorDrop, wallPx, center, reach, layers,
+      sphere: { r: Math.round(ROOM.SPHERE_M * P), w: 1024, h: 512 },
+    };
   }
 
   /** The room every gallery's pictures are drawn for: a classic level's. */
@@ -131,9 +135,9 @@
     return sheet;
   }
 
-  /** The plane names a room has: bowl0, floor0, wall0, band0, ceiling0, floor1, ..., backdrop. */
+  /** The plane names a room has: sky, bowl0, floor0, wall0, band0, ceiling0, floor1, ..., backdrop. */
   function planeNames(room) {
-    const out = ["bowl0"];
+    const out = ["sky", "bowl0"];
     for (const l of room.layers) out.push("floor" + l.i, "wall" + l.i, "band" + l.i, "ceiling" + l.i);
     out.push("backdrop");
     return out;
@@ -216,9 +220,10 @@
     const themeBg = (env.palette && parseHex(env.palette.bg)) ?? (theme.BACKGROUND !== undefined ? theme.BACKGROUND : 0);
     const bg = luma(themeBg) > 4 ? themeBg : scale(dark, 0.45);
     const accent = theme.MASK !== undefined ? theme.MASK : (theme.MINIMAP !== undefined ? theme.MINIMAP : dark);
-    // the haze the far layers sink into: the material's own hue, muted and dim
-    const fog = (env.palette && parseHex(env.palette.fog)) ?? mix(scale(bg, 0.8), mix(dark, light, 0.5), 0.55);
-    return { material, bg, dark, light, accent, fog, source };
+    // the haze the far rings sink into: the average tint of the pieces, dimmed
+    const avg = ctx.groundImage && ctx.width && ctx.height ? meanColor({ data: ctx.groundImage, width: ctx.width, height: ctx.height }) : null;
+    const fog = (env.palette && parseHex(env.palette.fog)) ?? (avg !== null && luma(avg) > 6 ? scale(mix(avg, bg, 0.2), 0.8) : mix(scale(bg, 0.8), mix(dark, light, 0.5), 0.55));
+    return { material, bg, dark, light, accent, fog, avg, source };
   }
 
   /** The most common colours of the level's solid pixels, 5 bits a channel. */
@@ -798,6 +803,7 @@
   /** The plane name's parts: { kind: "floor"|"wall"|"ceiling"|"side"|"backdrop", i }. */
   function parsePlane(name) {
     const m = /^(floor|wall|band|ceiling|bowl)(\d+)$/.exec(name);
+    if (name === "sky") return { kind: "sky", i: 0 };
     return m ? { kind: m[1], i: parseInt(m[2], 10) } : { kind: name, i: 0 };
   }
 
@@ -876,17 +882,25 @@
       }
       if (want("wall" + i)) {
         const bmp = new Bitmap(layer.wall.w, layer.wall.h);
-        if (layer.last) {
-          // the sky: the wallpaper when the style has one, else the haze,
-          // lighter toward the horizon where the fog is thickest
-          paintGradient(bmp, [{ t: 0, rgb: scale(fog, 0.55) }, { t: 0.55, rgb: scale(fog, 0.85) }, { t: 1, rgb: fog }],
-            "v", Object.assign(gradientOpts(2), { palette: [fog, scale(fog, 0.85), scale(fog, 0.7), scale(fog, 0.55), scale(fog, 0.4)], vignette: 0 }));
-          if (wp) drawWallpaper(bmp, room, layer, wp, fog);
-        }
         if (opts.full) drawWall(bmp, room, layer, bk, mode, seed("wall" + i));
         fogBlend(bmp, fog, layer.fog, layer.fog);
         planes["wall" + i] = bmp;
       }
+    }
+    if (want("sky")) {
+      // the fog sphere round it all: the haze thickest at the horizon,
+      // darker overhead and below; the style's sky, when it has one, a hint
+      // across the horizon band
+      const sp = room.sphere, bmp = new Bitmap(sp.w, sp.h);
+      paintGradient(bmp, [{ t: 0, rgb: scale(fog, 0.5) }, { t: 0.42, rgb: scale(fog, 0.9) }, { t: 0.5, rgb: fog }, { t: 0.58, rgb: scale(fog, 0.9) }, { t: 1, rgb: scale(fog, 0.45) }],
+        "v", { palette: [fog, scale(fog, 0.9), scale(fog, 0.8), scale(fog, 0.7), scale(fog, 0.6), scale(fog, 0.5), scale(fog, 0.4)], dark: fog, cell: 1, vignette: 0 });
+      if (wp && wp.kind === "wallpaper") {
+        const band = new Bitmap(sp.w, Math.round(sp.h * 0.24));
+        Pixels.drawNineSlice(band, 0, 0, band.width, band.height, wp.image.tinted(TINT.wallpaper), { left: 0, top: 0, right: 0, bottom: 0 }, Pixels.combineGadget);
+        fogBlend(band, fog, 0.85, 0.85);
+        Pixels.blit(bmp, 0, Math.round(sp.h * 0.38), band, 0, 0, band.width, band.height, Pixels.combineGadget);
+      }
+      planes.sky = bmp;
     }
     let backdrop = null;
     if (want("backdrop") && wp && wp.kind === "prop") backdrop = propBackdrop(ctx, wp.image, bg);
