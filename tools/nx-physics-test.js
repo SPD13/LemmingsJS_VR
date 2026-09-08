@@ -15,43 +15,10 @@ const { PM, BA } = Lemmix;
 let masks;
 let passed = 0, failed = 0;
 
-/** A level of `w` x `h` with a solid floor from row `floorY` down. */
-function makeLevel(w, h, floorY) {
-  const level = new Lemmix.Level(w, h);
-  level.physics = new Uint16Array(w * h);
-  const mask = new Int8Array(w * h);
-  level.groundImage = new Uint8ClampedArray(w * h * 4);
-  level.groundMask = { groundMask: mask, hasGroundAt: (x, y) => mask[x + y * w] !== 0,
-    setGroundAt: (x, y) => { mask[x + y * w] = 1; }, clearGroundAt: (x, y) => { mask[x + y * w] = 0; } };
-  level.gadgets = []; level.objects = []; level.entrances = [];
-  level.preplaced = []; level.talismans = []; level.skills = [];
-  level.releaseCount = 0; level.needCount = 0; level.spawnInterval = 53; level.spawnLocked = false;
-  level.timeLimitSeconds = 0; level.zombieCount = 0; level.spawnOrder = [];
-  level.theme = { lemmings: "default", colors: { MASK: 0x006090 } };
-  const fill = (x0, y0, x1, y1, bits) => {
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      level.physics[x + y * w] = bits; mask[x + y * w] = bits & PM.SOLID ? 1 : 0;
-    }
-  };
-  fill(0, floorY, w, h, PM.SOLID);
-  level.fill = fill;
-  return level;
-}
-
+const fixtures = require("./nx-fixtures");
+const makeLevel = fixtures.makeLevel, run = fixtures.run;
 /** A game on the level with one lemming at (x, y) facing dx, given `skills`. */
-function makeGame(level, x, y, dx, skills) {
-  level.skills = (skills || []).map((name) => ({ name, count: 5 }));
-  level.preplaced = [{ x, y, dx, slider: false, climber: false, swimmer: false, floater: false, glider: false, disarmer: false, zombie: false, neutral: false, blocker: false }];
-  level.releaseCount = 1;
-  const game = new Lemmix.LemGame(level, masks);
-  game.start();
-  return game;
-}
-
-function run(game, frames, onFrame) {
-  for (let f = 0; f < frames; f++) { game.update(); if (onFrame && onFrame(f) === false) break; }
-}
+function makeGame(level, x, y, dx, skills) { return fixtures.makeGame(level, x, y, dx, skills, masks); }
 
 function check(name, cond, detail) {
   if (cond) { passed++; console.log("  ok   " + name); }

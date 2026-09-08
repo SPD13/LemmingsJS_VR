@@ -46,7 +46,7 @@
     const lines = [];
     const line = (k, v) => { if (v !== undefined && v !== null && v !== "") lines.push(k + " " + v); };
     line("TITLE", info.title);
-    line("AUTHOR", info.author);
+    line("AUTHOR", extra.author !== undefined ? extra.author : info.author);
     line("GAME", extra.game);
     line("GROUP", extra.group);
     line("LEVEL", extra.level);

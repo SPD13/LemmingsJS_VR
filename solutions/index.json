@@ -1,0 +1,1983 @@
+{
+ "version": 1,
+ "generated": "2026-09-08T23:21:21.704Z",
+ "solverVersion": "0.1.0",
+ "levels": {
+  "NeoLemmix_Introduction_Pack/Advanced_Training/A_Different_Kind_Of_Space.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/A_Different_Kind_Of_Space.nxrp",
+   "needed": 8,
+   "count": 8,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 8,
+   "features": [
+    "fire",
+    "multiHatch",
+    "pickup",
+    "steel",
+    "teleport"
+   ],
+   "expansions": 2536,
+   "elapsedMs": 9065
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Beam_Up_The_Equipment!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Beam_Up_The_Equipment!.nxrp",
+   "needed": 8,
+   "count": 8,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 8,
+   "features": [
+    "lockedRR",
+    "steel",
+    "teleport"
+   ],
+   "expansions": 2091,
+   "elapsedMs": 9075
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Bending_Bashers.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Bending_Bashers.nxrp",
+   "needed": 10,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [],
+   "expansions": 1217,
+   "elapsedMs": 9067
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Between_A_Stone_And_A_Hard_Place.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Between_A_Stone_And_A_Hard_Place.nxrp",
+   "needed": 19,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "oneway",
+    "steel",
+    "water"
+   ],
+   "expansions": 1476,
+   "elapsedMs": 9084
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Blocker's_Blindside.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Blocker's_Blindside.nxrp",
+   "needed": 5,
+   "count": 12,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 12,
+   "features": [
+    "lockedRR",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 2052,
+   "elapsedMs": 9097
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Caught_And_Released.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Caught_And_Released.nxrp",
+   "needed": 29,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "button",
+    "lockedRR",
+    "multiHatch",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 1576,
+   "elapsedMs": 9096
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Checkerboard's_Crossing.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Checkerboard's_Crossing.nxrp",
+   "needed": 21,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 22,
+   "features": [
+    "cloner",
+    "lockedRR",
+    "multiHatch",
+    "pickup",
+    "water"
+   ],
+   "expansions": 256,
+   "elapsedMs": 2811
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Curse_Of_The_Gold.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Curse_Of_The_Gold.nxrp",
+   "needed": 18,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "fire",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 1280,
+   "elapsedMs": 9080
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Edges_Of_Glory.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Edges_Of_Glory.nxrp",
+   "needed": 6,
+   "count": 6,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 6,
+   "features": [
+    "fire",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 3883,
+   "elapsedMs": 9090
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Higher_Levels_Of_Wisdom.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Higher_Levels_Of_Wisdom.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "fire",
+    "multiHatch",
+    "oneway",
+    "steel"
+   ],
+   "expansions": 599,
+   "elapsedMs": 9112
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Jump_The_Sausage!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Jump_The_Sausage!.nxrp",
+   "needed": 28,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "oneway",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 1482,
+   "elapsedMs": 9064
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Just_As_He_Was_About_To_Fall.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Just_As_He_Was_About_To_Fall.nxrp",
+   "needed": 22,
+   "count": 22,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 22,
+   "features": [
+    "fire",
+    "multiHatch",
+    "neutral",
+    "steel",
+    "trap"
+   ],
+   "expansions": 395,
+   "elapsedMs": 9114
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Pharaoh's_Turnaround.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Pharaoh's_Turnaround.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 23,
+   "features": [
+    "cloner",
+    "lockedRR",
+    "multiHatch",
+    "oneway",
+    "pickup",
+    "water"
+   ],
+   "expansions": 2033,
+   "elapsedMs": 9074
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Revenge_Of_The_Fiddler.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Revenge_Of_The_Fiddler.nxrp",
+   "needed": 2,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 5515,
+   "elapsedMs": 9101
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Saving_Two_Lems_With_One_Bomb.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Saving_Two_Lems_With_One_Bomb.nxrp",
+   "needed": 19,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 21,
+   "features": [
+    "cloner",
+    "exitcap",
+    "fire",
+    "lockedRR",
+    "pickup",
+    "steel"
+   ],
+   "expansions": 1349,
+   "elapsedMs": 9117
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Shimmichanga.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Shimmichanga.nxrp",
+   "needed": 47,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "fire",
+    "lockedRR",
+    "oneway",
+    "pickup",
+    "preplaced",
+    "steel"
+   ],
+   "expansions": 335,
+   "elapsedMs": 9127
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Sorry,_Job_Already_Taken.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Sorry,_Job_Already_Taken.nxrp",
+   "needed": 3,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "steel",
+    "water"
+   ],
+   "expansions": 3529,
+   "elapsedMs": 9063
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Stack_And_Step.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Stack_And_Step.nxrp",
+   "needed": 39,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "multiHatch",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 742,
+   "elapsedMs": 9079
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Stacker_Of_The_Sky.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Stacker_Of_The_Sky.nxrp",
+   "needed": 60,
+   "count": 60,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 60,
+   "features": [
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 146,
+   "elapsedMs": 9167
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Stepping_Up_To_A_Higher_Level.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Stepping_Up_To_A_Higher_Level.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "lockedRR",
+    "water"
+   ],
+   "expansions": 1063,
+   "elapsedMs": 9067
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/The_Detour.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/The_Detour.nxrp",
+   "needed": 39,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "fire",
+    "steel",
+    "water"
+   ],
+   "expansions": 409,
+   "elapsedMs": 9098
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/The_Fiddler.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/The_Fiddler.nxrp",
+   "needed": 3,
+   "count": 6,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 6,
+   "features": [
+    "lockedRR",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 2301,
+   "elapsedMs": 9124
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/The_Fiddler_2__Electric_Boogaloo.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/The_Fiddler_2__Electric_Boogaloo.nxrp",
+   "needed": 5,
+   "count": 6,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 6,
+   "features": [
+    "lockedRR",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 2595,
+   "elapsedMs": 9142
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Victory_Lap.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Victory_Lap.nxrp",
+   "needed": 11,
+   "count": 15,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 15,
+   "features": [
+    "fire",
+    "lockedRR",
+    "pickup",
+    "steel"
+   ],
+   "expansions": 872,
+   "elapsedMs": 9131
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Walking_Over_Dead_Bodies.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Walking_Over_Dead_Bodies.nxrp",
+   "needed": 36,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "lockedRR",
+    "trap",
+    "water"
+   ],
+   "expansions": 301,
+   "elapsedMs": 9129
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Welcome_To_The_Crystal_Maze!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Welcome_To_The_Crystal_Maze!.nxrp",
+   "needed": 10,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "trap",
+    "water"
+   ],
+   "expansions": 953,
+   "elapsedMs": 9089
+  },
+  "NeoLemmix_Introduction_Pack/Advanced_Training/Welcome_To_The_Sliderdance!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Advanced_Training/Welcome_To_The_Sliderdance!.nxrp",
+   "needed": 29,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 31,
+   "features": [
+    "cloner",
+    "multiHatch",
+    "pickup",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 841,
+   "elapsedMs": 9110
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Airdrop_Incoming!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Airdrop_Incoming!.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "button",
+    "multiHatch"
+   ],
+   "expansions": 342,
+   "elapsedMs": 9081
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Backup_Wall.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Backup_Wall.nxrp",
+   "needed": 50,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "steel",
+    "water"
+   ],
+   "expansions": 499,
+   "elapsedMs": 9110
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Blastcrawler.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Blastcrawler.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "oneway",
+    "trap",
+    "water"
+   ],
+   "expansions": 442,
+   "elapsedMs": 9167
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Blocker_Rocker.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Blocker_Rocker.nxrp",
+   "needed": 99,
+   "count": 100,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 100,
+   "features": [
+    "multiHatch",
+    "steel",
+    "water"
+   ],
+   "expansions": 283,
+   "elapsedMs": 9081
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Central_Fear.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Central_Fear.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "multiHatch",
+    "steel",
+    "trap"
+   ],
+   "expansions": 2093,
+   "elapsedMs": 9091
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Chalk_Walk.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Chalk_Walk.nxrp",
+   "needed": 42,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "fire",
+    "lockedRR",
+    "trap",
+    "water"
+   ],
+   "expansions": 558,
+   "elapsedMs": 9106
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Containment_Breach!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Containment_Breach!.nxrp",
+   "needed": 35,
+   "count": 88,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "multiHatch",
+    "pickup",
+    "preplaced",
+    "steel",
+    "updraft",
+    "water",
+    "zombie"
+   ],
+   "expansions": 226,
+   "elapsedMs": 9118
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Deepfreeze.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Deepfreeze.nxrp",
+   "needed": 15,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "fire",
+    "trap",
+    "water"
+   ],
+   "expansions": 1439,
+   "elapsedMs": 9103
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Delaying_The_Inevitable.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Delaying_The_Inevitable.nxrp",
+   "needed": 40,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "fire",
+    "steel",
+    "trap"
+   ],
+   "expansions": 495,
+   "elapsedMs": 9138
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Distance_Control.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Distance_Control.nxrp",
+   "needed": 3,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "fire",
+    "lockedRR",
+    "oneway",
+    "steel"
+   ],
+   "expansions": 4277,
+   "elapsedMs": 9133
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Fly_Traps.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Fly_Traps.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "fire",
+    "steel"
+   ],
+   "expansions": 1135,
+   "elapsedMs": 9122
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Headbumper.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Headbumper.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "steel",
+    "water"
+   ],
+   "expansions": 753,
+   "elapsedMs": 9129
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/It's_A_Stretch.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/It's_A_Stretch.nxrp",
+   "needed": 5,
+   "count": 5,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 5,
+   "features": [
+    "fire",
+    "water"
+   ],
+   "expansions": 3535,
+   "elapsedMs": 9068
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/King_Of_The_Sky.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/King_Of_The_Sky.nxrp",
+   "needed": 5,
+   "count": 5,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 5,
+   "features": [
+    "fire",
+    "lockedRR",
+    "steel"
+   ],
+   "expansions": 2315,
+   "elapsedMs": 9085
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Laboratory_Of_Explosions.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Laboratory_Of_Explosions.nxrp",
+   "needed": 10,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "oneway",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 733,
+   "elapsedMs": 9090
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Limited_Release.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Limited_Release.nxrp",
+   "needed": 100,
+   "count": 100,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 100,
+   "features": [
+    "water"
+   ],
+   "expansions": 169,
+   "elapsedMs": 9241
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Oil_Processing_Plant.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Oil_Processing_Plant.nxrp",
+   "needed": 29,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "oneway",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 405,
+   "elapsedMs": 9167
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/PARKOUR_!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/PARKOUR_!.nxrp",
+   "needed": 15,
+   "count": 15,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 15,
+   "features": [
+    "fire",
+    "preplaced",
+    "water"
+   ],
+   "expansions": 699,
+   "elapsedMs": 9090
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Reacharound.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Reacharound.nxrp",
+   "needed": 50,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 554,
+   "elapsedMs": 9094
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Scrap_The_Buttons!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Scrap_The_Buttons!.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "button",
+    "fire",
+    "steel",
+    "updraft"
+   ],
+   "expansions": 439,
+   "elapsedMs": 9103
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Slider's_Sacrifice.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Slider's_Sacrifice.nxrp",
+   "needed": 8,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "oneway",
+    "trap"
+   ],
+   "expansions": 3592,
+   "elapsedMs": 9104
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Spiraling_Out_Of_Control.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Spiraling_Out_Of_Control.nxrp",
+   "needed": 20,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "trap",
+    "water"
+   ],
+   "expansions": 301,
+   "elapsedMs": 9085
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Steely_Halls.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Steely_Halls.nxrp",
+   "needed": 10,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "steel",
+    "water"
+   ],
+   "expansions": 2093,
+   "elapsedMs": 9086
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/The_Builder_Drain.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/The_Builder_Drain.nxrp",
+   "needed": 40,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "lockedRR",
+    "trap",
+    "water"
+   ],
+   "expansions": 47,
+   "elapsedMs": 9399
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/The_Graveyard.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/The_Graveyard.nxrp",
+   "needed": 37,
+   "count": 114,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 38,
+   "features": [
+    "lockedRR",
+    "multiHatch",
+    "neutral",
+    "preplaced",
+    "trap",
+    "zombie"
+   ],
+   "expansions": 195,
+   "elapsedMs": 9130
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/The_Guardian.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/The_Guardian.nxrp",
+   "needed": 11,
+   "count": 11,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 11,
+   "features": [
+    "multiHatch",
+    "neutral",
+    "oneway",
+    "steel",
+    "water"
+   ],
+   "expansions": 1942,
+   "elapsedMs": 9077
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Top-Down_Approach.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Top-Down_Approach.nxrp",
+   "needed": 11,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 11,
+   "features": [
+    "cloner",
+    "steel"
+   ],
+   "expansions": 832,
+   "elapsedMs": 9072
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Tower_Of_Training.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Tower_Of_Training.nxrp",
+   "needed": 25,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "water"
+   ],
+   "expansions": 417,
+   "elapsedMs": 9091
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/Weightless.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/Weightless.nxrp",
+   "needed": 15,
+   "count": 15,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 15,
+   "features": [
+    "multiHatch",
+    "pickup",
+    "water"
+   ],
+   "expansions": 1192,
+   "elapsedMs": 9080
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_1/With_Minimal_Efforts.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_1/With_Minimal_Efforts.nxrp",
+   "needed": 20,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "steel",
+    "water"
+   ],
+   "expansions": 380,
+   "elapsedMs": 9125
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/A_Sudden_Change_In_Direction.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/A_Sudden_Change_In_Direction.nxrp",
+   "needed": 28,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "oneway",
+    "steel",
+    "water"
+   ],
+   "expansions": 424,
+   "elapsedMs": 9124
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Above_The_Nile.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Above_The_Nile.nxrp",
+   "needed": 21,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 21,
+   "features": [
+    "cloner",
+    "lockedRR",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 199,
+   "elapsedMs": 2896
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Blocked_In_Your_Favor.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Blocked_In_Your_Favor.nxrp",
+   "needed": 32,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "pickup",
+    "preplaced",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 382,
+   "elapsedMs": 9148
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Combine_&_Conquer.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Combine_&_Conquer.nxrp",
+   "needed": 9,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "pickup",
+    "steel"
+   ],
+   "expansions": 675,
+   "elapsedMs": 9081
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Concentrated_Force.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Concentrated_Force.nxrp",
+   "needed": 44,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "fire",
+    "steel",
+    "trap"
+   ],
+   "expansions": 338,
+   "elapsedMs": 9184
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Counterclockwise.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Counterclockwise.nxrp",
+   "needed": 22,
+   "count": 22,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 22,
+   "features": [
+    "forcefield",
+    "oneway",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 2598,
+   "elapsedMs": 9113
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Cunning_Cycle.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Cunning_Cycle.nxrp",
+   "needed": 10,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "lockedRR",
+    "pickup",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 1874,
+   "elapsedMs": 9162
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Dig_The_Trench!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Dig_The_Trench!.nxrp",
+   "needed": 15,
+   "count": 15,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 15,
+   "features": [
+    "water"
+   ],
+   "expansions": 1705,
+   "elapsedMs": 9071
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Double_Down!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Double_Down!.nxrp",
+   "needed": 23,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 25,
+   "features": [
+    "cloner",
+    "oneway",
+    "steel",
+    "water"
+   ],
+   "expansions": 2416,
+   "elapsedMs": 9100
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Equal_Distribution.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Equal_Distribution.nxrp",
+   "needed": 22,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 22,
+   "features": [
+    "cloner",
+    "exitcap",
+    "multiHatch",
+    "pickup"
+   ],
+   "expansions": 531,
+   "elapsedMs": 9077
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Fancy_Fencer.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Fancy_Fencer.nxrp",
+   "needed": 10,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "fire"
+   ],
+   "expansions": 715,
+   "elapsedMs": 9091
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Hidden_Crystalline_Temple.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Hidden_Crystalline_Temple.nxrp",
+   "needed": 16,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "pickup",
+    "water"
+   ],
+   "expansions": 1938,
+   "elapsedMs": 9118
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Infinity.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Infinity.nxrp",
+   "needed": 3,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "fire",
+    "lockedRR",
+    "multiHatch",
+    "pickup",
+    "steel",
+    "teleport"
+   ],
+   "expansions": 963,
+   "elapsedMs": 9108
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Keep_A_Tight_Grasp!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Keep_A_Tight_Grasp!.nxrp",
+   "needed": 10,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "steel",
+    "water"
+   ],
+   "expansions": 959,
+   "elapsedMs": 9090
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Lab_Workout.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Lab_Workout.nxrp",
+   "needed": 19,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "fire",
+    "forcefield",
+    "oneway",
+    "pickup",
+    "steel"
+   ],
+   "expansions": 2421,
+   "elapsedMs": 9079
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Overruled.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Overruled.nxrp",
+   "needed": 29,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "lockedRR",
+    "steel",
+    "water"
+   ],
+   "expansions": 1173,
+   "elapsedMs": 9085
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Platstop.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Platstop.nxrp",
+   "needed": 5,
+   "count": 5,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 5,
+   "features": [
+    "lockedRR",
+    "steel"
+   ],
+   "expansions": 3641,
+   "elapsedMs": 9254,
+   "saved": 5,
+   "skillsUsed": 4,
+   "completionFrame": 856,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Pressure_Management.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Pressure_Management.nxrp",
+   "needed": 15,
+   "count": 15,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 15,
+   "features": [
+    "fire",
+    "pickup",
+    "water"
+   ],
+   "expansions": 932,
+   "elapsedMs": 9071
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Rescue_Ralley.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Rescue_Ralley.nxrp",
+   "needed": 30,
+   "count": 35,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 31,
+   "features": [
+    "cloner",
+    "lockedRR",
+    "neutral",
+    "pickup",
+    "preplaced",
+    "steel",
+    "trap",
+    "updraft",
+    "water",
+    "zombie"
+   ],
+   "expansions": 109,
+   "elapsedMs": 9102
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Rude_Interruption.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Rude_Interruption.nxrp",
+   "needed": 28,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "oneway",
+    "pickup",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 1316,
+   "elapsedMs": 9088
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Sandy_Danger.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Sandy_Danger.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "trap"
+   ],
+   "expansions": 1484,
+   "elapsedMs": 9106
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Shocking_Interruption.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Shocking_Interruption.nxrp",
+   "needed": 30,
+   "count": 90,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "fire",
+    "lockedRR",
+    "multiHatch",
+    "pickup",
+    "steel",
+    "water",
+    "zombie"
+   ],
+   "expansions": 189,
+   "elapsedMs": 9209
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Snow_Splitter.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Snow_Splitter.nxrp",
+   "needed": 21,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 21,
+   "features": [
+    "cloner",
+    "lockedRR",
+    "multiHatch",
+    "trap",
+    "water"
+   ],
+   "expansions": 409,
+   "elapsedMs": 9062
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Special_Staircase.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Special_Staircase.nxrp",
+   "needed": 1,
+   "count": 1,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 1,
+   "features": [
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 4386,
+   "elapsedMs": 9085
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Stepblocked.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Stepblocked.nxrp",
+   "needed": 50,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "fire",
+    "lockedRR",
+    "oneway",
+    "steel",
+    "water"
+   ],
+   "expansions": 151,
+   "elapsedMs": 9279
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Stepping_Up_To_The_Stars.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Stepping_Up_To_The_Stars.nxrp",
+   "needed": 10,
+   "count": 10,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 10,
+   "features": [
+    "pickup",
+    "steel"
+   ],
+   "expansions": 1048,
+   "elapsedMs": 9147
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Steps_And_Pixels.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Steps_And_Pixels.nxrp",
+   "needed": 20,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [],
+   "expansions": 2256,
+   "elapsedMs": 9068
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/Stick_The_Landing!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/Stick_The_Landing!.nxrp",
+   "needed": 3,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "lockedRR",
+    "steel",
+    "teleport",
+    "updraft"
+   ],
+   "expansions": 1875,
+   "elapsedMs": 9101
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/That_Little_Extra_Help.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/That_Little_Extra_Help.nxrp",
+   "needed": 40,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "button",
+    "lockedRR",
+    "pickup",
+    "steel",
+    "water"
+   ],
+   "expansions": 301,
+   "elapsedMs": 9135
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/The_Joy_Of_Sorting.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/The_Joy_Of_Sorting.nxrp",
+   "needed": 27,
+   "count": 27,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 27,
+   "features": [
+    "exitcap",
+    "multiHatch",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 29,
+   "elapsedMs": 9316
+  },
+  "NeoLemmix_Introduction_Pack/Basic_Training_2/The_Steepest_Slope.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Basic_Training_2/The_Steepest_Slope.nxrp",
+   "needed": 5,
+   "count": 5,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 5,
+   "features": [
+    "water"
+   ],
+   "expansions": 1464,
+   "elapsedMs": 9164
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/A_New_Coat_Of_Paint.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/A_New_Coat_Of_Paint.nxrp",
+   "needed": 29,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "steel"
+   ],
+   "expansions": 287,
+   "elapsedMs": 9102
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Beam_Them_Over.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Beam_Them_Over.nxrp",
+   "needed": 20,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "pickup",
+    "steel",
+    "teleport",
+    "trap"
+   ],
+   "expansions": 774,
+   "elapsedMs": 9115
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Big_Steps_Through_The_Snow.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Big_Steps_Through_The_Snow.nxrp",
+   "needed": 20,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "water"
+   ],
+   "expansions": 489,
+   "elapsedMs": 9131
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Follow_The_Arrow!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Follow_The_Arrow!.nxrp",
+   "needed": 30,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [
+    "multiHatch",
+    "oneway",
+    "steel",
+    "water"
+   ],
+   "expansions": 206,
+   "elapsedMs": 9142
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Getting_Into_Sorting.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Getting_Into_Sorting.nxrp",
+   "needed": 14,
+   "count": 14,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 14,
+   "features": [
+    "exitcap",
+    "multiHatch",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 1074,
+   "elapsedMs": 9079
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Gravity_Lab.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Gravity_Lab.nxrp",
+   "needed": 3,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "fire",
+    "splatpad",
+    "steel",
+    "updraft"
+   ],
+   "expansions": 1220,
+   "elapsedMs": 9112
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Highlights_With_A_Safety_Net.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Highlights_With_A_Safety_Net.nxrp",
+   "needed": 20,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "fire",
+    "multiHatch",
+    "steel",
+    "water"
+   ],
+   "expansions": 845,
+   "elapsedMs": 9114
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Index_Error_Out_Of_Bounds.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Index_Error_Out_Of_Bounds.nxrp",
+   "needed": 20,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "water"
+   ],
+   "expansions": 918,
+   "elapsedMs": 9144
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Iron_Anthill.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Iron_Anthill.nxrp",
+   "needed": 26,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "multiHatch",
+    "steel"
+   ],
+   "expansions": 297,
+   "elapsedMs": 9151
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Neutral_Response.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Neutral_Response.nxrp",
+   "needed": 11,
+   "count": 11,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 11,
+   "features": [
+    "multiHatch",
+    "neutral",
+    "steel"
+   ],
+   "expansions": 771,
+   "elapsedMs": 9132
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Night_Of_The_Living_Lems.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Night_Of_The_Living_Lems.nxrp",
+   "needed": 17,
+   "count": 42,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 21,
+   "features": [
+    "cloner",
+    "multiHatch",
+    "pickup",
+    "preplaced",
+    "steel",
+    "trap",
+    "water",
+    "zombie"
+   ],
+   "expansions": 434,
+   "elapsedMs": 9116
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Pick_Them_Up_And_Push_Them_Down.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Pick_Them_Up_And_Push_Them_Down.nxrp",
+   "needed": 15,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "button",
+    "fire",
+    "pickup",
+    "steel"
+   ],
+   "expansions": 356,
+   "elapsedMs": 9097
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Set_Your_Priorities_Right!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Set_Your_Priorities_Right!.nxrp",
+   "needed": 24,
+   "count": 24,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 24,
+   "features": [
+    "multiHatch",
+    "oneway",
+    "preplaced",
+    "steel",
+    "water"
+   ],
+   "expansions": 1328,
+   "elapsedMs": 9065
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Split_And_Splat.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Split_And_Splat.nxrp",
+   "needed": 40,
+   "count": 60,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 60,
+   "features": [
+    "flipper",
+    "steel"
+   ],
+   "expansions": 434,
+   "elapsedMs": 10371,
+   "saved": 51,
+   "skillsUsed": 4,
+   "completionFrame": 1772,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Stop,_Rewind_And_Go!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Stop,_Rewind_And_Go!.nxrp",
+   "needed": 3,
+   "count": 4,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 4,
+   "features": [
+    "multiHatch",
+    "steel",
+    "trap",
+    "water"
+   ],
+   "expansions": 4510,
+   "elapsedMs": 9091
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Time_Crime.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Time_Crime.nxrp",
+   "needed": 95,
+   "count": 100,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 100,
+   "features": [
+    "timeLimit"
+   ],
+   "expansions": 440,
+   "elapsedMs": 9072
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Trap_Roulette.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Trap_Roulette.nxrp",
+   "needed": 40,
+   "count": 50,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 50,
+   "features": [
+    "fire",
+    "forcefield",
+    "steel",
+    "trap"
+   ],
+   "expansions": 120,
+   "elapsedMs": 9198
+  },
+  "NeoLemmix_Introduction_Pack/Objects_&_Functions/Up_For_A_Walk_.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Objects_&_Functions/Up_For_A_Walk_.nxrp",
+   "needed": 40,
+   "count": 40,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 40,
+   "features": [],
+   "expansions": 121,
+   "elapsedMs": 10472,
+   "saved": 40,
+   "skillsUsed": 2,
+   "completionFrame": 2041,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/A_Float,_A_Glide,_Puts_Any_Abyss_Aside!.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/A_Float,_A_Glide,_Puts_Any_Abyss_Aside!.nxrp",
+   "needed": 6,
+   "count": 8,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 8,
+   "features": [
+    "water"
+   ],
+   "expansions": 4037,
+   "elapsedMs": 9207,
+   "saved": 8,
+   "skillsUsed": 8,
+   "completionFrame": 495,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Amphibious_Engineer_Squad.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Amphibious_Engineer_Squad.nxrp",
+   "needed": 3,
+   "count": 4,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 4,
+   "features": [
+    "trap",
+    "water"
+   ],
+   "expansions": 4089,
+   "elapsedMs": 9497,
+   "saved": 4,
+   "skillsUsed": 6,
+   "completionFrame": 1065,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Block_And_Blow_In_The_Snow.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Block_And_Blow_In_The_Snow.nxrp",
+   "needed": 5,
+   "count": 25,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 25,
+   "features": [
+    "water"
+   ],
+   "expansions": 1041,
+   "elapsedMs": 9091
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Building_Flat_And_Building_High.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Building_Flat_And_Building_High.nxrp",
+   "needed": 5,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [
+    "water"
+   ],
+   "expansions": 439,
+   "elapsedMs": 9081
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Climb_Up,_Hang_On,_Get_Along!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Climb_Up,_Hang_On,_Get_Along!.nxrp",
+   "needed": 2,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "water"
+   ],
+   "expansions": 4983,
+   "elapsedMs": 9110
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Fence_&Mine_For_A_Diagonal_Line.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Fence_&Mine_For_A_Diagonal_Line.nxrp",
+   "needed": 5,
+   "count": 15,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 15,
+   "features": [
+    "fire",
+    "water"
+   ],
+   "expansions": 1187,
+   "elapsedMs": 9796,
+   "saved": 15,
+   "skillsUsed": 4,
+   "completionFrame": 1536,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Jumping_Lem_Flash.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Jumping_Lem_Flash.nxrp",
+   "needed": 1,
+   "count": 2,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 2,
+   "features": [
+    "water"
+   ],
+   "expansions": 4483,
+   "elapsedMs": 9085
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Just_Digging_Into_NeoLemmix.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Just_Digging_Into_NeoLemmix.nxrp",
+   "needed": 5,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "water"
+   ],
+   "expansions": 547,
+   "elapsedMs": 10176,
+   "saved": 20,
+   "skillsUsed": 2,
+   "completionFrame": 1019,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Just_Nuke_Them!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Just_Nuke_Them!.nxrp",
+   "needed": 8,
+   "count": 80,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 80,
+   "features": [
+    "fire",
+    "steel",
+    "water"
+   ],
+   "expansions": 0,
+   "elapsedMs": 288
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Laserslide.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Laserslide.nxrp",
+   "needed": 2,
+   "count": 3,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 3,
+   "features": [
+    "water"
+   ],
+   "expansions": 2220,
+   "elapsedMs": 8597,
+   "saved": 3,
+   "skillsUsed": 6,
+   "completionFrame": 1402,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Let's_Take_A_Bash_At_It!.nxlv": {
+   "status": "solved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Let's_Take_A_Bash_At_It!.nxrp",
+   "needed": 10,
+   "count": 30,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 30,
+   "features": [],
+   "expansions": 594,
+   "elapsedMs": 10179,
+   "saved": 30,
+   "skillsUsed": 5,
+   "completionFrame": 1251,
+   "optimal": false
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Stacks_And_Stones_Saved_Our_Bones.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Stacks_And_Stones_Saved_Our_Bones.nxrp",
+   "needed": 5,
+   "count": 20,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 20,
+   "features": [
+    "water"
+   ],
+   "expansions": 720,
+   "elapsedMs": 9090
+  },
+  "NeoLemmix_Introduction_Pack/Skills/They_Can't_Mash_Us_All!.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/They_Can't_Mash_Us_All!.nxrp",
+   "needed": 6,
+   "count": 60,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 60,
+   "features": [
+    "trap"
+   ],
+   "expansions": 0,
+   "elapsedMs": 197
+  },
+  "NeoLemmix_Introduction_Pack/Skills/Walking_On_The_Cloner_Cliffs.nxlv": {
+   "status": "unsolved",
+   "file": "NeoLemmix_Introduction_Pack/Skills/Walking_On_The_Cloner_Cliffs.nxrp",
+   "needed": 5,
+   "count": 1,
+   "tier": 1,
+   "solverVersion": "0.1.0",
+   "maxSavable": 5,
+   "features": [
+    "cloner",
+    "water"
+   ],
+   "expansions": 5555,
+   "elapsedMs": 9073
+  }
+ }
+}

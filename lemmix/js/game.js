@@ -132,6 +132,10 @@
       this.onOptionChanged = null;                   // () => the page redraws what it shows for an option
       this.showAthleteInfo = false;                  // the hotkey held: the info strip spells the permanent skills
       this.stateMark = null;                         // the Save State hotkey: {frame, recorded}
+      // replay mode, as the page sees it: engaged by a loaded file, a solution, the panel's
+      // replay button or Load State, and over the moment the player takes control (which
+      // cuts the replay: the sim's cutVersion moves on), a cancel, or a new level
+      this.replayMode = null;                        // {kind: "solution"|"attempt"|"file", cutVersion}
       this.gameTimer.onGameTick.on(() => this.onGameTimerTick());
       this.sim.start();
       for (const L of this.sim.lemmings) L.game = this;
@@ -175,6 +179,13 @@
     // ---- walking time (the panel's replay, frame back and frame forward)
 
     get replaying() { return this.sim.replaying; }
+
+    /** Replay mode on: the record is being played back and the player has not taken over. */
+    engageReplay(kind) { this.replayMode = { kind: kind || "attempt", cutVersion: this.sim.cutVersion }; }
+    disengageReplay() { this.replayMode = null; }
+    get replayEngaged() { return !!this.replayMode && this.sim.cutVersion === this.replayMode.cutVersion; }
+    /** The replay engaged is a level's stored solution (a watch, never a clear of the player's). */
+    get watchingSolution() { return this.replayEngaged && this.replayMode.kind === "solution"; }
     get replayInsert() { return this.sim.replayInsert; }
     toggleReplayInsert() { this.sim.replayInsert = !this.sim.replayInsert; if (this.gui) this.gui.render(true); }
     toggleClearPhysics() {
@@ -217,7 +228,7 @@
     }
 
     /** Cancel Replay: the player takes over even in replay-insert mode. */
-    cancelReplay() { this.sim.regainControl(true); if (this.gui) this.gui.render(true); }
+    cancelReplay() { this.sim.regainControl(true); this.disengageReplay(); if (this.gui) this.gui.render(true); }
 
     /** Save State: this frame and the replay as it stands, for Load State. */
     saveStateMark() {
@@ -229,6 +240,7 @@
       if (!this.stateMark) return false;
       this.sim.recorded = this.stateMark.recorded.map((r) => Object.assign({}, r));
       this.gotoFrame(this.stateMark.frame, true);
+      if (this.sim.recorded.length) this.engageReplay("attempt");
       return true;
     }
 
@@ -259,7 +271,7 @@
     }
 
     /** The replay button: the level from the start, paused, the attempt replaying. */
-    restartReplay() { this.gotoFrame(0, true); }
+    restartReplay() { this.gotoFrame(0, true); if (this.sim.recorded.length && !this.watchingSolution) this.engageReplay("attempt"); }
 
     /** One (or 17, or 85) frames back, paused. */
     backFrames(n) { this.gotoFrame(this.sim.currentIteration - n, true); }
@@ -277,11 +289,12 @@
       if (!this.gameTimer.isRunning()) this.gameTimer.tick();
     }
 
-    /** A loaded replay file plays from the start at normal speed. */
-    loadReplayFile(parsed) {
+    /** A loaded replay file plays from the start at normal speed; `opts.kind` says what it is ("solution", or a "file"). */
+    loadReplayFile(parsed, opts) {
       this.sim.loadReplay(parsed);
       this.gameTimer.speedFactor = 1;
       Lemmix.Rewind.gotoFrame(this.sim, this.states, 0);
+      this.engageReplay(opts && opts.kind || "file");
       this._afterJump(false);
       if (!this.gameTimer.isRunning()) this.gameTimer.continue();
     }
@@ -337,7 +350,7 @@
     }
 
     /** A NeoLemmix replay (parsed by Lemmix.Replay) as this game's own, before it starts. */
-    loadReplay(replay) { this.sim.loadReplay(replay); }
+    loadReplay(replay, kind) { this.sim.loadReplay(replay); this.engageReplay(kind || "file"); }
   }
 
   /** getLemmingManager(): the lemmings, and how a click picks one. */

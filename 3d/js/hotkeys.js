@@ -75,6 +75,7 @@
     { id: "replay_insert", label: "Replay Insert Mode", tag: "lemmix" },
     { id: "cancel_replay", label: "Cancel Replay", tag: "lemmix" },
     { id: "load_replay", label: "Load Replay", tag: "lemmix" },
+    { id: "watch_solution", label: "Watch Solution", tag: "lemmix" },
     { id: "save_replay", label: "Save Replay" },
     { id: "toggle_music", label: "Toggle Music" },
     { id: "toggle_sound", label: "Toggle Sound" },

@@ -244,6 +244,8 @@
       // same way a loaded replay's actions do (AssignNewSkill records, the
       // update applies). replay.js writes it out as .nxrp and reads one in.
       this.recorded = [];
+      this.recordVersion = 0;    // bumped whenever the replay's entries change (the page rebuilds what it shows of them)
+      this.cutVersion = 0;       // bumped when a cut removes entries (the player took control)
       this.replayInsert = false; // actions add to the replay without cutting it
       this.selectDx = 0;         // directional select: -1, 0 or 1 (the panel's, sticky)
       this.hotkeyDx = 0;         // the same while a direction hotkey is held; it wins
@@ -260,12 +262,14 @@
       for (const n of replay.nukes) out.push({ type: "nuke", frame: n.frame });
       out.sort((a, b) => a.frame - b.frame);
       this.recorded = out;
+      this.recordVersion++;
     }
 
     /** TReplay.Add: one entry of a kind per frame, the newer one wins. */
     _record(entry) {
       this.recorded = this.recorded.filter((r) => !(r.frame === entry.frame && r.type === entry.type));
       this.recorded.push(entry);
+      this.recordVersion++;
     }
 
     /** The frame of the replay's last action, -1 when it has none. */
@@ -289,7 +293,9 @@
     cutReplay(frame) {
       const onFrame = this.recorded.find((r) => r.type === "spawn_interval" && r.frame === frame);
       const siFrom = onFrame && onFrame.interval !== this.currSpawnInterval ? frame : frame + 1;
+      const before = this.recorded.length;
       this.recorded = this.recorded.filter((r) => (r.type === "spawn_interval" ? r.frame < siFrom : r.frame < frame));
+      if (this.recorded.length !== before) { this.recordVersion++; this.cutVersion++; }
     }
 
     /** RegainControl: the player acts, so the replay is cut here - unless it is being added to. */
@@ -323,9 +329,15 @@
 
     // ---- saved states (TLemmingGameSavedState)
 
-    /** Everything a later loadState needs to put this frame back. */
-    saveState() {
+    /**
+     * Everything a later loadState needs to put this frame back. With
+     * `opts.physicsOnly` the picture and the ground mask are left out - a
+     * solver stepping through thousands of states needs the physics map
+     * alone, and a loadState of such a state leaves the picture as it is.
+     */
+    saveState(opts) {
       const level = this.level;
+      const physicsOnly = !!(opts && opts.physicsOnly);
       const scalars = {};
       for (const k of SAVED_SCALARS) scalars[k] = this[k];
       return {
@@ -337,12 +349,12 @@
         gadgets: this.gadgets.map((g) => ({
           remainingLemmings: g.remainingLemmings, holdActive: g.holdActive, triggered: g.triggered,
           secondariesTreatAsBusy: g.secondariesTreatAsBusy, teleLem: g.teleLem, zombieMode: g.zombieMode,
-          neutralMode: g.neutralMode, x: g.x, y: g.y,
+          neutralMode: g.neutralMode, x: g.x, y: g.y, effect: g.effect, // a disarmed trap is "NONE"
           animations: g.animations.map((a) => ({ frame: a.frame, state: a.state, visible: a.visible })),
         })),
         physics: level.physics.slice(),
-        groundImage: level.groundImage.slice(),
-        groundMask: level.groundMask.groundMask.slice(),
+        groundImage: physicsOnly ? null : level.groundImage.slice(),
+        groundMask: physicsOnly ? null : level.groundMask.groundMask.slice(),
         extra: {}, // the page's own (depth and relief maps), see Game
       };
     }
@@ -365,13 +377,14 @@
         g.remainingLemmings = gs.remainingLemmings; g.holdActive = gs.holdActive; g.triggered = gs.triggered;
         g.secondariesTreatAsBusy = gs.secondariesTreatAsBusy; g.teleLem = gs.teleLem; g.zombieMode = gs.zombieMode;
         g.neutralMode = gs.neutralMode;
+        if (gs.effect !== undefined) g.effect = gs.effect;
         g.x = gs.x; g.y = gs.y;
         if (g.object) { g.object.x = g.x; g.object.y = g.y; }
         gs.animations.forEach((a, j) => { const t = g.animations[j]; if (t) { t.frame = a.frame; t.state = a.state; t.visible = a.visible; } });
       });
       level.physics.set(s.physics);
-      level.groundImage.set(s.groundImage);
-      level.groundMask.groundMask.set(s.groundMask);
+      if (s.groundImage) level.groundImage.set(s.groundImage);
+      if (s.groundMask) level.groundMask.groundMask.set(s.groundMask);
       this.zombieMap.fill(0);
       this.setBlockerMap();
       this.spawnIntervalModifier = 0;

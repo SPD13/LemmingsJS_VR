@@ -200,6 +200,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     speed: parseFloat(params.get("speed") || "1"),
     replay: params.get("replay"),
     nxrp: params.get("nxrp"),      // a NeoLemmix .nxrp replay, for Lemmix levels
+    solution: params.has("solution"), // the level's stored solution (solutions/), watched from the start
   };
 
   /** A lemming's action name, from either engine. */
@@ -480,6 +481,22 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       c.fill();
     });
   });
+  // The solution: a play triangle in a ring, in the catalog's cyan - the
+  // level's stored solution replayed from the start, the actions marked on
+  // the board. Lit (on) while the solution is the replay engaged.
+  const vrSolutionBtn = makeIconButton("vr-solution", guiRoot, (cx, st) => {
+    const on = !!st.on;
+    barToolIcon(cx, st.hovered, on ? (st.hovered ? "#26485c" : "#173442") : (st.hovered ? "#33405a" : "#1c2432"), "#7fd6e8", (c) => {
+      c.beginPath();
+      c.arc(32, 32, 15, 0, Math.PI * 2);
+      c.stroke();
+      c.fillStyle = "#7fd6e8";
+      c.beginPath();
+      c.moveTo(26, 22); c.lineTo(26, 42); c.lineTo(42, 32);
+      c.closePath();
+      c.fill();
+    });
+  });
   // Skip-track arrows, flanking restart. Deliberately not bare triangles:
   // a lone right-pointing triangle is the play icon two buttons along.
   const navIcon = (cx, st, back) => {
@@ -615,7 +632,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   });
 
   const vrLeftTools = [barLockBtn, barMoveBtn, barParkBtn, vrSettingsBtn];
-  const vrRightTools = [vrWorldsBtn, vrPrevBtn, vrRestartBtn, vrNextBtn];
+  const vrRightTools = [vrWorldsBtn, vrPrevBtn, vrRestartBtn, vrSolutionBtn, vrNextBtn];
   const vrButtons = vrLeftTools.concat([vrPauseBtn], vrRightTools);
 
   /**
@@ -853,6 +870,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     prev: iconizeHudButton(document.getElementById("btn-prev"), vrPrevBtn.userData.draw, "previous level"),
     restart: iconizeHudButton(document.getElementById("btn-restart"), vrRestartBtn.userData.draw, "restart the level"),
     next: iconizeHudButton(document.getElementById("btn-next"), vrNextBtn.userData.draw, "next level"),
+    solution: iconizeHudButton(document.getElementById("btn-solution"), vrSolutionBtn.userData.draw, "watch the solution: the level replayed by its stored solution, its actions marked on the board"),
     pause: iconizeHudButton(hud.pauseBtn, vrPauseBtn.userData.draw, "pause / resume"),
     worlds: iconizeHudButton(document.getElementById("btn-library"), vrWorldsBtn.userData.draw, "world library"),
     favorite: iconizeHudButton(document.getElementById("btn-favorite"), favoriteIcon, "mark this level as a favorite"),
@@ -1291,6 +1309,12 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
         cx.fillStyle = "#f0f3f8";
         cx.font = "bold 24px monospace";
         cx.fillText(fit(it.label, tw - (it.favorite ? 30 : 0)), cell.x + 10, cell.y + 62);
+        if (it.solution) {
+          // a stored solution: a small cyan play mark before the star's place
+          cx.fillStyle = "#7fd6e8";
+          const px = cell.x + cell.w - (it.favorite ? 44 : 24), py = cell.y + 54;
+          cx.beginPath(); cx.moveTo(px - 6, py - 7); cx.lineTo(px - 6, py + 7); cx.lineTo(px + 6, py); cx.closePath(); cx.fill();
+        }
         if (it.favorite) {
           // a favorite: a full yellow star at the end of the label's line
           cx.fillStyle = "#ffd866";
@@ -1466,6 +1490,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
         name: library.levelName(level.id),
         set: library.worldOf(level.id),
         best: LevelProgress.best(level.id),
+        solution: Solutions.has(level.id),
         favorite: FavoriteLevels.has(level.id),
         current: level.id === state.levelId,
         thumb: null, thumbReq: false,
@@ -2776,6 +2801,10 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     setReplayBadge(false);
     environment.clearLevel();
     if (session.shadowOverlay) session.shadowOverlay.dispose(); // its geometries are rebuilt per hover, not tracked
+    if (session.markers) session.markers.dispose();
+    solutionLit = false;
+    const solutionBtn = document.getElementById("btn-solution");
+    if (solutionBtn) solutionBtn.hidden = true;
     if (gameCursor) gameCursor.clear(renderer.domElement);
     if (mouseCursorSprite) mouseCursorSprite.visible = false;
     if (endTimeout) { clearTimeout(endTimeout); endTimeout = null; }
@@ -2924,6 +2953,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const cpmOverlay = game.sim ? makeClearPhysicsOverlay(level, worldGroup, resources) : null;
     // the skill shadows (Lemmix): what the selected skill would do to the lemming under the cursor
     const shadowOverlay = game.sim ? makeShadowOverlay(level, worldGroup, resources) : null;
+    // the replay's action markers (Lemmix): every recorded action on the board while a replay is engaged
+    const markers = game.sim && window.ReplayMarkers ? new ReplayMarkers({ THREE, worldGroup, level, game, z: LEMMING_Z + 2 }) : null;
 
     // selection highlight ring
     const ring = new THREE.Mesh(
@@ -3065,11 +3096,20 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       game.getCommandManager().loadReplay(state.replay);
       state.replay = null;
     }
-    // a NeoLemmix replay file (?nxrp=<url>) drives a Lemmix game from its own frames
+    // a NeoLemmix replay file (?nxrp=<url>) drives a Lemmix game from its own frames;
+    // ?solution=1 is the level's stored solution, watched (no clear recorded)
+    let replayKind = "file";
+    if (state.solution && game.sim) {
+      await Solutions.load(library.root);
+      const url = Solutions.url(library.root, state.levelId);
+      if (url) { state.nxrp = url; replayKind = "solution"; }
+      else console.warn("[3d] no stored solution for " + state.levelId);
+      state.solution = false;
+    }
     if (state.nxrp && game.sim) {
       try {
         const res = await fetch(state.nxrp);
-        if (res.ok) game.loadReplay(Lemmix.Replay.parse(await res.text()));
+        if (res.ok) game.loadReplay(Lemmix.Replay.parse(await res.text()), replayKind);
         else console.warn("[3d] replay not found: " + state.nxrp);
       } catch (e) { console.warn("[3d] replay failed:", e); }
       state.nxrp = null;
@@ -3308,8 +3348,9 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     game.getGameTimer().speedFactor = state.speed;
     game.onGameEnd.on((result) => {
       const won = result.state === Lemmings.GameStateTypes.SUCCEEDED;
+      const watched = !!(game.sim && game.watchingSolution); // a solution's win is the solver's, not the player's
       let best = "";
-      if (won) {
+      if (won && !watched) {
         // the clock counts down; how long it took is the elapsed time
         const seconds = game.getGameTimer().getGameTime();
         const record = LevelProgress.record(state.levelId, seconds, result.survivors);
@@ -3319,7 +3360,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       // a NeoLemmix level's talismans and its closing text
       let extra = "";
       if (game.sim) {
-        const got = (level.talismans || []).filter((t) => game.sim.talismansAchieved.has(t.id));
+        const got = watched ? [] : (level.talismans || []).filter((t) => game.sim.talismansAchieved.has(t.id));
         if (got.length) {
           extra += " — talisman: " + got.map((t) => t.title + " (" + t.color + ")").join(", ");
           try {
@@ -3331,11 +3372,11 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
         // the closing text takes the opening text's place behind "detail"
         if (won && level.posttext && level.posttext.length) setLevelText(level.posttext);
       }
-      hud.state.textContent = (won
+      hud.state.textContent = (watched ? "SOLUTION — " : "") + (won
         ? "LEVEL COMPLETE — " + Lemmings.GameStateTypes.toString(result.state) + best
         : "FAILED — " + Lemmings.GameStateTypes.toString(result.state)) + extra;
       hud.state.className = won ? "won" : "lost";
-      setVrStatus({ note: won ? "COMPLETE" + best : "FAILED",
+      setVrStatus({ note: (watched ? "SOLUTION " : "") + (won ? "COMPLETE" + best : "FAILED"),
                     kind: won ? "won" : "lost" });
       endTimeout = window.setTimeout(() => {
         endTimeout = null;
@@ -3361,6 +3402,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     if (!renderer.xr.isPresenting && !flatActive) frameDesktopCamera(level);
 
     hud.name.textContent = level.name.trim() || "(unnamed level)";
+    syncSolutionButton(true);
     const meta = where.packName + " · " + where.label +
       " · save " + level.needCount + "/" + level.releaseCount;
     hud.meta.textContent = meta;
@@ -3382,7 +3424,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       lemmingPool, objectPool, particles, resources, depthMap, profile,
       groundData, profileUrl, profileUrls, musicTrack, playMusic, pieceMap,
       getLastTickTime: () => lastTickTime,
-      syncScene, resetSceneMemory, shadowOverlay,
+      syncScene, resetSceneMemory, shadowOverlay, markers,
       // clear physics: the gadgets' one colour walks the hues every five
       // seconds (MakeFixedDrawColor), between ticks too; the water bodies with it
       cpmAnimate: (now) => {
@@ -4829,6 +4871,9 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       togglePause();
     } else if (p.barTool === "restart") {
       askVrConfirm("Restart level?", () => moveLevel(0));
+    } else if (p.barTool === "solution") {
+      if (session && session.game.sim && Solutions.has(state.levelId)) askVrConfirm("Watch the solution?", () => watchSolution());
+      else askVrNotice("No solution", "This level has no stored solution.");
     } else if (p.barTool === "prev") {
       askVrConfirm("Go back a level?", () => moveLevel(-1));
     } else if (p.barTool === "next") {
@@ -5234,6 +5279,46 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     else for (let i = 0; i < n; i++) timer.tick();
   }
 
+  /**
+   * Watch Solution: the level's stored solution (solutions/<level>.nxrp)
+   * loaded as the replay and played from the start at normal speed, the
+   * REPLAY badge on and every action marked on the board. A win watched
+   * this way records no clear. Any action of the player's takes the level
+   * over, as with any replay.
+   */
+  async function watchSolution() {
+    if (!session || !session.game.sim) return;
+    const game = session.game;
+    const url = Solutions.url(library.root, state.levelId);
+    if (!url) { setVrStatus({ note: "no solution", kind: "" }); return; }
+    let parsed;
+    try {
+      const res = await fetch(url, { cache: "no-cache" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      parsed = Lemmix.Replay.parse(await res.text());
+    } catch (e) { console.warn("[3d] solution:", e); return; }
+    if (!session || session.game !== game) return;
+    game.loadReplayFile(parsed, { kind: "solution" });
+    setVrStatus({ note: "SOLUTION", kind: "" });
+    syncSolutionButton(true);
+  }
+
+  /** The solution button shown for a Lemmix level that has one, lit while its solution is the replay engaged. */
+  let solutionLit = false;
+  function syncSolutionButton(force) {
+    const btn = document.getElementById("btn-solution");
+    if (!btn) return;
+    const has = !!(session && session.game.sim && state.engine === "lemmix" && Solutions.has(state.levelId));
+    btn.hidden = !has;
+    const lit = has && !!session.game.watchingSolution;
+    if (lit !== solutionLit || force) {
+      solutionLit = lit;
+      btn.setAttribute("aria-pressed", String(lit));
+      hudIcons.solution({ on: lit });
+      setBarToolState(vrSolutionBtn, { on: lit });
+    }
+  }
+
   /** Save Replay: the attempt as a file - NeoLemmix's .nxrp, or the DOS engine's replay string. */
   function saveReplayFile() {
     const game = session.game;
@@ -5363,6 +5448,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       case "replay_insert": game.toggleReplayInsert(); break;
       case "cancel_replay": game.cancelReplay(); break;
       case "load_replay": game.requestLoadReplay(); break;
+      case "watch_solution": watchSolution(); break;
       case "save_replay": saveReplayFile(); break;
       case "toggle_music": toggleMusic(); break;
       case "toggle_sound": soundBtn.click(); break;
@@ -5509,6 +5595,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     () => askConfirm("Skip to the next level?", "skip", () => moveLevel(1)));
   document.getElementById("btn-restart").addEventListener("click",
     () => askConfirm("Restart level?", "restart", () => moveLevel(0)));
+  document.getElementById("btn-solution").addEventListener("click", () => watchSolution());
   hud.pauseBtn.addEventListener("click", togglePause);
 
   // ------------------------------------------------------------ render loop
@@ -5561,6 +5648,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       session.gui.setViewRect(visibleLevelRect()); // the minimap's frame
       session.gui.update();
       setReplayBadge(!!session.game.replaying); // the red REPLAY over the play area
+      if (session.markers) { session.markers.setHidden(!!session.game.clearPhysics); session.markers.update(now); }
+      syncSolutionButton();
       layoutGuiPanel(); // no-ops unless the viewport or mode changed
       if (renderer.xr.isPresenting) {
         // the pause icon tracks the clock however it was stopped - this
