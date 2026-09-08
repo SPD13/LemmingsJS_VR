@@ -399,6 +399,8 @@ class Environment {
       if (eye.y > yHi) { eye.y = yHi; moved = true; }
       if (moved) camera.position.copy(this.root.localToWorld(eye.clone()));
     }
+    // in a session the board goes where the hands and sticks put it: kept inside the room
+    if (presenting) this._keepBoardInside(dioramaRoot, inv, room, c);
     // the board's middle, in the room's frame
     dioramaRoot.updateMatrixWorld(true);
     const board = new THREE.Vector3(room.W / 2, room.H / 2, 8).applyMatrix4(dioramaRoot.matrixWorld).applyMatrix4(inv);
@@ -424,6 +426,48 @@ class Environment {
       const pr = mesh.userData.prop;
       mesh.visible = !(tp > 0 && tp < 1 && horiz < pr.w / 2 + pad && Math.abs(near.y - (p.y + pr.h / 2)) < pr.h / 2 + pad);
     }
+  }
+
+  /**
+   * The board held inside the first ring, above the floor and below the
+   * ceiling: its box is measured in the room's frame and, where a pan, a
+   * dolly or a grab has carried it out, pushed back by the overshoot. A
+   * board too big for the room is left alone rather than shoved about.
+   */
+  _keepBoardInside(dioramaRoot, inv, room, c) {
+    dioramaRoot.updateMatrixWorld(true);
+    const m = new THREE.Matrix4().multiplyMatrices(inv, dioramaRoot.matrixWorld);
+    const W = room.W, H = room.H;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    const v = new THREE.Vector3();
+    for (const [x, y, z] of [[0, 0, 0], [W, 0, 0], [0, H, 0], [W, H, 0], [0, 0, 16], [W, 0, 16], [0, H, 16], [W, H, 16]]) {
+      v.set(x, y, z).applyMatrix4(m);
+      minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+      minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y);
+      minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
+    }
+    const margin = 0.15 * this.pxPerMetre;
+    const shift = new THREE.Vector3();
+    // up and down
+    const yLo = this._yFloor + margin, yHi = this._yCeil - margin;
+    if (maxY - minY < yHi - yLo) {
+      if (minY < yLo) shift.y = yLo - minY;
+      else if (maxY > yHi) shift.y = yHi - maxY;
+    }
+    // round: the farthest corner from the centre within the first ring
+    const rMax = room.layers[0].rOut - margin;
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+    const half = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+    if (half < rMax) {
+      const dx = cx - c.x, dz = cz - c.z, d = Math.hypot(dx, dz);
+      // the box's centre may go this far out before a corner leaves the ring
+      const reach = rMax - half;
+      if (d > reach && d > 0) { shift.x = dx * (reach / d) - dx; shift.z = dz * (reach / d) - dz; }
+    }
+    if (shift.lengthSq() === 0) return;
+    // the shift is in the room's frame: into the world through the room's rotation and scale
+    const world = shift.applyQuaternion(this.root.quaternion).multiply(this.root.scale);
+    dioramaRoot.position.add(world);
   }
 
   _clearProps() {
