@@ -42,7 +42,8 @@ URL params: `?level=<id>` (a level's path in `levels/index.json`, e.g.
 `LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Just_Walk!.nxlv`; the old
 `?type=1|2&group=N&level=N` still name a classic level), `?speed=N`,
 `?replay=<string>` (from the `r` key dump), `?nxrp=<url>` (a NeoLemmix
-`.nxrp` replay, for a Lemmix level), and the render settings
+`.nxrp` replay, for a Lemmix level), `?solution=1` (the level's stored
+solution watched from the start, see below), and the render settings
 `?emboss=`, `?smooth=`, `?smoothterrain=`, `?doors=`, `?skillbar=`, `?flatskills=`, `?flat=` and `?edit=` (`1`/`on`/`true` or
 `0`/`off`/`false`), `?environment=none|full` (the place around the board, see
 the 3D effects below), and `?assets=static|server` - where `neolemmix/` and
@@ -134,6 +135,20 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   hotkeys for these, in the default layout: R replay, B frame back, N frame
   forward, W replay-insert mode (your actions add to the replay instead of
   cutting it), C cancel the replay, Enter/Backspace save and load a state
+- **watch the solution**: a NeoLemmix level the solver has solved
+  (`solutions/`, see the root README) wears "▶ solution" in the catalog and
+  a play-in-a-ring button in the HUD's row (in a headset, on the bar beside
+  restart; the `Watch Solution` hotkey has no default key). It restarts
+  the level with the solution as the replay, at normal speed, the REPLAY
+  badge on, and every action of the replay marked on the board from the
+  start: a ring where the lemming stands when the skill is given, the
+  skill's picture beside it, the seconds until it, the next one pulsing;
+  once played a marker turns solid and stays, so the whole plan and what
+  has been done of it can be read at a glance. A release-rate change or
+  the nuke stands at the hatch. The markers show for any replay - a
+  loaded file, the panel's replay of your own attempt - and go the moment
+  you take control (any assignment, rate change or nuke), as the replay
+  itself does. A level completed by its solution records no clear.
 - **hotkeys** are NeoLemmix's (`js/hotkeys.js`, from its LemmixHotkeys.pas
   and the manual's list): a key does one function, some with a detail (which
   skill, how many frames, hold or toggle, which special skip), and Shift,

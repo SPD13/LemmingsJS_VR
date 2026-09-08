@@ -54,7 +54,9 @@ launcher/             Electron app that serves the repo over HTTPS for headsets
 levels/               level packs, one folder each (classic games committed, the rest drop-in)
 lemmix/js/            the Lemmix engine: NeoLemmix levels, styles, physics, panel (§2.9)
 tools/                levels-index (the catalog tree), nx-check / nx-render / nx-run /
-                      nx-physics-test (the Lemmix engine's checks), lemmix-node (node loader)
+                      nx-physics-test (the Lemmix engine's checks), lemmix-node (node loader),
+                      nx-solve + solver/ (the level solver, §2.10), nx-solve-test, nx-fixtures
+solutions/            the solver's replays, one .nxrp per solved level, and index.json
 neolemmix/            the NeoLemmix zip and styles package unpacked (styles/ gfx/ sound/ music/),
                       ignored by git except its README
 ```
@@ -703,6 +705,95 @@ headlessly and its physics counts are kept as `tools/fixtures/nx-physics.txt`;
 splat height, brick counts, tunnel shapes, steel and one-way rules, spawn
 cadence, the jumper's arc, the shimmier, the slider and the laserer. A
 run written as `.nxrp` and played back gives the same outcome.
+`nx-solve-test` holds the solver's fixtures (§2.10) on synthetic levels
+built by `nx-fixtures` (a floor, a hatch, an exit, water, a trap).
+
+### 2.10 Solutions (`tools/solver/`, `solutions/`, the page's Watch solution)
+
+`tools/nx-solve.js` finds a way through a NeoLemmix level with nothing but
+the Lemmix physics under node (`tools/lemmix-node.js`), and keeps it as a
+replay the page plays back. The plan is `3d/plans/solver-plan.md`; the
+shape of it:
+
+- **World** (`solver/world.js`): one `LemGame` per worker, saved and put
+  back at will - physics-only states (`saveState({physicsOnly})`, the
+  picture left out), the plan restored with a state as the game's record
+  (the record is not part of a state), the game in replay-insert mode so
+  an action joins a seeded plan without cutting its future. Every write to
+  the physics map bumps a terrain version the rollout watches.
+- **Rollout and events** (`solver/events.js`): the game run on with no
+  further action until it ends, gets stuck or a cap, watching every
+  controllable lemming for the moments a skill could matter - a spawn, a
+  landing, the step off an edge (with the frames it stood k pixels short
+  of it), a turn at a wall, a shrug, a job's end, a death and its cause,
+  an exit, a pickup or portal, a tick when nothing happened for a while.
+  *Stuck* is every controllable lemming pacing a cycle or blocking with
+  the terrain unchanged and nothing left to release.
+- **Analysis** (`solver/analysis.js`): an exit-distance field over the map
+  (open pixels cost one, solid six, steel sixty, at four-pixel cells), the
+  most lemmings that can be saved, and the level's feature tags.
+- **Candidates** (`solver/candidates.js`): from events to (lemming, skill,
+  frame), never at an arbitrary frame - templates per event (a fall: a
+  builder or platformer k pixels short of the edge, a floater at once; a
+  wall: a basher, miner, climber, jumper before it; a death: what answers
+  its cause at the fall or turn that led to it; a shrug: the next builder),
+  the lead and the tail lemming with every template, every other lemming
+  its own deaths and permanent skills; the release rate at the root and
+  after the first exit; the nuke once the count is made.
+- **Search** (`solver/solver.js`): best-first over the edges (node,
+  candidate), a child materialised only when its edge is popped (the world
+  back at the node, stepped to the frame, the action recorded and applied,
+  the child saved and rolled out), the frontier one heap per depth popped
+  in rotation so a shallow edge is never starved; dead branches (out of
+  time, too few lemmings left at the node, no skill left) dropped, states
+  seen with no more skills spent dropped (the hash covers the terrain, the
+  lemmings, the counters and the plan's pending entries); the score
+  `1000·saved + 300·bound − 120·skills − 40·lost − distance/2 − frames/500`.
+  A lead pass (skills to the first lemming out, one save is a success)
+  seeds a crowd pass for the count; a pass that runs dry with time left
+  runs again at the next tier's breadth. Tiers: 10 s, 2 min, 15 min.
+- **Optimise and verify** (`solver/optimise.js`, `solver/verify.js`): the
+  solution replayed from frame 0 with each entry dropped in turn, the
+  release rate at its fastest, assignments moved earlier - kept when
+  (saved, fewest skills, earliest end) is no worse; then the `.nxrp` text
+  loaded into a fresh level and game, run to the end, and compared with the
+  claim before anything is written.
+
+`solutions/<pack>/<rank>/<level>.nxrp` (NeoLemmix's own format, `AUTHOR
+nx-solve`, `COMPLETION_FRAME` the verified end) and `solutions/index.json`
+(`levels[id] = {status, file, saved, needed, count, maxSavable,
+skillsUsed, completionFrame, optimal, tier, elapsedMs, expansions,
+features}`) are committed, so both asset modes serve them (`sw.js` does not
+intercept `solutions/`, the launcher serves any path). A batch skips a
+level the index holds at this tier or higher, or solved optimally.
+
+The page (`library.js` `Solutions`) fetches the index once; a level with a
+solution wears "▶ solution" on its catalog tile (a cyan play mark in the
+headset's catalog) and shows the **Watch solution** button (the HUD's
+`btn-solution`, the VR bar's tool beside restart, the `watch_solution`
+hotkey, `?solution=1`): `Game.loadReplayFile(parsed, {kind: "solution"})`
+restarts the level with the solution as the replay, at normal speed. The
+game keeps one notion of **replay mode** (`engageReplay(kind)`,
+`replayEngaged`, `watchingSolution`): engaged by a solution, a loaded
+file, the panel's replay button or Load State, over the moment the player
+takes control (the sim's `cutVersion` moves on when a cut removes entries;
+`recordVersion` when the record changes), a cancel or a new level. A win
+watched this way records no clear and no talisman ("SOLUTION — LEVEL
+COMPLETE").
+
+**Action markers** (`3d/js/replay-markers.js`): while a replay is engaged,
+every entry of the record stands on the board from frame 0 - an
+assignment as a ring where the lemming stood with the skill's picture
+beside it (the panel's own `_skillIcon`, outlined), a release-rate change
+and the nuke at the hatch with the panel's icons; ahead of its frame a
+marker is translucent with the seconds until it, the next one pulses, a
+played one turns solid and stays; a step back turns them translucent again
+by the same comparison; the moment the replay is no longer engaged they
+all go. In clear physics mode only the rings show.
+
+Results so far: the Introduction pack at tier 1 (10 s a level) gives 9 of
+120 levels; `3d/plans/solver-plan.md` carries the ladder of levels the
+solver is taken through and what each rung taught.
 ---
 
 ## 3. Play mode and edit mode
