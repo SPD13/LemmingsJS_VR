@@ -1,0 +1,147 @@
+{
+  "name": "orig_dirt",
+  "title": "Dirt (Orig)",
+  "level": null,
+  "style": "orig_dirt",
+  "generated": "2026-09-07T19:09:25.254Z",
+  "mode": "clump",
+  "palette": {
+    "source": "histogram",
+    "material": [
+      "#d08020",
+      "#709000",
+      "#c05010",
+      "#606070",
+      "#206020",
+      "#404050",
+      "#902010",
+      "#600010"
+    ],
+    "bg": "#2b0007",
+    "dark": "#600010"
+  },
+  "wallpaper": {
+    "key": "orig_dirt:nessy",
+    "kind": "prop"
+  },
+  "fog": "#62230f",
+  "room": {
+    "layers": [
+      {
+        "d": 2.8,
+        "kFloor": 2,
+        "kWall": 3,
+        "fog": 0.33
+      },
+      {
+        "d": 4.5,
+        "kFloor": 6,
+        "kWall": 7,
+        "fog": 0.47
+      },
+      {
+        "d": 8,
+        "kFloor": 10,
+        "kWall": 13,
+        "fog": 0.68
+      },
+      {
+        "d": 17,
+        "kFloor": 21,
+        "kWall": 27,
+        "fog": 0.91
+      }
+    ]
+  },
+  "model": {
+    "api": "http://127.0.0.1:7860",
+    "denoise": 0.35,
+    "steps": 24,
+    "cfg": 7,
+    "seed": 289783801,
+    "lora": "16_bit_pixel_background_sd1.5_lora_f16.ckpt:0.8",
+    "model": null
+  },
+  "planes": [
+    {
+      "plane": "floor0",
+      "w": 3519,
+      "h": 560,
+      "collage": "floor-collage.png",
+      "scores": {
+        "collage": {
+          "paletteDistance": 4.2,
+          "meanLuma": 33.1
+        },
+        "final": {
+          "paletteDistance": 6.1,
+          "meanLuma": 47.6
+        }
+      },
+      "prompt": "apxlz, prushik, pixel art, 16-bit video game background, Dirt (Orig) tileset, ground seen from above, rocks and soil in the foreground, cave floor, flat shading, limited palette, crisp pixels, no text",
+      "raw": "floor-raw.png",
+      "strips": 4,
+      "final": "floor.png"
+    },
+    {
+      "plane": "floor1",
+      "w": 1885,
+      "h": 114,
+      "collage": "floor-1-collage.png",
+      "scores": {
+        "collage": {
+          "paletteDistance": 8.8,
+          "meanLuma": 51.4
+        },
+        "final": {
+          "paletteDistance": 8.3,
+          "meanLuma": 51.4
+        }
+      },
+      "prompt": "apxlz, prushik, pixel art, 16-bit video game background, Dirt (Orig) tileset, ground seen from above, rocks and soil in the foreground, cave floor, middle distance, flat shading, limited palette, crisp pixels, no text",
+      "raw": "floor-1-raw.png",
+      "strips": 5,
+      "final": "floor-1.png"
+    },
+    {
+      "plane": "floor2",
+      "w": 2011,
+      "h": 140,
+      "collage": "floor-2-collage.png",
+      "scores": {
+        "collage": {
+          "paletteDistance": 9.9,
+          "meanLuma": 50.9
+        },
+        "final": {
+          "paletteDistance": 11.3,
+          "meanLuma": 49.6
+        }
+      },
+      "prompt": "apxlz, prushik, pixel art, 16-bit video game background, Dirt (Orig) tileset, ground seen from above, rocks and soil in the foreground, cave floor, far away, hazy, atmospheric perspective, flat shading, limited palette, crisp pixels, no text",
+      "raw": "floor-2-raw.png",
+      "strips": 5,
+      "final": "floor-2.png"
+    },
+    {
+      "plane": "floor3",
+      "w": 2035,
+      "h": 172,
+      "collage": "floor-3-collage.png",
+      "scores": {
+        "collage": {
+          "paletteDistance": 8.9,
+          "meanLuma": 50.9
+        },
+        "final": {
+          "paletteDistance": 13.4,
+          "meanLuma": 49.1
+        }
+      },
+      "prompt": "apxlz, prushik, pixel art, 16-bit video game background, Dirt (Orig) tileset, ground seen from above, rocks and soil in the foreground, cave floor, far away, hazy, atmospheric perspective, flat shading, limited palette, crisp pixels, no text",
+      "raw": "floor-3-raw.png",
+      "strips": 4,
+      "final": "floor-3.png"
+    }
+  ]
+}

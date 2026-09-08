@@ -36,3 +36,9 @@ builder/
 # (config/README.md says which) - each player's own, not committed
 config/*
 !config/README.md
+
+# the environment pictures: the finished ones are committed, the review material is not
+3d/env/**/*-collage.png
+3d/env/**/*-raw.png
+3d/env/contact.html
+3d/env/contact.json
