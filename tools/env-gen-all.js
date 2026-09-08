@@ -16,11 +16,12 @@
  *   --force            redo styles that have a set
  *   --api, --lora, --trigger, --steps, --denoise, --cfg, --sampler, --model, --prompt
  *                      passed on to env-gen.js (defaults below are the recipe used so far)
- * Classic DOS tilesets are not covered: env-gen.js reads NeoLemmix styles only.
+ * The classic games' tilesets come first (`<pack>-g<set>`), then the styles.
  */
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const classic = require("./classic-node");
 
 const repoRoot = path.resolve(__dirname, "..");
 const ENV_DIR = path.join(repoRoot, "3d", "env");
@@ -57,12 +58,16 @@ function galleries() {
   try {
     for (const s of JSON.parse(fs.readFileSync(path.join(repoRoot, "neolemmix", "styles", "index.json"), "utf8")).styles || []) styles.set(s.name.toLowerCase(), s);
   } catch (e) { styles = null; }
-  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([name, levels]) => {
+  const isDone = (name) => fs.existsSync(path.join(ENV_DIR, name, "floor.png")) && fs.existsSync(path.join(ENV_DIR, name, "wall.png"));
+  // the classic games' tilesets first - the headline worlds - then the NeoLemmix styles
+  const dos = classic.classicTilesets(repoRoot).map((t) => ({
+    name: t.id, levels: 30, installed: true, pieces: null, done: isDone(t.id), title: t.title,
+  }));
+  const nx = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([name, levels]) => {
     const entry = styles && styles.get(name);
-    const dir = path.join(ENV_DIR, name);
-    const done = fs.existsSync(path.join(dir, "floor.png")) && fs.existsSync(path.join(dir, "wall.png"));
-    return { name, levels, installed: !!entry, pieces: entry ? entry.count : 0, done };
+    return { name, levels, installed: !!entry, pieces: entry ? entry.count : 0, done: isDone(name) };
   });
+  return dos.concat(nx);
 }
 
 function main() {
@@ -70,7 +75,7 @@ function main() {
   let list = galleries();
   if (opts.only) list = list.filter((g) => opts.only.includes(g.name));
   if (opts.list) {
-    for (const g of list) console.log((g.done ? "done " : g.installed ? "todo " : "none ") + g.name.padEnd(28) + String(g.levels).padStart(4) + " levels" + (g.installed ? ", " + g.pieces + " pieces" : ", not installed"));
+    for (const g of list) console.log((g.done ? "done " : g.installed ? "todo " : "none ") + g.name.padEnd(28) + String(g.levels).padStart(4) + " levels" + (g.title ? ", " + g.title : g.installed ? ", " + g.pieces + " pieces" : ", not installed"));
     const todo = list.filter((g) => g.installed && !g.done).length;
     console.log(list.length + " galleries: " + list.filter((g) => g.done).length + " done, " + todo + " to do, " + list.filter((g) => !g.installed).length + " not installed");
     return;

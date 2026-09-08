@@ -319,6 +319,8 @@ class Environment {
       list.forEach((img) => { if (img && img.frames && img.frames[0]) images.push(EnvGen.dosBitmap(img)); });
     }
     const sheet = EnvGen.sheetOf(images);
+    // the folder its pictures are kept in: the style's name, or the tileset's `<pack>-g<set>`
+    base.dir = ctx.engine === "lemmix" ? (ctx.themeName || null) : this._galleryKey(ctx).replace(/^dos:/, "");
     return Object.assign(base, {
       width: sheet.width, height: sheet.height, groundImage: sheet.data, groundMask: null,
       lemmixPieces: ctx.engine === "lemmix" ? pieces : null, groundData,
@@ -481,8 +483,8 @@ class Environment {
 
   /** Pictures made offline for a gallery's style (tools/env-gen.js), or null. */
   async _files(gctx, room) {
-    if (gctx.engine !== "lemmix" || !gctx.themeName) return null;
-    const dir = "3d/env/" + gctx.themeName + "/";
+    if (!gctx.dir) return null;
+    const dir = "3d/env/" + gctx.dir + "/";
     const load = async (name) => {
       try {
         const res = await fetch(dir + name + ".png");
@@ -498,7 +500,7 @@ class Environment {
       } catch (e) { return null; }
     };
     // only asked for when an index says the folder is there: no probing 404s
-    if (!Environment.shipped || !Environment.shipped.has(gctx.themeName)) return null;
+    if (!Environment.shipped || !Environment.shipped.has(gctx.dir)) return null;
     // floor.png is the first ring's, floor-1.png the next one's, and so on
     const names = EnvGen.planeNames(room).filter((n) => ["floor", "wall"].includes(EnvGen.parsePlane(n).kind) && EnvGen.parsePlane(n).i < room.layers.length);
     const files = await Promise.all(names.map((n) => load(Environment.fileFor(n))));

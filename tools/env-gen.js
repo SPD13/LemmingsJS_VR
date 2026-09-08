@@ -12,9 +12,10 @@
  * (3d/env/<style>/) over its live collage.
  *
  * Usage:
- *   node tools/env-gen.js <style|level-id> [<style|level-id> ...] [options]
+ *   node tools/env-gen.js <style|level-id|pack-gN> [...] [options]
  *   (a level id names its theme style: the pictures are a gallery's, one set
- *   for every level of the style)
+ *   for every level of the style; a classic tileset is `<pack>-g<set>`,
+ *   lemmings-g0 to lemmings-g4 and lemmingsohno-g0 to -g3)
  *     --dry              the collages only, no model (default out: tmp/env-dry/)
  *     --out <dir>        where to write (default 3d/env/ unless --dry)
  *     --planes a,b       floor, wall (default both; the ceiling is fog alone)
@@ -55,6 +56,7 @@
 const fs = require("fs");
 const path = require("path");
 const { Lemmix, nodeIO, writePng, findRepoRoot, listLevels } = require("./lemmix-node");
+const classic = require("./classic-node");
 const EnvGen = require("../3d/js/envgen.js");
 const { ProfileStore } = require("../3d/js/profile-store.js");
 
@@ -127,6 +129,24 @@ async function styleContext(repoRoot, styles, name) {
       lemmixPieces: pieces, lemmixObjects: null, dosPalette: null,
     },
     wallpaper, title: entry.title || name, name, sheet,
+  };
+}
+
+/** A classic tileset's environment context (`<pack>-g<set>`, e.g. lemmings-g0): every terrain image of the set. */
+function dosContext(repoRoot, id) {
+  const { tileset, terraImages, groundPalette } = classic.readTileset(repoRoot, id);
+  const images = terraImages.filter((img) => img && img.frames && img.frames[0]).map((img) => EnvGen.dosBitmap(img));
+  const sheet = EnvGen.sheetOf(images);
+  let profile = ProfileStore.emptyProfile();
+  try { profile = ProfileStore.normalize(JSON.parse(fs.readFileSync(path.join(repoRoot, "3d", "profiles", id + ".json"), "utf8"))); } catch (e) {}
+  return {
+    ctx: {
+      engine: "classic", levelId: "gallery:dos:" + id, gallery: true, width: sheet.width, height: sheet.height,
+      theme: null, themeName: null, background: null, backgroundName: null,
+      groundImage: sheet.data, groundMask: null, donors: null, groundData: { terraImages, lr: null }, profile,
+      lemmixPieces: null, lemmixObjects: null, dosPalette: groundPalette,
+    },
+    wallpaper: null, title: tileset.title, name: id, sheet,
   };
 }
 
@@ -438,10 +458,11 @@ async function main() {
   const report = [];
   for (const name of opts.names) {
     const isLevel = /\.nxlv$/i.test(name) || name.includes("/");
+    const isDos = /^[a-z0-9]+-g\d+$/i.test(name);
     const t0 = Date.now();
     const styleName = isLevel ? styleOfLevel(repoRoot, name) : name;
     if (isLevel) console.log(name + ": the gallery of its theme, " + styleName);
-    const loaded = await styleContext(repoRoot, styles, styleName);
+    const loaded = isDos ? dosContext(repoRoot, name.toLowerCase()) : await styleContext(repoRoot, styles, styleName);
     const { ctx, wallpaper, title } = loaded;
     const outName = opts.as || loaded.name;
     const room = EnvGen.canonicalRoom(PX_PER_METRE);
