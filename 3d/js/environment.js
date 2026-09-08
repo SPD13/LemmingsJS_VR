@@ -239,10 +239,11 @@ class Environment {
     // the sphere and the near ring's floor and dome in the haze first, so the place is there at once
     t = performance.now();
     const first = ["sky", "floor0", "bowl0", "ceiling0"];
+    const isFog = (name) => name === "sky" || EnvGen.parsePlane(name).kind === "ceiling" || g.fogOnly;
     for (const name of first) {
-      const ambient = EnvGen.build(gctx, Object.assign({ full: false }, opts), [name]);
+      const ambient = EnvGen.build(gctx, Object.assign({ full: false, smoothFog: g.fogOnly }, opts), [name]);
       g.fog = ambient.fog;
-      g.textures.set(name, this._textureFor(name, ambient.planes[name]));
+      g.textures.set(name, this._textureFor(name, ambient.planes[name], isFog(name)));
       if (live()) { this._applyTexture(name, g.textures.get(name)); this._applyScene(); this._applyBackdrop(); }
       await tick();
     }
@@ -264,7 +265,7 @@ class Environment {
       }
       const old = g.textures.get(name);
       if (old) old.dispose();
-      g.textures.set(name, this._textureFor(name, bitmap));
+      g.textures.set(name, this._textureFor(name, bitmap, isFog(name)));
       if (live()) this._applyTexture(name, g.textures.get(name));
       ms[name] = Math.round(performance.now() - t);
     }
@@ -483,9 +484,11 @@ class Environment {
 
   /** A gallery's texture for a plane: row 0 is the rim for a floor or
    *  ceiling band, the top for a wall; every one wraps round. */
-  _textureFor(name, bitmap) {
+  _textureFor(name, bitmap, smooth) {
     const tex = this._texture(bitmap, true);
     tex.wrapS = THREE.RepeatWrapping;
+    // the fog is haze, not pixel art: filtered smooth
+    if (smooth) { tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter; }
     // (nothing of the bitmap on the texture: three.js copies a texture's
     // user data through JSON when it clones one)
     return tex;

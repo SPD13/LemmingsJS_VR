@@ -318,6 +318,18 @@
     return bmp;
   }
 
+  /** A gradient painted as it is - no palette, no dither: the fog, which
+   *  is haze, not pixel art, and reads wrong as squares. */
+  function paintSmooth(bmp, stops) {
+    const w = bmp.width, h = bmp.height, words = bmp.words();
+    for (let y = 0; y < h; y++) {
+      const c = stopColor(stops, h > 1 ? y / (h - 1) : 0);
+      const word = (0xff000000 | (B(c) << 16) | (G(c) << 8) | R(c)) >>> 0;
+      words.fill(word, y * w, (y + 1) * w);
+    }
+    return bmp;
+  }
+
   /** The palette a gradient may use: the level's colours and darker rungs
    *  of its dark one, down to black. */
   function quantPalette(material, dark) {
@@ -840,7 +852,8 @@
       // dark toward the middle, rubble strewn down its sides
       const layer = room.layers[0];
       const bmp = new Bitmap(layer.floor.w, layer.floor.h);
-      paintGradient(bmp, [{ t: 0, rgb: scale(dark, 0.45) }, { t: 0.5, rgb: scale(dark, 0.18) }, { t: 1, rgb: 0x000000 }],
+      if (opts.smoothFog) paintSmooth(bmp, [{ t: 0, rgb: scale(fog, 0.6) }, { t: 0.5, rgb: scale(fog, 0.25) }, { t: 1, rgb: 0x000000 }]);
+      else paintGradient(bmp, [{ t: 0, rgb: scale(dark, 0.45) }, { t: 0.5, rgb: scale(dark, 0.18) }, { t: 1, rgb: 0x000000 }],
         "v", Object.assign(gradientOpts(1), { vignette: 0 }));
       if (opts.full) {
         const rng = seed("bowl0"), H = bmp.height, W = bmp.width;
@@ -858,7 +871,8 @@
           ? [{ t: 0, rgb: scale(dark, 0.55) }, { t: 0.45, rgb: scale(dark, 0.75) }, { t: 1, rgb: scale(dark, 0.3) }]
           : [{ t: 0, rgb: scale(dark, 0.5) }, { t: 1, rgb: scale(dark, 0.6) }];
         // the first floor in full is a lattice: clear where nothing stands, the bowl beneath showing
-        if (!(i === 0 && opts.full)) paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: 0 }));
+        if (opts.smoothFog) paintSmooth(bmp, [{ t: 0, rgb: scale(fog, 0.8) }, { t: 1, rgb: scale(fog, 0.55) }]);
+        else if (!(i === 0 && opts.full)) paintGradient(bmp, stops, "v", Object.assign(gradientOpts(1), { vignette: 0 }));
         if (opts.full) drawFloor(bmp, room, layer, bk, mode, seed("floor" + i));
         fogBlend(bmp, fog, layer.fog, layer.fogNear);
         planes["floor" + i] = bmp;
@@ -867,8 +881,7 @@
         // the ceiling is fog alone: a little darker overhead, the haze at the rim
         const bmp = new Bitmap(layer.ceiling.w, layer.ceiling.h);
         const overhead = scale(fog, i === 0 ? 0.55 : 0.8);
-        paintGradient(bmp, [{ t: 0, rgb: fog }, { t: 1, rgb: overhead }],
-          "v", { palette: [fog, scale(fog, 0.9), scale(fog, 0.8), scale(fog, 0.7), scale(fog, 0.6), scale(fog, 0.5)], dark: fog, cell: 2, vignette: 0 });
+        paintSmooth(bmp, [{ t: 0, rgb: fog }, { t: 1, rgb: overhead }]);
         fogBlend(bmp, fog, layer.fog, layer.fogNear);
         planes["ceiling" + i] = bmp;
       }
@@ -892,8 +905,7 @@
       // darker overhead and below; the style's sky, when it has one, a hint
       // across the horizon band
       const sp = room.sphere, bmp = new Bitmap(sp.w, sp.h);
-      paintGradient(bmp, [{ t: 0, rgb: scale(fog, 0.5) }, { t: 0.42, rgb: scale(fog, 0.9) }, { t: 0.5, rgb: fog }, { t: 0.58, rgb: scale(fog, 0.9) }, { t: 1, rgb: scale(fog, 0.45) }],
-        "v", { palette: [fog, scale(fog, 0.9), scale(fog, 0.8), scale(fog, 0.7), scale(fog, 0.6), scale(fog, 0.5), scale(fog, 0.4)], dark: fog, cell: 1, vignette: 0 });
+      paintSmooth(bmp, [{ t: 0, rgb: scale(fog, 0.5) }, { t: 0.42, rgb: scale(fog, 0.9) }, { t: 0.5, rgb: fog }, { t: 0.58, rgb: scale(fog, 0.9) }, { t: 1, rgb: scale(fog, 0.45) }]);
       if (wp && wp.kind === "wallpaper") {
         const band = new Bitmap(sp.w, Math.round(sp.h * 0.24));
         Pixels.drawNineSlice(band, 0, 0, band.width, band.height, wp.image.tinted(TINT.wallpaper), { left: 0, top: 0, right: 0, bottom: 0 }, Pixels.combineGadget);
@@ -954,7 +966,7 @@
     classifyBackground, opaqueFraction,
     collectPieces, buckets, chooseMode, measure, dosBitmap,
     seededRandom, noiseFn,
-    build, buildProps, drawWallpaper, propBackdrop, shrink,
+    build, buildProps, drawWallpaper, propBackdrop, shrink, paintSmooth,
   };
   root.EnvGen = EnvGen;
   if (isNode) module.exports = EnvGen;
