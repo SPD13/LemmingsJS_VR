@@ -11,7 +11,10 @@ With a folder here the page shows these instead of the collage it draws
 itself from the level's pieces (`3d/js/envgen.js`, the "environment" effect
 in `3d/README.md`); without one, the collage.
 
-They are made with `node tools/env-gen.js <style>`: the page's own collage
+`node tools/env-gen-all.js` makes them for every gallery the installed
+levels use, most-used first, skipping the styles that have a set (`--list`
+shows the order and the state; `--only`, `--limit`, `--force`); it can be
+stopped and started again. Each style is made with `node tools/env-gen.js <style>`: the page's own collage
 is polished through a local Stable Diffusion server speaking the
 Automatic1111 API (Draw Things with its API server on, ComfyUI behind a
 bridge, A1111 itself) as an img2img pass at a low denoise, then brought
