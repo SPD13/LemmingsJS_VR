@@ -20,6 +20,10 @@
 - **Fully web based** - serve it on your own network with the launcher
   (see [Releases](#releases)), or play the static version at
   https://lemmix.spd13.us with nothing to install
+- **Solutions** - a solver (`tools/nx-solve.js`) searches NeoLemmix levels
+  for a way through and keeps what it finds as `.nxrp` replays under
+  `solutions/`; a level that has one shows a *Watch solution* button, which
+  replays it with every action marked on the board
 
 ## Levels and assets
 
@@ -98,6 +102,19 @@ node tools/levels-index.js
 node tools/styles-index.js
 node tools/music-index.js
 ```
+
+The solutions under `solutions/` (one `.nxrp` per solved level, mirroring
+the `levels/` tree, and `solutions/index.json` saying what was found) are
+written by the solver and committed, so both asset modes serve them:
+
+```
+node tools/nx-solve.js <level>              one level, in this process (--trace shows the search)
+node tools/nx-solve.js <pack> --tier all    a pack on a pool of workers, 10 s, 2 min then 15 min a level
+node tools/nx-solve.js --verify             every solution replayed through a fresh game
+```
+
+`<level>` is a level id or a unique part of one (`Just_Nuke`); the plan
+behind it, the search and its results are in `3d/plans/solver-plan.md`.
 
 ## Releases
 
