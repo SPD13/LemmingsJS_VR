@@ -42,3 +42,5 @@ config/*
 3d/env/**/*-raw.png
 3d/env/contact.html
 3d/env/contact.json
+# the galleries made since are kept out for now (the four committed stay tracked; `git add -f 3d/env/<style>` brings one in)
+3d/env/*/
