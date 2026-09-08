@@ -307,7 +307,8 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   stands between the eye and the board, a ring's wall or a standing piece,
   is hidden while it does. In a headset the board itself is held inside
   the room: a stick pan, a dolly or a grab that would carry it out through
-  the first ring's wall, the floor or the ceiling stops it there (`3d/js/environment.js`, the
+  the first ring's wall, the floor or the ceiling stops it there, and one
+  that would bring it behind the player stops a step in front (`3d/js/environment.js`, the
   pictures from `3d/js/envgen.js`). The board stands inside the first ring,
   in front of the player, whose place at the moment the board is placed is
   the rings' centre. The place is the gallery's, not the level's: it is

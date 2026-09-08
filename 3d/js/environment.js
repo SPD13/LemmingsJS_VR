@@ -464,6 +464,10 @@ class Environment {
       const reach = rMax - half;
       if (d > reach && d > 0) { shift.x = dx * (reach / d) - dx; shift.z = dz * (reach / d) - dz; }
     }
+    // and never behind the player: the room's front is -z from its centre,
+    // where the board was placed; its nearest face stays a step in front
+    const zFront = c.z - 0.4 * this.pxPerMetre;
+    if (maxZ + shift.z > zFront) shift.z = zFront - maxZ;
     if (shift.lengthSq() === 0) return;
     // the shift is in the room's frame: into the world through the room's rotation and scale
     const world = shift.applyQuaternion(this.root.quaternion).multiply(this.root.scale);
