@@ -268,6 +268,42 @@ const LevelProgress = {
  * The levels played, latest first, for the library's recent filter. Kept in
  * localStorage next to the progress, so per-browser too.
  */
+/**
+ * The stored solutions (solutions/index.json, written by tools/nx-solve.js):
+ * which levels have one, and where its .nxrp is. Fetched once; a site
+ * without the file has no solutions.
+ */
+const Solutions = {
+  index: null,
+  ready: null,
+
+  /** Fetch the index once (relative to `root`, the repo root as seen from the page). */
+  load(root) {
+    if (this.ready) return this.ready;
+    this.ready = fetch(root + "solutions/index.json", { cache: "no-cache" })
+      .then((res) => (res.ok ? res.json() : { levels: {} }))
+      .catch(() => ({ levels: {} }))
+      .then((index) => { this.index = index && index.levels ? index : { levels: {} }; return this.index; });
+    return this.ready;
+  },
+
+  /** The index's record of a level, or null. */
+  info(levelId) {
+    const rec = this.index && this.index.levels[levelId];
+    return rec && rec.status === "solved" ? rec : null;
+  },
+
+  /** Is there a solution to watch? */
+  has(levelId) { return !!this.info(levelId); },
+
+  /** The URL of a level's solution replay, relative to `root`; null without one. */
+  url(root, levelId) {
+    const rec = this.info(levelId);
+    if (!rec || !rec.file) return null;
+    return root + "solutions/" + rec.file.split("/").map(encodeURIComponent).join("/");
+  },
+};
+
 const RecentLevels = {
   list() {
     try {
@@ -411,7 +447,7 @@ class WorldLibrary {
   /** The tree, loaded on first use; `force` re-reads the index. */
   tree(force) {
     if (!this.ready || force) {
-      this.ready = LevelTree.load(this.root, force).then((tree) => {
+      this.ready = Promise.all([LevelTree.load(this.root, force), Solutions.load(this.root)]).then(([tree]) => {
         LevelProgress.migrate();
         return tree;
       });
@@ -1028,8 +1064,15 @@ class WorldLibrary {
     });
     label.appendChild(star);
 
-    // playing: a cleared level is marked and wears its best time
+    // playing: a level with a stored solution says so; a cleared level is marked and wears its best time
     if (!this.editMode) {
+      if (Solutions.has(level.id)) {
+        const mark = document.createElement("span");
+        mark.className = "lib-solution";
+        mark.textContent = "\u25B6 solution";
+        mark.title = "a solution is available - watch it from the level";
+        label.insertBefore(mark, star);
+      }
       const best = LevelProgress.best(level.id);
       if (best !== null) {
         tile.classList.add("cleared");
