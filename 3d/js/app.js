@@ -602,28 +602,15 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     setBarToolState(vrMuteBtn, { on: !audio.enabled });
   }
 
-  // cogwheel: the render switches, which are DOM buttons on a monitor
+  // the 3D effects: the relief profile the desktop's drawer wears, opening
+  // the window of render switches - the 3D terrain's, the environment's -
+  // which are DOM buttons on a monitor
   const vrSettingsBtn = makeIconButton("vr-settings", guiRoot, (cx, st) => {
     barToolIcon(cx, st.hovered, st.hovered ? "#33405a" : "#1c2432", "#cdd6e4", (c) => {
-      c.fillStyle = "#cdd6e4";
       c.beginPath();
-      for (let i = 0; i < 8; i++) {           // eight teeth round the rim
-        const a = (i / 8) * Math.PI * 2;
-        c.save();
-        c.translate(32 + Math.cos(a) * 20, 32 + Math.sin(a) * 20);
-        c.rotate(a);
-        c.fillRect(-5, -5, 10, 10);
-        c.restore();
-      }
-      c.fill();
-      c.beginPath();
-      c.arc(32, 32, 16, 0, Math.PI * 2);
-      c.fill();
-      c.globalCompositeOperation = "destination-out";  // the hub
-      c.beginPath();
-      c.arc(32, 32, 7, 0, Math.PI * 2);
-      c.fill();
-      c.globalCompositeOperation = "source-over";
+      c.moveTo(10, 46); c.lineTo(10, 38); c.lineTo(22, 22); c.lineTo(31, 32); c.lineTo(42, 16); c.lineTo(54, 38); c.lineTo(54, 46);
+      c.closePath();
+      c.stroke();
     });
   });
 
@@ -1555,7 +1542,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     lock: () => barLocked ? "let the bar go: it stays where it hangs" : "lock the bar to your head",
     move: () => "hold the trigger here and move your hand to carry the bar",
     park: () => "put the bar back below the board",
-    settings: () => "settings",
+    settings: () => "3D effects: the terrain's switches, the environment",
     pause: () => session && !session.game.getGameTimer().isRunning() ? "resume" : "pause",
     restart: () => "restart the level (asks first)",
     prev: () => "previous level (asks first)",
@@ -1891,7 +1878,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
       cx.textAlign = "left";
       cx.fillStyle = "#f0f3f8";
       cx.font = "bold 34px monospace";
-      cx.fillText("SETTINGS", 28, 60);
+      cx.fillText("3D EFFECTS", 28, 60);
 
       vrSettingRows.forEach((row, i) => {
         const y = VR_SET_TOP + i * VR_SET_ROW;

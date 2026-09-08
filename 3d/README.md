@@ -524,7 +524,12 @@ board - where the desktop's 3D and 2D views start too.
   goes; beside it the four-way arrows
   are a grab handle — hold the trigger on them and move your hand to carry
   the bar, locked or not; the board-over-bar icon next to them puts the bar
-  back where a session starts it, below the board. Leaving VR puts it back on the head, square in
+  back where a session starts it, below the board; the relief profile after
+  it - the desktop drawer's own "3D effects" icon - opens a window of the
+  render switches a monitor has as buttons: the 3D terrain, the doors, the
+  two smoothings, the colour blend, the skills bar's relief, the flat
+  skills, the environment, and a recentre of the board; the game holds
+  while it is up. Leaving VR puts it back on the head, square in
   front. In the middle, pause, which becomes a play
   triangle once the game is stopped and tracks the clock however it was
   stopped: this button, the panel, the space bar or the catalog. At the right
