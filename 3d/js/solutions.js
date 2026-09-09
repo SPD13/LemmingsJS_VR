@@ -227,7 +227,11 @@ Vfs.boot("").then(async () => {
       const res = await fetch(ROOT + "solve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error("HTTP " + res.status);
       applyStatus(await res.json());
-    } catch (e) { dom.queue.innerHTML = "<span class='err'>the solver could not be started: " + escape(e.message) + "</span>"; }
+    } catch (e) {
+      // a 404: the launcher's server was started before this page's routes existed - it re-reads its code on a stop and start
+      const hint = /404/.test(e.message) ? " - the launcher's server predates the solver routes: stop and start it from the launcher window (or restart the launcher)" : "";
+      dom.queue.innerHTML = "<span class='err'>the solver could not be started: " + escape(e.message) + hint + "</span>";
+    }
     for (const id of ids) selected.delete(id);
     render();
     startPolling();
