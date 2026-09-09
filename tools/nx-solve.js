@@ -275,13 +275,15 @@ function runPool(entries, jobs, job, onDone) {
       running++;
       const worker = new Worker(path.join(__dirname, "solver", "worker.js"), { workerData: { repoRoot: job.repoRoot } });
       let finished = false;
+      // the budget is wall-clock inside the worker; a loaded machine stretches it, so the leash is long
+      const leash = job.budgetMs * 2 + 60000;
       const timer = setTimeout(() => {
         if (finished) return;
         finished = true;
         worker.terminate();
-        onDone(entry, { record: { status: "error", error: "timeout", file: solutionFile(entry), tier: job.tier, elapsedMs: job.budgetMs * 1.5 + 30000 } });
+        onDone(entry, { record: { status: "error", error: "timeout", file: solutionFile(entry), tier: job.tier, elapsedMs: leash } });
         running--; start();
-      }, job.budgetMs * 1.5 + 30000);
+      }, leash);
       worker.on("message", (msg) => {
         if (finished) return;
         finished = true; clearTimeout(timer);
