@@ -113,7 +113,7 @@
       if (dead) { this.dropped.dead++; node.state = null; node.events = null; return node; }
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
         game, skillCounts, activeSkills: game.activeSkills, params: this.params, analysis: this.analysis,
-        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level,
+        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan,
       });
       this._hold(node);
       if (outcome.solved) {
@@ -159,12 +159,20 @@
       if (!this._goto(node)) { this.dropped.ended++; return null; }
       if (cand.frame > world.frame) world.step(cand.frame - world.frame);
       if (world.frame !== cand.frame) { this.dropped.ended++; return null; }
+      if (cand.kind === "follow") { const made = this._follow(node, cand, target, lemFilter); if (!made) this.dropped.refused++; return made; }
       let ok = false;
       if (cand.kind === "assign" || cand.kind === "repeat") { const L = world.lemmingById(cand.lemId); ok = !!L && world.assign(L, cand.skill); }
       else if (cand.kind === "si") ok = world.setSpawnInterval(cand.si);
       else if (cand.kind === "nuke") ok = world.nuke();
       if (!ok) { this.dropped.refused++; if (this.trace && this.log) this.log("  refused f=" + cand.frame + " " + describe(cand)); return null; }
       world.step(1);
+      if (cand.kind === "assign") {
+        const child = this._child(node, cand, target, lemFilter);
+        // the lemming dies of what a permanent skill answers (a splat: a floater): the rescue at once, chained
+        const rescued = child && !child.dead && !child.solved ? this._rescue(child, cand, target, lemFilter) : null;
+        return rescued ? [child, rescued] : child;
+      }
+      if (cand.kind === "follow") return this._follow(node, cand, target, lemFilter);
       if (cand.kind !== "repeat") return this._child(node, cand, target, lemFilter);
       // "keep at it": the skill given again each time its job ends, a node per repetition, so
       // every length of the chain (three floors dug, not four) is a state the search holds.
@@ -185,6 +193,52 @@
         last = next;
       }
       return children;
+    }
+
+    /**
+     * The rescue chained: the lemming of `cand` died in `child`'s rollout of a
+     * cause a permanent skill answers (a splat, water, a trap), so that skill
+     * is given at the death's anchor - the fall's start, or at once for a
+     * swimmer - and the result is a node of its own.
+     */
+    _rescue(child, cand, target, lemFilter) {
+      const death = (child.events || []).find((e) => e.type === "DEATH" && e.lemId === cand.lemId);
+      if (!death) return null;
+      const skill = { splat: "FLOATER", water: "SWIMMER", trap: "DISARMER" }[death.cause];
+      if (!skill || !this.world.skillCounts()[skill]) return null;
+      const frame = death.cause === "splat" ? (death.anchor ? death.anchor.frame : death.frame - 24) : death.frame;
+      if (frame < child.frame) return null;
+      const rescue = { kind: "assign", lemId: cand.lemId, skill, frame, why: cand.why + "+" + skill.toLowerCase(), prior: cand.prior };
+      if (!this._goto(child)) return null;
+      const world = this.world;
+      if (frame > world.frame) world.step(frame - world.frame);
+      if (world.frame !== frame) return null;
+      const L = world.lemmingById(cand.lemId);
+      if (!L || !world.assign(L, skill)) return null;
+      world.step(1);
+      return this._child(child, rescue, target, lemFilter);
+    }
+
+    /**
+     * "Follow the lead": `cand.lemId` given the permanent skills the lead got
+     * (`cand.perms`: [{skill, frame}] of the lead's, the frames shifted by
+     * the two lemmings' spawn gap), each at its frame, as one edge.
+     */
+    _follow(node, cand, target, lemFilter) {
+      const world = this.world;
+      const L0 = world.lemmingById(cand.lemId);
+      if (!L0) return null;
+      for (const p of cand.perms) {
+        const f = p.frame + cand.shift;
+        if (f < world.frame) continue;
+        world.step(f - world.frame);
+        if (world.frame !== f) return null;
+        const L = world.lemmingById(cand.lemId);
+        if (!L || L.removed) return null;
+        if (!world.assign(L, p.skill)) return null;
+        world.step(1);
+      }
+      return this._child(node, cand, target, lemFilter);
     }
 
     /** The node of the world as it stands, after `cand` was applied, traced. */
@@ -274,7 +328,7 @@
   }
 
   const planEntry = (e) => e.type === "assignment" ? e.skill + "@" + e.frame + ">" + e.lemId : e.type === "nuke" ? "NUKE@" + e.frame : "SI" + e.interval + "@" + e.frame;
-  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "si" ? "SI=" + c.si : "NUKE";
+  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "follow" ? c.perms.map((p) => p.skill).join("+") + ">" + c.lemId + " (follow)" : c.kind === "si" ? "SI=" + c.si : "NUKE";
 
   /**
    * Solve the level `world` holds: { best, stats }. `opts` = { tier,
