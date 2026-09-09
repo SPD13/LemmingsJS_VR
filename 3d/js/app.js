@@ -3034,19 +3034,30 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const waveEntryFor = (prev, frame, next) => (state.smoothTerrain
       ? materialCache.forFrameBlended(prev || null, frame, next || null)
       : materialCache.forFrame(frame));
+    // a slice cut to the level's rectangle, as the flat sprites are: the
+    // stretch of lava the author laid past the edge ends flush with the slab
+    const waveFrameCut = (stack, frame) => (frame
+      ? clipFrameToBounds(frame, stack.mapObject.x, stack.mapObject.y, stack.flipY, level.width, level.height)
+      : null);
     for (const stack of stacks) {
       stack.meshes = [];
       // built wearing the first frame rather than bare: an empty mesh carries
       // a default geometry and material that nothing owns, and would sit at
       // the origin until the first tick redressed it
-      const first = stack.mapObject.animation.frames[0];
-      const entry = waveEntryFor(null, first, null);
+      const first = waveFrameCut(stack, stack.mapObject.animation.frames[0]);
+      const entry = first ? waveEntryFor(null, first, null) : null;
       for (let k = 0; k < stack.phases.length; k++) {
-        const mesh = new THREE.Mesh(entry.geometry, materialCache.blendedMaterialFor(first));
-        mesh.scale.y = stack.flipY ? -1 : 1;
-        mesh.position.set(stack.mapObject.x + first.offsetX,
-          stack.mapObject.y + first.offsetY + (stack.flipY ? entry.h : 0),
-          WAVE_FRONT_Z - (k + 1) * SPRITE_DEPTH);
+        const mesh = first
+          ? new THREE.Mesh(entry.geometry, materialCache.blendedMaterialFor(first))
+          : new THREE.Mesh(); // nothing of it inside the level: never dressed
+        mesh.visible = !!first;
+        mesh.userData.empty = !first;
+        if (first) {
+          mesh.scale.y = stack.flipY ? -1 : 1;
+          mesh.position.set(stack.mapObject.x + first.offsetX,
+            stack.mapObject.y + first.offsetY + (stack.flipY ? entry.h : 0),
+            WAVE_FRONT_Z - (k + 1) * SPRITE_DEPTH);
+        }
         worldGroup.add(mesh);
         stack.meshes.push(mesh);
       }
@@ -3059,6 +3070,11 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const particles = new ParticleCloud(worldGroup, LEMMING_Z + 1);
     const lemCapture = new SpriteCapture();
     const objCapture = new SpriteCapture();
+    // every sprite cut to the level's rectangle, as the original's level
+    // bitmap cuts them (clipFrameToBounds): a lava strip laid past the edge
+    // so its animation shows no seam ends flush with the slab, not beyond it
+    lemCapture.setBounds(level.width, level.height);
+    objCapture.setBounds(level.width, level.height);
 
     const gui = new GuiPanel(guiRoot, game, resources);
     gui.setRelief(state.skillBar && renderer.xr.isPresenting); // a headset's; see applySkillBarRelief
@@ -3208,15 +3224,18 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
           const object = stack.mapObject;
           // every slice's frame first: each one is blended into the slices in
           // front of and behind it, so it has to know what they are showing
+          // (each cut to the level, as the flat sprites are)
           const shown = [];
           for (let k = 0; k < stack.meshes.length; k++) {
-            shown.push(frameAtPhase(object, waveTick, stack.phases[k]));
+            shown.push(waveFrameCut(stack, frameAtPhase(object, waveTick, stack.phases[k])));
           }
           for (let k = 0; k < stack.meshes.length; k++) {
             const frame = shown[k];
+            const mesh = stack.meshes[k];
+            mesh.userData.empty = !frame;
+            mesh.visible = !!frame;
             if (!frame) continue;
             const entry = waveEntryFor(shown[k - 1], frame, shown[k + 1]);
-            const mesh = stack.meshes[k];
             mesh.geometry = entry.geometry;
             mesh.material = game.clearPhysics
               ? materialCache.flatMaterialFor(frame)
@@ -3446,7 +3465,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
           if (portal.flaps) for (const flap of portal.flaps) flap.mesh.visible = v;
         }
         for (const w of waterMeshes) w.mesh.visible = v;
-        for (const stack of stacks) for (const mesh of stack.meshes) mesh.visible = v;
+        // (a slice with nothing of it inside the level stays hidden)
+        for (const stack of stacks) for (const mesh of stack.meshes) mesh.visible = v && !mesh.userData.empty;
         if (portalsShown === v) return;
         portalsShown = v;
         syncScene(true); // the sprites drawn again, whether the clock runs or not
