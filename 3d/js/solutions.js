@@ -119,6 +119,11 @@ Vfs.boot("").then(async () => {
       td("num" + (rec ? "" : " dim"), rec ? rec.tier + " <span class='dim'>· " + Math.round(rec.elapsedMs / 1000) + " s</span>" : "");
       td("state", d.state === "running" ? "solving…" : d.state || "");
       const act = td("actions", "");
+      // the level itself, to play, in a new tab
+      const play = document.createElement("button"); play.textContent = "play level";
+      play.title = "open the level in a new tab, to play it";
+      play.addEventListener("click", () => window.open(Vfs.link("index.html?level=" + encodeURIComponent(l.id)), "_blank"));
+      act.appendChild(play);
       if (d.solved) {
         const play = document.createElement("button"); play.textContent = "▶ play solution"; play.className = "primary";
         play.title = "the level in a new tab, its solution replaying from the start";

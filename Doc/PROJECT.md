@@ -787,8 +787,8 @@ play order - a check when a solution exists, saved / lemmings (and the
 count asked), skills used, the clock at the end, the tier and the search
 time - with the solved count and percentage at the head, library.js's
 fuzzy search, a filter by level folder or pack, solved/unsolved, sortable
-columns, checkboxes with select-all-shown, *play solution* (the level in a
-new tab with `?solution=1`). In server mode it drives the launcher's
+columns, checkboxes with select-all-shown, *play level* (the level in a
+new tab) and *play solution* (the same with `?solution=1`). In server mode it drives the launcher's
 **solver queue** (`launcher/server.js`): `POST /solve` `{levels, tier,
 budget}` queues levels (ids checked against the index), run one after the
 other as child processes of `tools/nx-solve.js` in its single-level mode
