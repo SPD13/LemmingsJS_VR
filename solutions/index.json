@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-09T04:42:18.862Z",
+ "generated": "2026-09-09T06:08:03.970Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12525,19 +12525,23 @@
    "optimal": false
   },
   "Lemmings_Redux/Gentle/Keep_your_hair_on,_Mr._Lemming.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Keep_your_hair_on,_Mr._Lemming.nxrp",
    "needed": 20,
    "count": 30,
-   "tier": 1,
+   "tier": 3,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "oneway",
     "steel"
    ],
-   "expansions": 362,
-   "elapsedMs": 9125
+   "expansions": 38163,
+   "elapsedMs": 818400,
+   "saved": 30,
+   "skillsUsed": 24,
+   "completionFrame": 6821,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Konnichiwa_Lemming-san.nxlv": {
    "status": "unsolved",
