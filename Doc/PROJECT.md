@@ -793,11 +793,19 @@ new tab with `?solution=1`). In server mode it drives the launcher's
 budget}` queues levels (ids checked against the index), run one after the
 other as child processes of `tools/nx-solve.js` in its single-level mode
 (which writes the `.nxrp` and the index itself); `GET /solve/status.json`
-is the queue (running job with its log tail, pending, done with each
-verdict line, a serial the page polls every two seconds); `POST
-/solve/cancel` drops the queue (`{running: true}` kills the job under
-way). When a job ends the page re-fetches `solutions/index.json` and marks
-the row green if a solution arrived.
+is the queue (running job with its budget, its latest milestone and its
+log tail, pending, done with each verdict line, a serial the page polls);
+`POST /solve/cancel` `{levels}` takes levels out of the queue (the one
+under way is killed), without levels it drops the whole queue (`{running:
+true}` kills the job under way too). The solver reports milestones as it
+goes (`Solver.solve`'s `onProgress`: the phase - lead pass, crowd pass and
+its widenings, optimising, verifying - the expansions, the best so far),
+which `nx-solve` prints as `progress {json}` lines and the launcher keeps
+per job. On the page a pressed *solve* becomes "queued #n" with a cancel,
+then a progress bar - how far into its budget the search is, its phase,
+its best so far, cancel beside it - ticking every second between polls;
+when a job ends the page re-fetches `solutions/index.json` and marks the
+row green if a solution arrived.
 
 **Action markers** (`3d/js/replay-markers.js`): while a replay is engaged,
 every entry of the record stands on the board from frame 0 - an
