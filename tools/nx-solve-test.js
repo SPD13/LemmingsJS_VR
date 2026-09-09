@@ -47,6 +47,13 @@ async function main() {
     const r = solve(crossing(300, 5, 5, {}));
     check("solved with no skill", r.best && r.best.saved === 5 && r.best.skillsUsed === 0, r.best);
     check("nothing expanded", r.stats.expansions === 0, r.stats.expansions);
+    // the followers' fate foretold: once the first is in and the rest walk its trail, the rollout ends early with the count
+    const w1 = new Solver.World(crossing(300, 5, 5, {}), masks); w1.reset([]);
+    const full = Solver.rollout(w1, {});
+    const w2 = new Solver.World(crossing(300, 5, 5, {}), masks); w2.reset([]);
+    const early = Solver.rollout(w2, { predict: true });
+    check("foretold: the same count", early.outcome.predicted && early.outcome.saved === full.outcome.saved && early.outcome.lost === full.outcome.lost, early.outcome);
+    check("foretold: sooner, the end frame kept", early.frames < full.frames && early.outcome.endFrame === full.outcome.endFrame, [early.frames, full.frames, early.outcome.endFrame, full.outcome.endFrame]);
   }
 
   console.log("a gap needs one builder");
@@ -79,6 +86,13 @@ async function main() {
     check("steel: a climber per lemming", ps && ps.cost === 5, ps && ps.cost);
     const few = R.planAll(gs, [{ region: hs.id, dir: 0, n: 5, lacking: { CLIMBER: 5, FLOATER: 5 } }], { BASHER: 3, CLIMBER: 3 }, 5);
     check("steel and three climbers for five: no plan", !few, few && few.cost);
+    // the route's skills must fit the stock: two steel walls, one climber
+    const twice = crossing(300, 1, 1, { CLIMBER: 1 });
+    twice.fill(120, 30, 130, 60, PM.SOLID | PM.STEEL); twice.fill(180, 30, 190, 60, PM.SOLID | PM.STEEL);
+    const g2 = R.build(twice, twice.physics), h2 = g2.regions.find((r) => r.hatch);
+    const one = R.planAll(g2, [{ region: h2.id, dir: 0, n: 1, lacking: { CLIMBER: 1 } }], { CLIMBER: 1 }, 1);
+    const two = R.planAll(g2, [{ region: h2.id, dir: 0, n: 1, lacking: { CLIMBER: 1 } }], { CLIMBER: 2 }, 1);
+    check("two steel walls, one climber: no route; two climbers: one", !one && two && two.cost === 2, [one && one.cost, two && two.cost]);
     // a blocker on the floor cuts the hatch's region: a bomber on it is the gate
     const gb = R.build(level, level.physics, [{ x: 100, y: 60 }]);
     const left = gb.regionOf(50, 59), right = gb.regionOf(130, 59);

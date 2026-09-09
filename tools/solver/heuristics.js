@@ -108,9 +108,9 @@
   }
 
   const TIERS = {
-    1: { budgetMs: 10000, lemmings: 2, offsets: [0, 4], skillsPerEvent: 3, beam: 64, states: 32, depth: 12, rr: 2, restarts: 0, leadShare: 0.3, repeats: 8 },
-    2: { budgetMs: 120000, lemmings: 4, offsets: [0, 2, 4, 8], skillsPerEvent: 6, beam: 512, states: 128, depth: 24, rr: 3, restarts: 0, leadShare: 0.15, repeats: 16 },
-    3: { budgetMs: 900000, lemmings: 8, offsets: [0, 1, 2, 4, 8, 12, 16], skillsPerEvent: 99, beam: 4096, states: 512, depth: 48, rr: 3, restarts: 3, leadShare: 0.15, repeats: 24 },
+    1: { budgetMs: 10000, lemmings: 2, offsets: [0, 4], skillsPerEvent: 3, beam: 64, states: 32, depth: 12, rr: 2, restarts: 0, leadShare: 0.3, repeats: 8, tickEvery: 32 },
+    2: { budgetMs: 120000, lemmings: 4, offsets: [0, 2, 4, 8], skillsPerEvent: 6, beam: 512, states: 128, depth: 24, rr: 3, restarts: 0, leadShare: 0.15, repeats: 16, tickEvery: 16 },
+    3: { budgetMs: 900000, lemmings: 8, offsets: [0, 1, 2, 4, 8, 12, 16], skillsPerEvent: 99, beam: 4096, states: 512, depth: 48, rr: 3, restarts: 3, leadShare: 0.15, repeats: 24, tickEvery: 8 },
   };
 
   /** A tier's parameters, the state cache scaled down for a big level. */

@@ -728,7 +728,13 @@ shape of it:
   of it), a turn at a wall, a shrug, a job's end, a death and its cause,
   an exit, a pickup or portal, a tick when nothing happened for a while.
   *Stuck* is every controllable lemming pacing a cycle or blocking with
-  the terrain unchanged and nothing left to release.
+  the terrain unchanged and nothing left to release. A crowd rollout also
+  ends once every lemming still out is at the exit or on the trail of a
+  predecessor that reached it (the same state, the terrain and blockers
+  unchanged since, nothing pending): the physics is deterministic, so the
+  count and the end frame are foretold - a happy end only, never with
+  zombies, traps, teleporters or splitters about. The walk is sampled for
+  anchors every 32 frames at tier 1, 16 at tier 2, 8 at tier 3.
 - **Analysis** (`solver/analysis.js`): an exit-distance field over the map
   (open pixels cost one, solid six, steel sixty, at four-pixel cells), the
   most lemmings that can be saved, and the level's feature tags.
@@ -758,7 +764,9 @@ shape of it:
   one that digs what the crowd needs), free for everyone after it in
   either direction; then each group pays its own way, per-lemming gates by
   those lacking the skill, closed when the skill is short. The plan's cost
-  is the score's forward look (`80` a skill), and its gates boost the
+  is the score's forward look (`80` a skill; a route whose skills exceed
+  the stock is no plan, a blocker is spent unless a walker frees it), and
+  its gates boost the
   candidates that match them - the right skill at the right spot and
   heading, a blocker in the region that wants a turn, the bomber on the
   blocker the plan bombs, a permanent skill on the lead or the group.
@@ -783,7 +791,9 @@ shape of it:
   lost ignored).
   A lead pass (skills to the first lemming out, one save is a success)
   seeds a crowd pass for the count; a pass that runs dry with time left
-  runs again at the next tier's breadth. Tiers: 10 s, 2 min, 15 min.
+  runs again at the next tier's breadth, and at the widest, with the
+  priors jiggled (tier 3's three restarts, a seeded generator). Tiers:
+  10 s, 2 min, 15 min.
 - **Optimise and verify** (`solver/optimise.js`, `solver/verify.js`): the
   solution replayed from frame 0 with each entry dropped in turn, the
   release rate at its fastest, assignments moved earlier - kept when

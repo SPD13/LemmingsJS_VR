@@ -224,10 +224,9 @@ verification.
 | 5 | Platstop (5/5), Concentrated Force (50/44) | solved |
 
 Introduction pack, 120 levels: **12 solved at tier 1** (2.6 min on 7
-workers), 10 at tier 2 (92 min, before the last round of solver changes;
-a tier-2 pass with the current solver has not been run). No verification
-mismatch remains. A tier-1 pass over every installed pack (1076 levels)
-runs after this note.
+workers), 10 at tier 2 (92 min) - both before the planner; the tier-1
+pass over every installed pack (1076 levels) that followed found 62. No
+verification mismatch remains.
 
 ### Later (8 September, evening)
 
@@ -365,23 +364,56 @@ gate opens). *Split And Splat* stays at 54/60 with 5 skills, everything
 else holds. The blocker itself has no group: a blocking lemming stands in
 no region and counts as spent.
 
+### Later (10 September): the plan's leftovers
+
+- **Restarts with prior noise** (tier 3's table promised three): once the
+  crowd pass has run dry at the widest breadth with time to spare, the
+  search runs again with every prior jiggled by up to ±30 % (a seeded
+  generator, so a run repeats), seeded from the root, the lead's way in
+  and the best so far, keeping what comes out better; skipped when no
+  frontier ever lost an edge to its cap, since it would only repeat itself.
+- **A finer sweep along a walk**: the `TICK` sample every 32 frames at
+  tier 1, 16 at tier 2, 8 at tier 3 - the timing anchors a jumper or a
+  shimmier mid-walk asks for, at the breadth that can afford them.
+- **The followers' fate foretold**: a lemming at the very state a
+  predecessor was in - spot, way, action, animation frame, fall so far,
+  permanent skills, the flipper it is in - with the terrain and the
+  blockers unchanged since, nothing pending in the plan and nothing left
+  to release, goes where the predecessor went, the physics being
+  deterministic; so once every lemming still out is on such a trail to an
+  exit (or at the exit), the crowd rollout ends there with the count and
+  the end frame foretold. Only a happy end is foretold: a death foretold
+  would hide the next lemming's death anchor from the candidates and score
+  the branch more harshly than the cap would its siblings (Split And Splat
+  went unsolved that way). No foretelling with zombies, traps, teleporters,
+  splitters or a counted exit about, and none for a trail walked before the
+  plan's last action (the action changed that walker's future - the first
+  version foretold thirty saved from the athlete's walk to the wall). The
+  trail table is open-addressed over typed arrays: a Map cost a rollout a
+  fifth of its time.
+- **The planner's route budget**: a plan whose skills, summed over every
+  step of every lemming, exceed the stock is no plan (four climbs for one
+  lemming with three climbers), where the sweep checked each gate alone.
+- **Blockers in the plan**: a blocking lemming is spent - out of the count
+  and the groups - unless a walker is in stock, in which case it is a
+  lemming of the region beside it and the plan pays a walker for it.
+
+All regressions hold (Keep your hair 29/30 with 11, Snuggle 4, bashers 3,
+Up For A Walk 40/40 with 2, Split And Splat 47/60). The fixtures: 53. A
+batch over the packs has not been run since the planner landed (the
+recorded solutions predate it); it is the next thing to run when the
+machine is free for half an hour.
+
 ### What limits the solver now
 
-1. **The progress signal.** The exit-distance field costs air one and solid
-   six with no gravity, so a lemming above the exit "is close" though it
-   cannot get down, and a builder's staircase toward the exit shows no gain
-   until the lemming is in. A field that walks down (a fall is free
-   downward, a climb impossible without a skill) would rank the staircase
-   and the jump chain rightly. The biggest lever.
-2. **Combinations.** The planner (above) now prices a blocker set for a
-   turn and a bomber to free it; what it does not see - a platformer, a
-   stacker, a jump, a shimmy, water, a trap - still scores as doing
-   nothing until the follow-up shows.
-3. **Timing anchors.** The shimmier from a climb, a jumper at a spot with no
-   edge or wall near it, a bomber at a wall's foot: `CLIMB` events every
-   eight pixels and `TICK` ring samples cover some; a per-pixel sweep along
-   a walk is the wide answer at tier 3.
-4. **Cost.** A rollout on a crowded level runs to the last lemming's spawn
-   and beyond (2000-3000 frames, 30-100 ms), so tier 1 affords 300-1000
-   expansions. Ending a crowd rollout once every lemming out is on a path a
-   predecessor already took would halve it.
+1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang
+   On and Trap Roulette: the way through is not one the region graph
+   sees, and I could not find it by hand either. The graph is at four
+   pixels; what it misses is finer than that or needs a trick (a stack as
+   a step for a stoner, a shimmier let go at a chosen tooth).
+2. **Timing anchors.** A jump or a shimmy at a precise pixel is found by
+   the sweep at tier 2 or 3, not at tier 1 (Jumping Lem Flash takes 81 s).
+3. **Cost.** A crowded level's rollout runs to the last spawn and beyond
+   unless every lemming is foretold; a stuck crowd is never foretold, so
+   the levels where the crowd paces still afford a few hundred expansions
+   at tier 1.
