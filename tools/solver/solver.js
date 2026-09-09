@@ -249,7 +249,7 @@
       if (!child && this.trace && this.log) this.log("  seen f=" + cand.frame + " " + describe(cand));
       if (this.trace && this.log && child) {
         const o = child.outcome;
-        this.log("  #" + this.expansions + " f=" + cand.frame + " " + describe(cand) + " -> saved " + o.saved + "/" + target + " lost " + o.lost + " skills " + child.skillsUsed
+        this.log("  #" + this.expansions + " n" + child.id + "<n" + node.id + " f=" + cand.frame + " " + describe(cand) + " -> saved " + o.saved + "/" + target + " lost " + o.lost + " skills " + child.skillsUsed
           + (o.stuck ? " stuck" : "") + (o.outOfTime ? " time" : "") + (child.dead ? " DEAD:" + child.dead : "") + (o.solved ? " SOLVED" : "") + " score " + child.score.toFixed(0));
       }
       return child;
@@ -309,7 +309,7 @@
         let heap = null, bestKey = Infinity;
         for (const [d, h] of open) {
           if (!h.size) continue;
-          const key = ((pops.get(d) || 0) + 1) * (1 + 0.5 * d);
+          const key = ((pops.get(d) || 0) + 1) * (1 + 0.25 * d);
           if (key < bestKey) { bestKey = key; heap = h; pops.set(-1, d); }
         }
         if (!heap) break;
@@ -362,7 +362,8 @@
     // frontier runs dry with time to spare, the pass runs again wider - the next
     // tier's lemmings, offsets and skills per event - up to the widest tier.
     const seeds = [{ plan: [], frame: 0 }];
-    for (const s of search.solutions.slice().sort((a, b) => compare(b, a)).slice(0, 4)) seeds.push({ plan: s.plan, frame: 0 });
+    // the root and the best lead solution: more seeds spread the crowd pass too thin to go deep
+    for (const s of search.solutions.slice().sort((a, b) => compare(b, a)).slice(0, 1)) seeds.push({ plan: s.plan, frame: 0 });
     search.solutions = []; search.best = null;
     let best = null;
     for (let widen = 0; widen < 3 && now() < searchEnd; widen++) {

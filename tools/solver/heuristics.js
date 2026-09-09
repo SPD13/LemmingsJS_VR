@@ -91,8 +91,11 @@
     // in the crowd pass a save counts in full only once the count is made: a branch that gives two
     // saves up to move the whole crowd (a blocker turning a lemming back to open the way) must not
     // be buried under every sibling that keeps them; the crowd's mean distance to an exit is its progress
-    const savedWeight = leadOnly || o.solved ? 1000 : 150;
-    let s = savedWeight * Math.min(o.saved, target) + 300 * bound - (leadOnly ? 20 : 120) * node.skillsUsed - (leadOnly ? 0 : 40 * o.lost);
+    const savedWeight = leadOnly || o.solved ? 1000 : 50;
+    // a skill costs the search little on either pass - the optimiser trims the solution afterwards;
+    // priced at the objective's rate a four-skill node sat below every one-skill sibling, and its
+    // edges (the far-side blocker after the second athlete) never came up
+    let s = savedWeight * Math.min(o.saved, target) + 300 * bound - (leadOnly ? 20 : 40) * node.skillsUsed - (leadOnly ? 0 : 40 * o.lost);
     s -= (leadOnly ? 1.0 : 0.5) * (o.leadDist || 0); // progress: how near anyone came to an exit
     if (!leadOnly) s -= 2 * (o.crowdDist || 0);      // and how near the crowd stands
     s -= (o.endFrame === Infinity ? o.lastFrame : o.endFrame) / 500;
