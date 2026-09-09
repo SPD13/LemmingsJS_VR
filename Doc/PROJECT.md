@@ -739,8 +739,14 @@ shape of it:
   gates out of it: a drop (free under the splat height, a floater's per
   lemming beyond), a wall bashed level, mined down or climbed (steel and a
   one-way wall's wrong side forbid what they forbid), a gap built across
-  (as many builders as its width and rise), the floor dug through, and a
-  blocker standing there (a bomber on it opens the way). A plan is a
+  (as many builders as its width and rise, or platformers flat), a jump
+  (the engine's arc, onto a ledge within its hoist), a low wall stacked
+  up, a ceiling within reach shimmied along to where it ends, a deadly
+  drop cut short by a stoner's stone, the floor dug through, a slope the
+  cells take for a wall walked at the pixels, and a blocker standing there
+  (a bomber on it opens the way); water, fire and traps are ends too -
+  deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
+  gone for all after, a once-only trap taking one lemming. A plan is a
   Dijkstra over (region, heading) - heading the other way costs a turn: a
   blocker and a bomber, unless a wall or a blocker ahead turns the lemming
   for nothing and the exit does not take it first - and the plan for

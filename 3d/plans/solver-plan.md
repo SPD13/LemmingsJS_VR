@@ -318,9 +318,34 @@ need bashers* (3), *Just Digging* (2), *Fence & Mine* (4), *Up For A Walk*
 (the graph cached by terrain version and blocker set); on a 320×160 level
 it is a few milliseconds.
 
-Not modelled yet: platformers and stackers as gates, jumpers and
-shimmiers, water and traps as region ends, one-way arrows on the floor
-for a digger, a blocker's own group (a blocking lemming has no region).
+Modelled since (9 September, later): **water, fire and traps** as region
+ends (their cells are no floor; water swum by a swimmer along the surface
+to the bank it climbs out on, a trap walked through by a disarmer and gone
+for everyone after, a once-only trap taking one lemming as a half-cost
+gate, a repeating trap a gauntlet at a lemming's worth; all crossed above
+like a gap), **platformers** (flat, as far as builders), **jumpers** (the
+engine's arc: 18 px up over 38 px, a ledge within 5 px of its head hoisted
+onto - so up to 5 cells up, across 9), **stackers** up a wall of three
+cells, **shimmiers** (a ceiling within 8-13 px of the floor followed its
+way, stepping a cell up or down as the hang does, to where it ends - the
+fall - or a ledge at hanging height - walked onto - or a wall at head
+height - let go), **stoners** cutting a deadly drop into safe pieces for
+everyone after, **arrows down and up** (no basher through arrows down or
+up, no miner through arrows up), and **slopes** the cells take for walls,
+walked at the pixels (six up, three down, a step at a time) into the
+region above - the biggest single gain, since every NeoLemmix hill was a
+wall before. The permanent-skill boost goes only to the lead (or to a
+group whose own step it is); a jumper or shimmier is boosted at its spot.
+
+Still outside the model: a jump into a wall as a way to turn round
+(*Jumping Lem Flash* turns on it), stacks and stones as a staircase up a
+tall wall (*Stacks And Stones*), a climber grabbing an overhang as a
+shimmier mid-climb (*Climb Up, Hang On*), the route down through a
+bashable block behind a force field (*Trap Roulette*): all four stay
+unsolved at tier 1; *Split And Splat* improves to 54/60 with 5 skills
+(51 before), everything else holds (Keep your hair 29/30 with 11, Snuggle
+4, bashers 3, A Float 8, Amphibious 6). The blocker itself has no group:
+a blocking lemming stands in no region and counts as spent.
 
 ### What limits the solver now
 
