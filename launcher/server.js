@@ -239,9 +239,11 @@ function solveNext(absRoot) {
   child.on("error", (e) => finish(job, "error", String(e.message || e)));
   child.on("exit", (code, signal) => {
     if (job.finished) return;
-    const status = signal ? "cancelled" : code === 0 ? "solved" : code === 3 ? "unsolved" : "error";
-    const line = job.log.filter((l) => /  (solved|unsolved|ERROR)/.test(l)).pop() || job.log[job.log.length - 1] || "";
-    finish(job, status, line.replace(/^.*\.nxlv  /, ""));
+    // the verdict is the solver's own line, never the exit code alone (a killed process may exit 0)
+    const verdict = job.log.filter((l) => /  (solved|unsolved|ERROR)/.test(l)).pop() || "";
+    const status = job.cancelled || signal ? "cancelled" : /  solved /.test(verdict) ? "solved" : /  unsolved/.test(verdict) || code === 3 ? "unsolved" : "error";
+    const line = (verdict || job.log[job.log.length - 1] || "").replace(/^.*\.nxlv  /, "");
+    finish(job, status, status === "cancelled" ? "cancelled" : line);
   });
   function finish(j, status, line) {
     if (j.finished) return;
@@ -280,7 +282,7 @@ function solveCancel(body) {
   solveQueue.pending = ids ? solveQueue.pending.filter((j) => !ids.has(j.id)) : [];
   let killed = false;
   const r = solveQueue.running;
-  if (r && r.child && (body.running || (ids && ids.has(r.id)))) { try { r.child.kill("SIGTERM"); killed = true; } catch (e) {} }
+  if (r && r.child && (body.running || (ids && ids.has(r.id)))) { r.cancelled = true; try { r.child.kill("SIGTERM"); killed = true; } catch (e) {} }
   solveQueue.serial++;
   return { dropped: before - solveQueue.pending.length, killed };
 }

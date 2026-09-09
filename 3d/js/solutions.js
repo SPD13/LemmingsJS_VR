@@ -55,7 +55,7 @@ Vfs.boot("").then(async () => {
     const rec = Solutions.info(l.id);
     return {
       solved: !!rec, saved: rec ? rec.saved : -1, skills: rec ? rec.skillsUsed : Infinity, time: rec ? rec.completionFrame : Infinity,
-      tier: rec ? rec.tier : 0, state: jobState.get(l.id) || "", rec,
+      tier: rec ? rec.tier : 0, state: jobState.get(l.id) === "solved" && !rec ? "" : jobState.get(l.id) || "", rec,
     };
   };
 
@@ -186,6 +186,7 @@ Vfs.boot("").then(async () => {
 
   // ---- the server's queue
   let lastSerial = -1, polling = null, lastStatus = null, ticker = null;
+  const pageOpenedAt = Date.now();
 
   /** The running level's bar: how far into its budget the search is, its phase and its best so far. */
   function updateBars() {
@@ -262,8 +263,9 @@ Vfs.boot("").then(async () => {
       const before = new Set(levels.filter((l) => Solutions.has(l.id)).map((l) => l.id));
       Solutions.ready = null;
       await Solutions.load(ROOT);
+      // green only for a solution the index really holds now (a job's verdict alone is not one)
       for (const l of levels) if (Solutions.has(l.id) && !before.has(l.id)) fresh.add(l.id);
-      for (const d of st.done) if (d.status === "solved") fresh.add(d.id);
+      for (const d of st.done) if (d.status === "solved" && Solutions.has(d.id) && d.finishedAt > pageOpenedAt) fresh.add(d.id);
     }
     const parts = [];
     if (st.running) parts.push("<span class='running'>solving <b>" + escape(st.running.id.split("/").slice(-1)[0]) + "</b> (tier " + st.running.tier + ", " + Math.round((Date.now() - st.running.startedAt) / 1000) + " s)</span>");
