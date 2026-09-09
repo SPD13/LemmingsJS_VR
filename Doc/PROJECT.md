@@ -797,7 +797,11 @@ is the queue (running job with its budget, its latest milestone and its
 log tail, pending, done with each verdict line, a serial the page polls);
 `POST /solve/cancel` `{levels}` takes levels out of the queue (the one
 under way is killed), without levels it drops the whole queue (`{running:
-true}` kills the job under way too). The solver reports milestones as it
+true}` kills the job under way too). A job that ends unsolved goes on at
+the next tier at once, ahead of the rest, up to tier 3 (`escalate`, the
+page's "next tier when unsolved" switch, on by default); the page's
+"found at" column says which tier found a solution and how long its
+search took, or the highest tier tried on an unsolved level. The solver reports milestones as it
 goes (`Solver.solve`'s `onProgress`: the phase - lead pass, crowd pass and
 its widenings, optimising, verifying - the expansions, the best so far),
 which `nx-solve` prints as `progress {json}` lines and the launcher keeps

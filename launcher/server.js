@@ -184,8 +184,8 @@ const solveQueue = { pending: [], running: null, done: [], serial: 0 };
 function solveStatus() {
   const r = solveQueue.running;
   return {
-    running: r ? { id: r.id, tier: r.tier, budget: r.budget, budgetMs: (r.budget || SOLVE_TIERS[r.tier]) * 1000, startedAt: r.startedAt, progress: r.progress || null, log: r.log.slice(-6) } : null,
-    pending: solveQueue.pending.map((j) => ({ id: j.id, tier: j.tier, budget: j.budget })),
+    running: r ? { id: r.id, tier: r.tier, budget: r.budget, escalate: !!r.escalate, budgetMs: (r.budget || SOLVE_TIERS[r.tier]) * 1000, startedAt: r.startedAt, progress: r.progress || null, log: r.log.slice(-6) } : null,
+    pending: solveQueue.pending.map((j) => ({ id: j.id, tier: j.tier, budget: j.budget, escalate: !!j.escalate })),
     done: solveQueue.done.slice(-200),
     serial: solveQueue.serial,
   };
@@ -250,6 +250,8 @@ function solveNext(absRoot) {
     j.finished = true;
     solveQueue.running = null;
     solveQueue.done.push({ id: j.id, status, line, tier: j.tier, finishedAt: Date.now(), elapsedMs: Date.now() - j.startedAt });
+    // unsolved at this tier: the next tier at once, ahead of the rest, up to the widest (the tier's own budget)
+    if (status === "unsolved" && j.escalate && j.tier < 3) solveQueue.pending.unshift({ id: j.id, tier: j.tier + 1, budget: 0, escalate: true });
     solveQueue.serial++;
     solveNext(absRoot);
   }
@@ -258,6 +260,7 @@ function solveNext(absRoot) {
 function solveEnqueue(absRoot, body) {
   const tier = [1, 2, 3].includes(body.tier | 0) ? body.tier | 0 : 1;
   const budget = body.budget > 0 ? Math.min(3600, Math.max(1, +body.budget)) : 0;
+  const escalate = body.escalate !== false; // unsolved at a tier: the next one, unless told not to
   const ids = Array.isArray(body.levels) ? body.levels : [];
   const known = ids.length ? solvableIds(absRoot) : new Set();
   const queued = new Set(solveQueue.pending.map((j) => j.id));
@@ -268,7 +271,7 @@ function solveEnqueue(absRoot, body) {
     if (!id) { refused++; continue; }
     if (queued.has(id)) continue;
     queued.add(id);
-    solveQueue.pending.push({ id, tier, budget });
+    solveQueue.pending.push({ id, tier, budget, escalate });
     added++;
   }
   solveQueue.serial++;
