@@ -247,6 +247,23 @@ runs after this note.
   freed once its edges are queued, the frontier per depth capped, a 4 GB
   heap for the launcher's jobs and the batch's workers).
 
+- **One-way walls and steel**: a basher, miner, fencer or laserer into a
+  wall the terrain forbids (steel, a one-way wall met from the wrong side)
+  and a digger over steel no longer take a candidate slot, so the slot goes
+  to a skill that can act (a bomber, a climber). A blocker at its post is
+  a `BLOCK` event, with a bomber to free it later as a candidate.
+- *Keep your hair on, Mr. Lemming* (Redux, Gentle) stays unsolved and shows
+  the limit: the crowd sits left of a one-way-left wall over a steel floor;
+  the way through is two climber-floaters over it, a blocker on the far
+  side so the second turns back, a basher from the far side (the allowed
+  way), then a bomber on the blocker - seven skills, checked by hand
+  (20 saved by frame 1070), with no gain the score can see until the
+  last two. The lead pass finds the athlete's way in at once; the crowd
+  pass does not get there at tier 1 or 2. What it would take: a notion of
+  *turning a lemming round* (a blocker as a tool, not a wall) and *a job
+  done to be undone* (the blocker freed) - two-step macros the search
+  could take as one edge, the way the keep-at-it step does.
+
 ### What limits the solver now
 
 1. **The progress signal.** The exit-distance field costs air one and solid
