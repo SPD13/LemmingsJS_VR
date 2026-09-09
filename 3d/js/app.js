@@ -894,6 +894,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     environment: iconizeHudButton(document.getElementById("btn-environment"), environmentIcon, "environment"),
     // the world library's own tools, in the same dress
     libRescan: iconizeHudButton(document.getElementById("lib-rescan"), rescanIcon, "rescan the level packs"),
+    libSolutions: iconizeHudButton(document.getElementById("lib-solutions"), vrSolutionBtn.userData.draw, "solutions: every level and its solution, which have one and how good it is - and, in server mode, solve more"),
     libSetup: iconizeHudButton(document.getElementById("lib-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
   };
   // the sound column keeps its own place, so it is not in the row above, but
