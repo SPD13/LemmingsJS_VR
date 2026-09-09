@@ -65,7 +65,10 @@ Vfs.boot("").then(async () => {
     return {
       solved: !!rec, notFound: !rec && notFound(l.id), saved: rec ? rec.saved : -1, skills: rec ? rec.skillsUsed : Infinity, time: rec ? rec.completionFrame : Infinity,
       tier: rec ? rec.tier : -((Solutions.index && Solutions.index.levels[l.id] || {}).tier || 0),
-      state: jobState.get(l.id) === "solved" && !rec ? "" : jobState.get(l.id) || "", rec,
+      // a job's verdict shows while it says something the index does not: a solution supersedes
+      // an old "cancelled", "unsolved" or "error" (a solve done elsewhere since), and a "solved"
+      // verdict with no solution behind it is nothing
+      state: (() => { const st = jobState.get(l.id) || ""; if (st === "queued" || st === "running") return st; if (rec) return ""; return st === "solved" ? "" : st; })(), rec,
     };
   };
 
