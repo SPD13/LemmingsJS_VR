@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-09T06:08:03.970Z",
+ "generated": "2026-09-09T16:05:12.835Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -16607,18 +16607,22 @@
    "optimal": false
   },
   "NeoLemmix_Introduction_Pack/Skills/Jumping_Lem_Flash.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "NeoLemmix_Introduction_Pack/Skills/Jumping_Lem_Flash.nxrp",
    "needed": 1,
    "count": 2,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 2,
    "features": [
     "water"
    ],
-   "expansions": 3664,
-   "elapsedMs": 9082
+   "expansions": 35231,
+   "elapsedMs": 81192,
+   "saved": 1,
+   "skillsUsed": 9,
+   "completionFrame": 714,
+   "optimal": false
   },
   "NeoLemmix_Introduction_Pack/Skills/Just_Digging_Into_NeoLemmix.nxlv": {
    "status": "solved",

@@ -118,6 +118,42 @@ async function main() {
     roof.fill(60, 0, 170, 47, PM.SOLID); // a ceiling 13 px over the floor (solid to the top: no ledge on it), from before the gap to past it: the fall from its end lands beyond
     const kr = kinds(roof, 50);
     check("a ceiling: a shimmy gate over the gap", kr.kinds.includes("shimmy:SHIMMIER") && !kr.kinds.includes("jump:JUMPER"), kr.kinds);
+    // a toothed ceiling drops the shimmier at the first tooth, as the engine does
+    const teeth = crossing(300, 1, 1, { SHIMMIER: 1 });
+    teeth.fill(100, 60, 150, 100, 0);
+    teeth.fill(60, 0, 170, 47, PM.SOLID);
+    for (let x = 80; x < 170; x += 8) teeth.fill(x, 47, x + 4, 51, PM.SOLID);
+    check("teeth: no shimmy gate", !kinds(teeth, 50).kinds.includes("shimmy:SHIMMIER"), kinds(teeth, 50).kinds);
+    // a turn where no wall turns the lemming: a blocker and a bomber, a stacker in its way, or a jump into an overhang
+    const mkBack = () => {
+      const lv = F.makeLevel(300, 160, 60);
+      F.setSpawn(lv, [F.makeWindow(150, 20, 1)], 1, 1, 20);
+      lv.gadgets.push(F.makeExit(20, 60));
+      lv.fill(100, 52, 240, 60, PM.SOLID); // the hatch's floor eight pixels above the exit's: a free drop down to it, on the left
+      lv.fill(240, 60, 300, 160, 0); // and a deadly drop on the right, the way the lemmings head
+      return lv;
+    };
+    const back = mkBack();
+    const turnPlan = (skills, lv) => { const gg = R.build(lv || back, (lv || back).physics); return R.plan(gg, { region: gg.regionOf(150, 51), dir: 1 }, skills, 1); };
+    check("no way to turn: no plan", !turnPlan({}), turnPlan({}));
+    const pb = turnPlan({ BLOCKER: 1, BOMBER: 1 });
+    check("a blocker and a bomber turn it (2)", pb && pb.cost === 2 && pb.steps[0].turn && pb.steps[0].how === "BLOCKER", pb && { cost: pb.cost, how: pb.steps[0].how });
+    const pst = turnPlan({ STACKER: 1 });
+    check("a stacker turns it (1)", pst && pst.cost === 1 && pst.steps[0].how === "STACKER", pst && { cost: pst.cost, how: pst.steps[0].how });
+    check("a jumper alone does not", !turnPlan({ JUMPER: 1 }), turnPlan({ JUMPER: 1 }));
+    const hang = mkBack(); hang.fill(180, 40, 200, 44, PM.SOLID); // an overhang 12 px over the floor
+    const pj = turnPlan({ JUMPER: 1 }, hang);
+    check("a jump into an overhang turns it (1)", pj && pj.cost === 1 && pj.steps[0].how === "JUMPER", pj && { cost: pj.cost, how: pj.steps[0].how });
+    // a force field turns whoever walks against it, for nothing
+    const field = mkBack(); field.gadgets.push(F.makeGadget("FORCELEFT", 220, 30, 8, 22));
+    const pf = turnPlan({}, field);
+    check("a force field ahead turns it for nothing", pf && pf.cost === 0, pf && pf.cost);
+    // a climber under a ceiling too close over the wall's top cannot hoist: a shimmier from the climb gets along it
+    const over = crossing(300, 1, 1, { CLIMBER: 1, SHIMMIER: 1 });
+    over.fill(150, 28, 160, 60, PM.SOLID); // a wall 32 px tall
+    over.fill(100, 20, 152, 24, PM.SOLID); // a ceiling 8 px over its top, up to the wall
+    const ko2 = kinds(over, 50);
+    check("a climb under a ceiling: a climb-and-shimmy gate", ko2.kinds.includes("climbshimmy:CLIMBER"), ko2.kinds);
   }
 
   console.log("a wall needs one basher, steel needs a climber");
