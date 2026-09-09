@@ -277,7 +277,7 @@ function runPool(entries, jobs, job, onDone) {
       if (next >= entries.length) { if (running === 0) resolve(); return; }
       const entry = entries[next++];
       running++;
-      const worker = new Worker(path.join(__dirname, "solver", "worker.js"), { workerData: { repoRoot: job.repoRoot } });
+      const worker = new Worker(path.join(__dirname, "solver", "worker.js"), { workerData: { repoRoot: job.repoRoot }, resourceLimits: { maxOldGenerationSizeMb: 4096 } });
       let finished = false;
       // the budget is wall-clock inside the worker; a loaded machine stretches it, so the leash is long
       const leash = job.budgetMs * 2 + 60000;
