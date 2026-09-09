@@ -15,11 +15,13 @@
   /** The outcome of `plan` from the start: { saved, skillsUsed, completionFrame, plan, ok }. */
   function evaluate(world, plan) {
     world.reset(plan);
-    const { outcome } = Solver.rollout(world);
+    const { outcome, events } = Solver.rollout(world);
+    let lastExit = -1;
+    for (const e of events) if (e.type === "EXIT" && e.frame > lastExit) lastExit = e.frame;
     return {
       plan: Solver.copyPlan(plan), saved: outcome.saved, skillsUsed: outcome.skillsUsed,
       completionFrame: outcome.endFrame === Infinity ? outcome.lastFrame : outcome.endFrame,
-      ok: outcome.ended || outcome.outOfTime, stuck: outcome.stuck,
+      ok: outcome.ended || outcome.outOfTime, stuck: outcome.stuck, lastExit,
     };
   }
 
@@ -28,6 +30,17 @@
     let cur = evaluate(world, best.plan);
     if (Solver.compare(cur, best) < 0) return best; // the plan does not replay as claimed: keep the claim for the verifier to judge
     cur.ok = cur.ok || best.ok;
+    // a plan that wins with the rest pacing for ever never ends the level: a nuke once the count is made
+    if ((cur.stuck || !cur.ok) && !cur.plan.some((e) => e.type === "nuke") && now() < deadline) {
+      // once the last lemming is in (or, with none in, after the plan's last action)
+      let lastAction = 0;
+      for (const e of cur.plan) if (e.frame > lastAction) lastAction = e.frame;
+      const at = (cur.lastExit >= 0 ? cur.lastExit : lastAction) + 1;
+      const trial = Solver.copyPlan(cur.plan);
+      trial.push({ type: "nuke", frame: at });
+      const r = evaluate(world, trial);
+      if (r.ok && r.saved >= cur.saved) { if (log) log("  optimise: the nuke at " + at + " ends the level"); cur = r; }
+    }
     let changed = true, rounds = 0;
     while (changed && now() < deadline && rounds < 6) {
       changed = false; rounds++;
@@ -35,7 +48,7 @@
       for (let i = cur.plan.length - 1; i >= 0 && now() < deadline; i--) {
         const trial = cur.plan.slice(0, i).concat(cur.plan.slice(i + 1));
         const r = evaluate(world, trial);
-        if (better(r, cur)) { if (log) log("  optimise: dropped " + Solver.planEntry(cur.plan[i])); cur = r; changed = true; }
+        if (better(r, cur) && (r.ok || !cur.ok)) { if (log) log("  optimise: dropped " + Solver.planEntry(cur.plan[i])); cur = r; changed = true; }
       }
       // the fastest release from the start
       if (!world.level.spawnLocked && now() < deadline) {
