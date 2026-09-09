@@ -785,11 +785,18 @@ class SpriteCapture {
     // (clipFrameToBounds), as the original's level bitmap cuts them
     this.boundsW = 0;
     this.boundsH = 0;
+    // the y the cut ends at: the level's bottom edge, unless the caller lets
+    // the draws run on past it (the lemmings falling out of the board)
+    this.boundsBottom = 0;
   }
-  /** Cut every draw from now on to a level this wide and this tall. */
-  setBounds(w, h) {
+  /**
+   * Cut every draw from now on to a level this wide and this tall; `bottom`,
+   * when given, is where the cut ends instead of the level's bottom edge.
+   */
+  setBounds(w, h, bottom) {
     this.boundsW = w | 0;
     this.boundsH = h | 0;
+    this.boundsBottom = bottom == null ? this.boundsH : bottom | 0;
   }
   /**
    * The draw cut to the level: `off` when nothing of it lies inside. The item
@@ -798,7 +805,7 @@ class SpriteCapture {
   _cut(item) {
     if (!(this.boundsW > 0 && this.boundsH > 0)) return item;
     const src = item.frame || item.mask;
-    const cut = clipFrameToBounds(src, item.x, item.y, item.flipY, this.boundsW, this.boundsH);
+    const cut = clipFrameToBounds(src, item.x, item.y, item.flipY, this.boundsW, this.boundsBottom);
     if (cut === src) return item;
     if (!cut) item.off = true;
     else if (item.frame) item.frame = cut;
