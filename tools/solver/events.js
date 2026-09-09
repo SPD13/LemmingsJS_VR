@@ -189,8 +189,12 @@
         if (all && any && !game.userSetNuking) { stuck = true; break; }
       }
     }
+    // the crowd's progress: the mean distance to an exit of the controllable lemmings still out
+    let crowdDist = 0, crowdN = 0;
+    if (field) for (const L of game.lemmings) { if (L.removed || L.cannotReceiveSkills) continue; crowdDist += field.at(L.x, L.y); crowdN++; }
+    crowdDist = crowdN ? crowdDist / crowdN : 0;
     const outcome = {
-      saved: game.lemmingsIn, lost: game.lemmingsRemoved - game.lemmingsIn, alive: game.lemmingsOut,
+      crowdDist, saved: game.lemmingsIn, lost: game.lemmingsRemoved - game.lemmingsIn, alive: game.lemmingsOut,
       toRelease: game.lemmingsToRelease, endFrame: world.ended ? game.currentIteration : Infinity,
       stuck, ended: world.ended, outOfTime: game.isOutOfTime, capped: !world.ended && !stuck && !game.isOutOfTime && !leadDone, leadDone,
       lastFrame: game.currentIteration, skillsUsed: world.skillsUsed(), need: level.needCount, minDist,

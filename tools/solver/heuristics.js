@@ -88,8 +88,13 @@
     // the lead pass looks for one lemming's way in, whatever it costs: a skill is cheap there and
     // progress dear, and what the crowd loses meanwhile is the crowd pass's concern (which
     // pays the objective's price per skill and per lemming lost)
-    let s = 1000 * Math.min(o.saved, target) + 300 * bound - (leadOnly ? 20 : 120) * node.skillsUsed - (leadOnly ? 0 : 40 * o.lost);
+    // in the crowd pass a save counts in full only once the count is made: a branch that gives two
+    // saves up to move the whole crowd (a blocker turning a lemming back to open the way) must not
+    // be buried under every sibling that keeps them; the crowd's mean distance to an exit is its progress
+    const savedWeight = leadOnly || o.solved ? 1000 : 150;
+    let s = savedWeight * Math.min(o.saved, target) + 300 * bound - (leadOnly ? 20 : 120) * node.skillsUsed - (leadOnly ? 0 : 40 * o.lost);
     s -= (leadOnly ? 1.0 : 0.5) * (o.leadDist || 0); // progress: how near anyone came to an exit
+    if (!leadOnly) s -= 2 * (o.crowdDist || 0);      // and how near the crowd stands
     s -= (o.endFrame === Infinity ? o.lastFrame : o.endFrame) / 500;
     if (o.stuck) s -= 20;
     if (o.solved) s += 5000;
