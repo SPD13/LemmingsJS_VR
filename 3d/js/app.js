@@ -5177,6 +5177,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   };
   document.getElementById("btn-setup").addEventListener("click", goSetup);
   document.getElementById("lib-setup").addEventListener("click", goSetup);
+  document.getElementById("lib-solutions").addEventListener("click", () => { location.href = Vfs.link("solutions.html"); });
   hotkeys.onChange = () => refreshKeyHints();
 
   /** The tooltips and the controls panel name the keys as they are set. */
