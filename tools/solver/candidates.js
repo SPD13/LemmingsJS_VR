@@ -27,7 +27,7 @@
       ["STACKER", "k", 0.6], ["JUMPER", "k", 0.6], ["DIGGER", "k", 0.5], ["SLIDER", "at", 0.4], ["MINER", "k", 0.4], ["BOMBER", "k", 0.2]],
     TURN: [["BASHER", "k", 1.0], ["MINER", "k", 0.9], ["CLIMBER", "k", 0.9], ["BUILDER", "k", 0.8], ["JUMPER", "k", 0.7], ["FENCER", "k", 0.7],
       ["LASERER", "k", 0.6], ["SHIMMIER", "k0", 0.5], ["STACKER", "k", 0.5], ["DIGGER", "k", 0.5], ["BLOCKER", "k", 0.6], ["BOMBER", "k", 0.3], ["PLATFORMER", "k", 0.3]],
-    LAND: [["DIGGER", "at", 0.8], ["MINER", "at", 0.6], ["BUILDER", "at", 0.5], ["BASHER", "at", 0.5], ["BLOCKER", "at", 0.5], ["CLIMBER", "at", 0.5],
+    LAND: [["DIGGER", "at", 0.8], ["MINER", "at", 0.6], ["BUILDER", "at", 0.5], ["BASHER", "at", 0.5], ["BLOCKER", "past", 0.5], ["CLIMBER", "at", 0.5],
       ["FLOATER", "at", 0.4], ["GLIDER", "at", 0.3], ["SWIMMER", "at", 0.3], ["DISARMER", "at", 0.3], ["SLIDER", "at", 0.2], ["CLONER", "at", 0.3], ["BOMBER", "at", 0.2], ["STACKER", "at", 0.2], ["PLATFORMER", "at", 0.2]],
     SHRUG: [["BUILDER", "at", 1.0], ["WALKER", "at", 0.6], ["BASHER", "at", 0.7], ["PLATFORMER", "at", 0.7], ["STACKER", "at", 0.5], ["MINER", "at", 0.5], ["DIGGER", "at", 0.5], ["BLOCKER", "at", 0.4], ["JUMPER", "at", 0.4], ["CLIMBER", "at", 0.3]],
     WORK_END: [["BUILDER", "at", 0.8], ["BASHER", "at", 0.8], ["MINER", "at", 0.7], ["DIGGER", "at", 0.7], ["BLOCKER", "at", 0.5], ["PLATFORMER", "at", 0.5], ["STACKER", "at", 0.4], ["CLIMBER", "at", 0.4], ["JUMPER", "at", 0.3]],
@@ -149,6 +149,9 @@
           const anchor = e.anchor;
           switch (where) {
             case "at": frames.push([e.frame, 1]); break;
+            // a little past the moment: a blocker set right on the landing spot lets the followers who land
+            // inside its field walk out of it, one a dozen pixels on turns them
+            case "past": frames.push([e.frame, 0.8]); for (const k of [12, 24]) frames.push([e.frame + k, 1]); break;
             case "early": frames.push([firstFrame, 1]); break;
             case "k0": frames.push([frameShortOf(e.ring || [], e.edgeX !== undefined ? e.edgeX : e.wallX, e.type === "TURN" && !e.climbing ? -e.dx : e.dx, 0), 1]); break;
             case "k": {
