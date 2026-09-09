@@ -773,6 +773,23 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     c.stroke();
   });
   // two arrows chasing round a circle: the library's rescan
+  // the solutions catalog: a list of three rows, a check before each, in the
+  // solutions' cyan - the list of them, as against the play-in-a-ring that is
+  // one level's solution
+  const solutionsCatalogIcon = (cx, st) => toolIcon(cx, st, (c) => {
+    c.strokeStyle = "#7fd6e8";
+    c.lineWidth = 3;
+    c.lineCap = "round";
+    c.lineJoin = "round";
+    for (const y of [20, 32, 44]) {
+      c.beginPath();
+      c.moveTo(15, y + 1); c.lineTo(19, y + 5); c.lineTo(26, y - 4); // the check
+      c.stroke();
+      c.beginPath();
+      c.moveTo(33, y); c.lineTo(50, y); // the row
+      c.stroke();
+    }
+  }, "#7fd6e8");
   const rescanIcon = (cx, st) => toolIcon(cx, st, (c) => {
     const mx = 32, my = 32, r = 13, head = 8, half = 6;
     for (const from of [Math.PI * 0.15, Math.PI * 1.15]) {
@@ -894,7 +911,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     environment: iconizeHudButton(document.getElementById("btn-environment"), environmentIcon, "environment"),
     // the world library's own tools, in the same dress
     libRescan: iconizeHudButton(document.getElementById("lib-rescan"), rescanIcon, "rescan the level packs"),
-    libSolutions: iconizeHudButton(document.getElementById("lib-solutions"), vrSolutionBtn.userData.draw, "solutions: every level and its solution, which have one and how good it is - and, in server mode, solve more"),
+    libSolutions: iconizeHudButton(document.getElementById("lib-solutions"), solutionsCatalogIcon, "the solutions catalog: every level and its solution, which have one and how good it is - and, in server mode, solve more"),
     libSetup: iconizeHudButton(document.getElementById("lib-setup"), setupIcon, "setup: NeoLemmix, the level packs and your configuration"),
   };
   // the sound column keeps its own place, so it is not in the row above, but
