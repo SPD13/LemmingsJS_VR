@@ -9,8 +9,15 @@
  * floater's job beyond it), a wall (bashed level, mined down, climbed to
  * its top; steel and a one-way wall's forbidden side forbid what they
  * forbid), a gap (built across, as many builders as its width and rise
- * need), the floor (dug through, unless steel). Each gate names the skill,
- * where it is worked and which way the lemming faces there.
+ * need; a platformer flat; a jump over nine cells and up to five up), the floor
+ * (dug through, unless steel), a deadly drop cut short by a stoner's stone,
+ * a low wall jumped or stacked up, a ceiling
+ * within reach shimmied along to where it ends. Water, fire and a trap
+ * are ends too - deadly on foot, crossed above like a gap, water swum by a
+ * swimmer to the bank it climbs out on, a trap walked through by a
+ * disarmer and gone for everyone after (a trap that fires once takes one
+ * lemming and is gone). Each gate names the skill, where
+ * it is worked and which way the lemming faces there.
  *
  * A blocker standing on a floor cuts it in two, with a bomber on it as the
  * gate between the halves; the graph is rebuilt when the terrain or the
@@ -36,9 +43,15 @@
   const BUILD_ACROSS = 6;      // cells one builder spans (12 bricks, 24 px)
   const BUILD_UP = 3;          // cells one builder rises (12 px)
   const MAX_BUILDERS = 6;
+  const PLATFORM_ACROSS = 6;   // cells one platformer spans, flat
+  const JUMP_ACROSS = 9;       // cells a jump covers (38 px, back at its level) before the fall
+  const JUMP_UP = 4;           // cells a jump rises (18 px)
+  const JUMP_LEDGE = 5;        // cells a jump gets up onto: the arc, plus the hoist over a ledge within 5 px of its head
+  const STACK_UP = 3;          // cells a stack (8 px) plus a walker's step (6 px) climbs
+  const WATER = 1, FIRE = 2, TRAP = 3, TRAPONCE = 4;
   const PERM = new Set(["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"]);
 
-  /** The cell grid of a physics map: 0 air, 1 solid, 2 steel; and the one-way bits per cell. */
+  /** The cell grid of a physics map: 0 air, 1 solid, 2 steel; and the one-way bits per cell (1 left, 2 right, 4 down, 8 up). */
   function cells(physics, w, h) {
     const cw = Math.ceil(w / CELL), ch = Math.ceil(h / CELL);
     const kind = new Uint8Array(cw * ch), oneway = new Uint8Array(cw * ch);
@@ -50,7 +63,7 @@
       }
       const i = cx + cy * cw;
       kind[i] = st > n / 2 ? 2 : s > n / 2 ? 1 : 0;
-      oneway[i] = ow & PM.ONEWAYLEFT ? 1 : ow & PM.ONEWAYRIGHT ? 2 : 0;
+      oneway[i] = (ow & PM.ONEWAYLEFT ? 1 : 0) | (ow & PM.ONEWAYRIGHT ? 2 : 0) | (ow & PM.ONEWAYDOWN ? 4 : 0) | (ow & PM.ONEWAYUP ? 8 : 0);
     }
     return { cw, ch, kind, oneway };
   }
@@ -67,6 +80,17 @@
     const at = (cx, cy) => (cx < 0 || cy < 0 || cx >= cw || cy >= ch) ? 1 : kind[cx + cy * cw];
     const floor = new Uint8Array(cw * ch);
     for (let cy = 0; cy < ch - 1; cy++) for (let cx = 0; cx < cw; cx++) if (at(cx, cy) === 0 && at(cx, cy + 1) !== 0 && at(cx, cy - 1) === 0) floor[cx + cy * cw] = 1;
+    // hazards: water drowns, fire burns, a trap kills - none of their cells is floor to walk on
+    const hazard = new Uint8Array(cw * ch);
+    const HAZARD = { WATER, FIRE, TRAP, TRAPONCE };
+    for (const gd of level.gadgets) {
+      const hz = HAZARD[gd.effect] || 0;
+      if (!hz || !gd.triggerRect) continue;
+      const r = gd.triggerRect;
+      for (let cy = Math.max(0, Math.floor(r.y0 / CELL)); cy <= Math.min(ch - 1, Math.floor((r.y1 - 1) / CELL)); cy++)
+        for (let cx = Math.max(0, Math.floor(r.x0 / CELL)); cx <= Math.min(cw - 1, Math.floor((r.x1 - 1) / CELL)); cx++) { const i = cx + cy * cw; if (!hazard[i] || hz === WATER) hazard[i] = hz; floor[i] = 0; }
+    }
+    const hazardAt = (cx, cy) => (cx < 0 || cy < 0 || cx >= cw || cy >= ch) ? 0 : hazard[cx + cy * cw];
     // a blocker standing there cuts its floor in two: its cell column is no floor, and a gate of its own
     const blocked = new Uint8Array(cw * ch);
     for (const b of blockers || []) {
@@ -97,10 +121,56 @@
       regions.push({ id, cells: list, x0, x1, ymin, ymax, exit: false, hatch: false, ends: {}, gates: [] });
     }
     const regionAt = (cx, cy) => (cx < 0 || cy < 0 || cx >= cw || cy >= ch) ? -1 : region[cx + cy * cw];
+    const phys = physics || level.physics;
+    const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && (phys[x + y * w] & PM.SOLID) !== 0;
+    /**
+     * A wall the cells see that a walker climbs on foot - a slope, steps of
+     * six pixels or less at the pixels: from the end cell (ex, ey) heading
+     * `dir`, the ground followed pixel by pixel (up six at most, down three)
+     * until another region's cell is underfoot (its id) or a real wall or
+     * drop stops it (-1). At most 64 pixels of it.
+     */
+    const walkUp = (ex, ey, dir, fromId) => {
+      let x = dir > 0 ? ex * CELL + CELL - 1 : ex * CELL;
+      let y = ey * CELL + CELL; // the pixel under the feet
+      while (y < h && !solid(x, y)) y++;
+      for (let n = 0; n < 64; n++) {
+        x += dir;
+        if (x < 0 || x >= w) return -1;
+        let ny = y;
+        if (solid(x, ny)) { let up = 0; while (up <= 6 && solid(x, ny - 1)) { ny--; up++; } if (up > 6) return -1; }
+        else { let down = 0; while (down <= 3 && !solid(x, ny + 1)) { ny++; down++; } if (down > 3) return -1; }
+        y = ny;
+        const id = regionAt(Math.floor(x / CELL), Math.floor((y - 1) / CELL));
+        if (id >= 0 && id !== fromId) return id;
+      }
+      return -1;
+    };
     /** The floor a fall from (cx, cy) lands on: {cy, region} or null (off the level). */
     const landing = (cx, cy) => {
-      for (let y = cy; y < ch; y++) { if (at(cx, y) !== 0) return y > cy ? { cy: y - 1, region: regionAt(cx, y - 1), cells: y - 1 - cy } : null; }
+      for (let y = cy; y < ch; y++) {
+        if (hazardAt(cx, y)) return { cy: y, region: -1, cells: y - cy, hazard: hazard[cx + y * cw] };
+        if (at(cx, y) !== 0) return y > cy ? { cy: y - 1, region: regionAt(cx, y - 1), cells: y - 1 - cy } : null;
+      }
       return null;
+    };
+    /**
+     * Where a swimmer dropped into the water at (cx, cy) gets out: along the
+     * surface its way until terrain, climbed out when a floor is within two
+     * cells above the surface, else turned and the other way. A region or -1.
+     */
+    const swimOut = (cx, cy, dir) => {
+      let sy = cy; while (sy > 0 && hazardAt(cx, sy - 1) === WATER) sy--;
+      for (const d of [dir, -dir]) {
+        for (let x = cx; x >= 0 && x < cw; x += d) {
+          if (hazardAt(x, sy) === WATER) continue;
+          // the water's edge: a bank at the surface (walked out on), a low wall (climbed out), a drop (fallen down), a high wall (turned)
+          if (at(x, sy) === 0) { const id = regionAt(x, sy); if (id >= 0) return id; const l = landing(x, sy); return l && l.region >= 0 ? l.region : -1; }
+          for (let dy = 1; dy <= 2; dy++) { const id = regionAt(x, sy - dy); if (id >= 0) return id; }
+          break;
+        }
+      }
+      return -1;
     };
     // gadgets: the exit's region, the hatches' landing regions
     const exits = level.gadgets.filter((gd) => gd.effectBase === "EXIT" || gd.effectBase === "LOCKEXIT");
@@ -127,21 +197,9 @@
         const nx = ex + dir;
         const beyond = at(nx, ey);
         const blockedAt = (cx, cy) => cx >= 0 && cx < cw && ((cy >= 0 && blocked[cx + cy * cw]) || (cy + 1 < ch && blocked[cx + (cy + 1) * cw]) || (cy >= 1 && blocked[cx + (cy - 1) * cw]));
-        if (blockedAt(nx, ey)) {
-          // a blocker: it turns whoever comes, a bomber on it opens the way (both ways) to what stands beyond
-          r.ends[side] = { kind: "blocker" };
-          let beyondRegion = -1;
-          for (let k = 1; k <= 2 && beyondRegion < 0; k++) for (const dy of [0, -1, 1]) { const id = regionAt(nx + dir * k, ey + dy); if (id >= 0 && id !== r.id) { beyondRegion = id; break; } }
-          if (beyondRegion >= 0) gate(r.id, beyondRegion, "unblock", "BOMBER", 1, nx, ey, 0, { twoWay: true });
-        } else if (beyond === 0 && at(nx, ey + 1) === 0) {
-          // a drop: where it lands
-          const l = landing(nx, ey);
-          r.ends[side] = { kind: "drop", cells: l ? l.cells : Infinity, region: l ? l.region : -1 };
-          if (l && l.region >= 0 && l.region !== r.id) {
-            if (l.cells <= SPLAT_CELLS) gate(r.id, l.region, "drop", null, 0, ex, ey, dir);
-            else { gate(r.id, l.region, "drop", "FLOATER", 1, ex, ey, dir, { perLemming: true }); }
-          }
-          // a gap or a rise built across: the nearest region within k builders
+        const hz = hazardAt(nx, ey) || (at(nx, ey) === 0 ? hazardAt(nx, ey + 1) : 0);
+        /** What a builder, a platformer or a jumper reaches across from this end: the nearest region within reach. */
+        const crossings = () => {
           for (const t of regions) {
             if (t.id === r.id) continue;
             for (let k = 1; k <= MAX_BUILDERS; k++) {
@@ -149,30 +207,117 @@
               const hit = t.cells.some((j) => { const jx = j % cw, jy = (j / cw) | 0; return (dir > 0 ? jx > ex && jx <= reachX : jx < ex && jx >= reachX) && jy >= minY && jy <= ey; });
               if (hit) { gate(r.id, t.id, "build", "BUILDER", k, ex, ey, dir, { builders: k, twoWay: true }); break; }
             }
+            // a platformer: flat, as far as a builder
+            for (let k = 1; k <= MAX_BUILDERS; k++) {
+              const reachX = ex + dir * PLATFORM_ACROSS * k;
+              const hit = t.cells.some((j) => { const jx = j % cw, jy = (j / cw) | 0; return (dir > 0 ? jx > ex && jx <= reachX : jx < ex && jx >= reachX) && jy >= ey - 1 && jy <= ey + 1; });
+              if (hit) { gate(r.id, t.id, "platform", "PLATFORMER", k, ex, ey, dir, { platformers: k, twoWay: true }); break; }
+            }
           }
+          // a jump: an arc two cells up over seven across, through the air, onto a ledge on the way or wherever the fall after it lands
+          let to = -1;
+          for (let k = 1; k <= JUMP_ACROSS; k++) {
+            const col = ex + dir * k;
+            if (col < 0 || col >= cw || at(col, ey - JUMP_UP) !== 0) break;
+            if (k >= 2) for (let dy = JUMP_LEDGE; dy >= 1; dy--) { const id = regionAt(col, ey - dy); if (id >= 0 && id !== r.id) { to = id; break; } }
+            if (to >= 0) break;
+            if (k === JUMP_ACROSS) { const l = landing(col, ey - JUMP_UP); if (l && l.region >= 0 && l.region !== r.id) to = l.region; }
+          }
+          if (to >= 0) gate(r.id, to, "jump", "JUMPER", 1, ex, ey, dir, { perLemming: true });
+        };
+        if (blockedAt(nx, ey)) {
+          // a blocker: it turns whoever comes, a bomber on it opens the way (both ways) to what stands beyond
+          r.ends[side] = { kind: "blocker" };
+          let beyondRegion = -1;
+          for (let k = 1; k <= 2 && beyondRegion < 0; k++) for (const dy of [0, -1, 1]) { const id = regionAt(nx + dir * k, ey + dy); if (id >= 0 && id !== r.id) { beyondRegion = id; break; } }
+          if (beyondRegion >= 0) gate(r.id, beyondRegion, "unblock", "BOMBER", 1, nx, ey, 0, { twoWay: true });
+        } else if (hz) {
+          // water, fire or a trap on the way: deadly on foot; crossed above by a builder, a platformer or a jump
+          r.ends[side] = { kind: hz === WATER ? "water" : hz === FIRE ? "fire" : "trap", once: hz === TRAPONCE };
+          if (hz === WATER) { const to = swimOut(nx, hazardAt(nx, ey) ? ey : ey + 1, dir); if (to >= 0 && to !== r.id) gate(r.id, to, "swim", "SWIMMER", 1, ex, ey, dir, { perLemming: true }); }
+          if (hz === TRAP || hz === TRAPONCE) {
+            // a disarmer walks through and the trap is gone for everyone after it; a trap that fires once is gone
+            // for the one lemming it takes - half a skill's worth of loss, and no skill at all
+            let far = nx; while (far >= 0 && far < cw && hazardAt(far, ey) === hz) far += dir;
+            let to = -1; for (const dy of [0, -1, 1]) { const id = regionAt(far, ey + dy); if (id >= 0 && id !== r.id) { to = id; break; } }
+            if (to >= 0) gate(r.id, to, "disarm", "DISARMER", 1, ex, ey, dir, { perLemming: true, twoWay: true });
+            if (to >= 0 && hz === TRAPONCE) gate(r.id, to, "sacrifice", null, 0.5, ex, ey, dir, { twoWay: true });
+            // a trap that fires again and again is busy while it fires: a crowd through it loses some - a gauntlet, a lemming's worth
+            if (to >= 0 && hz === TRAP) gate(r.id, to, "gauntlet", null, 1, ex, ey, dir, { twoWay: true });
+          }
+          crossings();
+        } else if (beyond === 0 && at(nx, ey + 1) === 0) {
+          // a drop: where it lands
+          const l = landing(nx, ey);
+          r.ends[side] = { kind: "drop", cells: l ? l.cells : Infinity, region: l ? l.region : -1 };
+          if (l && l.hazard === WATER) { const to = swimOut(nx, l.cy, dir); if (to >= 0 && to !== r.id) gate(r.id, to, "swim", "SWIMMER", 1, ex, ey, dir, { perLemming: true }); }
+          else if (l && l.region >= 0 && l.region !== r.id) {
+            if (l.cells <= SPLAT_CELLS) gate(r.id, l.region, "drop", null, 0, ex, ey, dir);
+            else {
+              gate(r.id, l.region, "drop", "FLOATER", 1, ex, ey, dir, { perLemming: true });
+              // a stoner off the edge: a stone in the fall's way, the drop cut into safe pieces for everyone after
+              const stones = Math.ceil(l.cells / SPLAT_CELLS) - 1;
+              if (stones <= 3) gate(r.id, l.region, "stone", "STONER", stones, ex, ey, dir, { stones });
+            }
+          }
+          crossings();
         } else if (beyond !== 0 || (beyond === 0 && at(nx, ey - 1) !== 0)) {
           // a wall: its height, and what stands on the other side at this row
           let top = ey; while (top > 0 && at(nx, top - 1) !== 0) top--;
           let steel = false, ow = 0, far = nx;
           while (far >= 0 && far < cw && at(far, ey) !== 0) { if (at(far, ey) === 2) steel = true; ow |= g.oneway[far + ey * cw]; far += dir; }
           const thickness = Math.abs(far - nx);
-          r.ends[side] = { kind: "wall", height: ey - top + 1, thickness, steel, oneway: ow };
-          // one-way: a wall of arrows left is cut only by a lemming moving left (dir -1)
-          const onewayForbids = (ow === 1 && dir > 0) || (ow === 2 && dir < 0);
-          if (!steel && !onewayForbids && far >= 0 && far < cw) {
+          const height = ey - top + 1;
+          r.ends[side] = { kind: "wall", height, thickness, steel, oneway: ow };
+          // a slope the cells take for a wall: walked up on foot, both ways
+          const up = walkUp(ex, ey, dir, r.id);
+          if (up >= 0) { r.ends[side].kind = "slope"; gate(r.id, up, "walk", null, 0, ex, ey, dir, { twoWay: true }); }
+          // one-way: a wall of arrows left is cut only by a lemming moving left (dir -1); arrows down or up stop a basher, arrows up a miner
+          const sideForbids = ((ow & 1) && dir > 0) || ((ow & 2) && dir < 0);
+          if (!steel && !sideForbids && far >= 0 && far < cw) {
             const l = at(far, ey + 1) !== 0 ? { cy: ey, region: regionAt(far, ey), cells: 0 } : landing(far, ey);
-            if (l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bash", "BASHER", 1, ex, ey, dir, { thickness, fall: l.cells, twoWay: l.cells === 0 });
+            if (!(ow & 12) && l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bash", "BASHER", 1, ex, ey, dir, { thickness, fall: l.cells, twoWay: l.cells === 0 });
             // a miner: down and along, to the floor it breaks into
-            for (let k = 1, mx = nx, my = ey + 1; k < 40 && mx >= 0 && mx < cw && my < ch; k++, mx += dir, my++) {
-              if (at(mx, my) === 2) break;
+            if (!(ow & 8)) for (let k = 1, mx = nx, my = ey + 1; k < 40 && mx >= 0 && mx < cw && my < ch; k++, mx += dir, my++) {
+              if (at(mx, my) === 2 || (g.oneway[mx + my * cw] & 8)) break;
               if (at(mx, my) === 0) { const l2 = landing(mx, my); if (l2 && l2.region >= 0 && l2.region !== r.id) gate(r.id, l2.region, "mine", "MINER", 1, ex, ey, dir); break; }
             }
           }
-          // a climber: to the wall's top, whatever the wall is made of
+          // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one
           if (top >= 1 && at(nx, top - 1) === 0) {
             const topRegion = regionAt(nx, top - 1);
-            if (topRegion >= 0 && topRegion !== r.id) gate(r.id, topRegion, "climb", "CLIMBER", 1, ex, ey, dir, { perLemming: true, height: r.ends[side].height });
+            if (topRegion >= 0 && topRegion !== r.id) {
+              gate(r.id, topRegion, "climb", "CLIMBER", 1, ex, ey, dir, { perLemming: true, height });
+              if (height <= JUMP_LEDGE) gate(r.id, topRegion, "jump", "JUMPER", 1, ex, ey, dir, { perLemming: true, height });
+              if (height <= STACK_UP) gate(r.id, topRegion, "stack", "STACKER", 1, ex, ey, dir, { height });
+            }
           }
+        }
+      }
+      // a shimmier: a ceiling within reach over a floor cell (two or three cells up, 8 to 13 px), followed its way -
+      // the ceiling stepping up or down a cell at a time, as it does with the hang - until it ends (the fall from
+      // there) or a ledge stands in the way at hanging height (walked onto)
+      for (const dir of [-1, 1]) {
+        let found = false;
+        const ordered = dir > 0 ? r.cells : r.cells.slice().reverse();
+        for (const j of ordered) {
+          if (found) break;
+          const jx = j % cw, jy = (j / cw) | 0;
+          if (at(jx, jy - 1) !== 0) continue;
+          let c = at(jx, jy - 2) !== 0 ? jy - 2 : at(jx, jy - 3) !== 0 ? jy - 3 : -1;
+          if (c < 0) continue;
+          let x = jx, to = -1;
+          while (x + dir >= 0 && x + dir < cw) {
+            const nx2 = x + dir;
+            let next = -1;
+            for (const dc of [0, 1, -1]) { const cc = c + dc; if (cc >= 0 && cc < jy && at(nx2, cc) !== 0 && at(nx2, cc + 1) === 0) { next = cc; break; } }
+            if (next >= 0) { x = nx2; c = next; continue; }
+            if (at(nx2, c + 1) !== 0 && at(nx2, c) === 0) { to = regionAt(nx2, c); } // a ledge at hanging height: onto it
+            else if (at(nx2, c) === 0 && at(nx2, c + 1) === 0) { const l = landing(nx2, c + 1); to = l ? l.region : -1; } // the ceiling ends: the fall
+            else { const l = landing(x, c + 1); to = l ? l.region : -1; } // a wall at head height: let go where it hangs
+            break;
+          }
+          if (to >= 0 && to !== r.id && x !== jx) { gate(r.id, to, "shimmy", "SHIMMIER", 1, jx, jy, dir, { perLemming: true }); found = true; }
         }
       }
       // the floor dug through, from anywhere in the region: the region below
@@ -187,7 +332,7 @@
       }
       if (dug) gate(r.id, dug.to, "dig", "DIGGER", 1, dug.cx, dug.cy, 0);
     }
-    return { cw, ch, kind, floor, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
+    return { cw, ch, kind, floor, hazard, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
   }
 
   /** The region a lemming stands in (or would land in), or -1. */
@@ -280,7 +425,7 @@
     return key === null ? null : { cost, key };
   }
 
-  const TERRAIN = new Set(["bash", "mine", "dig", "build", "unblock"]);
+  const TERRAIN = new Set(["bash", "mine", "dig", "build", "platform", "stack", "stone", "unblock", "disarm", "sacrifice"]);
 
   /**
    * The cheapest plan for every group of lemmings together: `groups` =
@@ -320,7 +465,7 @@
       memo.set(mk, r);
       return r;
     };
-    const terrain = graph.gates.filter((gt) => TERRAIN.has(gt.kind) && gt.skill && skills[gt.skill] > 0);
+    const terrain = graph.gates.filter((gt) => TERRAIN.has(gt.kind) && (!gt.skill || skills[gt.skill] > 0));
     let best = null;
     for (const leadGroup of taken) {
       const lead = { n: 1, lacking: leadGroup.leadLacking || scaled(leadGroup.lacking, 1) };
@@ -394,6 +539,6 @@
   /** `lacking` with every count capped at n. */
   function scaled(lacking, n) { const o = {}; if (lacking) for (const k of Object.keys(lacking)) o[k] = Math.min(lacking[k], n); return o; }
 
-  Solver.Regions = { build, plan, planAll, sweep, regionOfLemming, CELL, PERMS: ["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"] };
+  Solver.Regions = { build, plan, planAll, sweep, regionOfLemming, CELL, TERRAIN, PERMS: ["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"] };
   if (typeof module !== "undefined" && module.exports) module.exports = Solver.Regions;
 })(typeof window !== "undefined" ? window : globalThis);

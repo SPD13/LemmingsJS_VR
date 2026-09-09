@@ -84,6 +84,40 @@ async function main() {
     const left = gb.regionOf(50, 59), right = gb.regionOf(130, 59);
     check("a blocker splits the floor", left >= 0 && right >= 0 && left !== right, [left, right]);
     check("with a bomber as the gate", left >= 0 && gb.regions[left].gates.some((gt) => gt.kind === "unblock" && gt.skill === "BOMBER"), left >= 0 && gb.regions[left].gates.map((gt) => gt.kind));
+    const kinds = (lv, x) => { const gg = R.build(lv, lv.physics); const id = gg.regionOf(x, 59); return { g: gg, id, kinds: id >= 0 ? gg.regions[id].gates.map((gt) => gt.kind + (gt.skill ? ":" + gt.skill : "")) : [] }; };
+    // a pool: a swimmer across it to the far bank, a builder or a platformer over it, a jump when it is short
+    const pool = crossing(300, 3, 2, { SWIMMER: 3, BUILDER: 3, PLATFORMER: 3, JUMPER: 3 });
+    pool.fill(120, 60, 144, 100, 0);
+    pool.gadgets.push(F.makeGadget("WATER", 120, 56, 24, 44));
+    const kp = kinds(pool, 50);
+    check("water: an end of its own", kp.id >= 0 && kp.g.regions[kp.id].ends.right && kp.g.regions[kp.id].ends.right.kind === "water", kp.id >= 0 && kp.g.regions[kp.id].ends.right);
+    check("water: swim, build, platform and jump gates", ["swim:SWIMMER", "build:BUILDER", "platform:PLATFORMER", "jump:JUMPER"].every((k) => kp.kinds.includes(k)), kp.kinds);
+    const pp = R.planAll(kp.g, [{ region: kp.id, dir: 0, n: 3, lacking: { SWIMMER: 3 } }], { SWIMMER: 3, BUILDER: 3, PLATFORMER: 3, JUMPER: 3 }, 3);
+    check("water: a bridge for the three beats three swimmers", pp && pp.cost <= 2 && /build|platform/.test(pp.steps[0].gate.kind), pp && { cost: pp.cost, kinds: pp.steps.map((st) => st.gate.kind) });
+    const ps2 = R.planAll(kp.g, [{ region: kp.id, dir: 0, n: 1, lacking: { SWIMMER: 1 } }], { SWIMMER: 3 }, 1);
+    check("water: a swimmer alone swims", ps2 && ps2.cost === 1 && ps2.steps[0].gate.kind === "swim", ps2 && { cost: ps2.cost, kinds: ps2.steps.map((st) => st.gate.kind) });
+    // a trap: a disarmer through it, and it is gone for everyone after
+    const trap = crossing(300, 3, 3, { DISARMER: 1 });
+    trap.gadgets.push(F.makeGadget("TRAP", 150, 50, 4, 11));
+    const kt = kinds(trap, 50);
+    check("trap: an end of its own with a disarm gate", kt.id >= 0 && kt.g.regions[kt.id].ends.right.kind === "trap" && kt.kinds.includes("disarm:DISARMER"), kt.kinds);
+    const pt = R.planAll(kt.g, [{ region: kt.id, dir: 0, n: 3, lacking: { DISARMER: 3 } }], { DISARMER: 1 }, 3);
+    check("trap: one disarmer opens it for all", pt && pt.cost === 1, pt && pt.cost);
+    // a low wall: jumped or stacked up as well as climbed; steel one-way-down arrows stop a basher
+    const low = crossing(300, 1, 1, { JUMPER: 1, STACKER: 1, CLIMBER: 1 });
+    low.fill(150, 51, 160, 60, PM.SOLID);
+    const kl = kinds(low, 50);
+    check("a low wall: jump, stack and climb gates", ["jump:JUMPER", "stack:STACKER", "climb:CLIMBER"].every((k) => kl.kinds.includes(k)), kl.kinds);
+    const owd = crossing(300, 1, 1, { BASHER: 1, MINER: 1 });
+    owd.fill(150, 30, 160, 60, PM.SOLID | PM.ONEWAYDOWN);
+    const ko = kinds(owd, 50);
+    check("arrows down: no bash gate, a climb still", !ko.kinds.includes("bash:BASHER") && ko.kinds.includes("climb:CLIMBER"), ko.kinds);
+    // a ceiling within reach: a shimmier along it to where it ends, over the gap the floor has
+    const roof = crossing(300, 1, 1, { SHIMMIER: 1 });
+    roof.fill(100, 60, 150, 100, 0); // fifty pixels of gap, too far for a jump
+    roof.fill(60, 0, 170, 47, PM.SOLID); // a ceiling 13 px over the floor (solid to the top: no ledge on it), from before the gap to past it: the fall from its end lands beyond
+    const kr = kinds(roof, 50);
+    check("a ceiling: a shimmy gate over the gap", kr.kinds.includes("shimmy:SHIMMIER") && !kr.kinds.includes("jump:JUMPER"), kr.kinds);
   }
 
   console.log("a wall needs one basher, steel needs a climber");

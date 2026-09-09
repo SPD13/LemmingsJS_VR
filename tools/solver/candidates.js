@@ -24,7 +24,7 @@
   // before the anchor), "at" (the event's frame), "early" (the lemming's first frame)
   const TEMPLATES = {
     FALL: [["BUILDER", "k", 1.0], ["PLATFORMER", "k", 0.9], ["FLOATER", "at", 0.9], ["GLIDER", "at", 0.8], ["BLOCKER", "k", 0.7],
-      ["STACKER", "k", 0.6], ["JUMPER", "k", 0.6], ["DIGGER", "k", 0.5], ["SLIDER", "at", 0.4], ["MINER", "k", 0.4], ["BOMBER", "k", 0.2]],
+      ["STACKER", "k", 0.6], ["JUMPER", "k", 0.6], ["DIGGER", "k", 0.5], ["STONER", "k", 0.5], ["SLIDER", "at", 0.4], ["MINER", "k", 0.4], ["BOMBER", "k", 0.2]],
     TURN: [["BASHER", "k", 1.0], ["MINER", "k", 0.9], ["CLIMBER", "k", 0.9], ["BUILDER", "k", 0.8], ["JUMPER", "k", 0.7], ["FENCER", "k", 0.7],
       ["LASERER", "k", 0.6], ["SHIMMIER", "k0", 0.5], ["STACKER", "k", 0.5], ["DIGGER", "k", 0.5], ["BLOCKER", "k", 0.6], ["BOMBER", "k", 0.3], ["PLATFORMER", "k", 0.3]],
     LAND: [["DIGGER", "at", 0.8], ["MINER", "at", 0.6], ["BUILDER", "at", 0.5], ["BASHER", "at", 0.5], ["BLOCKER", "past", 0.5], ["CLIMBER", "at", 0.5],
@@ -38,7 +38,7 @@
   const DEATH_TEMPLATES = {
     water: [["SWIMMER", "at", 1.0], ["BUILDER", "anchor", 0.9], ["PLATFORMER", "anchor", 0.8], ["BLOCKER", "anchor", 0.7], ["STACKER", "anchor", 0.4], ["JUMPER", "anchor0", 0.4]],
     trap: [["DISARMER", "early", 1.0], ["BLOCKER", "anchor", 0.7], ["CLIMBER", "anchor", 0.4], ["BOMBER", "back", 0.5], ["STONER", "back", 0.5], ["BUILDER", "anchor", 0.5], ["DIGGER", "back", 0.4], ["BASHER", "back", 0.3]],
-    splat: [["FLOATER", "anchorat", 1.0], ["GLIDER", "anchorat", 0.8], ["BUILDER", "anchor", 0.8], ["PLATFORMER", "anchor", 0.7], ["BLOCKER", "anchor", 0.7], ["DIGGER", "anchor", 0.4], ["STACKER", "anchor", 0.4], ["SLIDER", "anchorat", 0.3], ["MINER", "anchor", 0.3]],
+    splat: [["FLOATER", "anchorat", 1.0], ["GLIDER", "anchorat", 0.8], ["BUILDER", "anchor", 0.8], ["PLATFORMER", "anchor", 0.7], ["BLOCKER", "anchor", 0.7], ["STONER", "anchor", 0.6], ["DIGGER", "anchor", 0.4], ["STACKER", "anchor", 0.4], ["SLIDER", "anchorat", 0.3], ["MINER", "anchor", 0.3]],
     fire: [["BLOCKER", "anchor", 0.8], ["BUILDER", "anchor", 0.8], ["CLIMBER", "anchor", 0.6], ["BASHER", "anchor", 0.5], ["MINER", "anchor", 0.5], ["DIGGER", "anchor", 0.5], ["JUMPER", "anchor0", 0.4], ["BOMBER", "back", 0.3]],
     offscreen: [["BLOCKER", "anchor", 0.9], ["BUILDER", "anchor", 0.8], ["CLIMBER", "anchor", 0.7], ["JUMPER", "anchor", 0.4], ["BASHER", "anchor", 0.5], ["MINER", "anchor", 0.5], ["DIGGER", "anchor", 0.5], ["PLATFORMER", "anchor", 0.5], ["STACKER", "anchor", 0.3], ["BOMBER", "back", 0.3]],
   };
@@ -59,7 +59,6 @@
   function candidates(events, outcome, ctx) {
     const { params, analysis, skillCounts, nodeFrame } = ctx;
     const game = ctx.game;
-    // the plan's first gate: the skill, where and which way; a candidate that matches is the planner's pick
     // the plan's gates: the skill, where and which way; a candidate that matches one is the planner's pick
     const steps = ctx.planned && ctx.planned.steps ? ctx.planned.steps : [];
     const graph = ctx.planned && ctx.planned.graph;
@@ -73,7 +72,7 @@
         if (c.skill !== gt.skill) continue;
         if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step, on any of the group when theirs
           if (st.who === "lead" && (!ctx.planned.leadId || e.lemId !== ctx.planned.leadId)) continue;
-          return 2.5;
+          if (PERM_BITS[gt.skill]) return 2.5; // a permanent skill: given anywhere before the gate
         }
         if (gt.kind === "unblock" && e.type !== "BLOCK") continue; // the bomber goes on the blocker itself
         const near = Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= 16;
