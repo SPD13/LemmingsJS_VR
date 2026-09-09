@@ -206,7 +206,9 @@ Vfs.boot("").then(async () => {
     let text = p.phase || "starting";
     if (p.best) text += " · best " + p.best.saved + "/" + (p.needed || "?") + ", " + p.best.skillsUsed + " skills";
     else if (p.expansions) text += " · " + p.expansions + " tries";
-    text += " · " + Math.round(elapsed / 1000) + "/" + Math.round(budget / 1000) + " s";
+    // past the budget the search is finishing (the optimiser's last trials, the verification); a job long past it is stuck
+    if (elapsed > budget * 1.5 + 5000) text += " · " + Math.round(elapsed / 1000) + " s, past its " + Math.round(budget / 1000) + " s budget";
+    else text += " · " + Math.min(Math.round(elapsed / 1000), Math.round(budget / 1000)) + "/" + Math.round(budget / 1000) + " s";
     bar.querySelector(".txt").textContent = text;
     bar.title = text;
   }

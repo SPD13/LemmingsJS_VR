@@ -212,7 +212,10 @@ function solveNext(absRoot) {
   if (job.budget) args.push("--budget", String(job.budget));
   let child;
   try {
-    child = spawn(process.execPath, args, { cwd: absRoot, stdio: ["ignore", "pipe", "pipe"] });
+    // under the Electron launcher process.execPath is Electron itself: ELECTRON_RUN_AS_NODE
+    // makes it run the script as plain node (an Electron app would never exit); plain node ignores it
+    const env = Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: "1" });
+    child = spawn(process.execPath, args, { cwd: absRoot, stdio: ["ignore", "pipe", "pipe"], env });
   } catch (e) {
     finish(job, "error", "could not start the solver: " + e.message);
     return;
