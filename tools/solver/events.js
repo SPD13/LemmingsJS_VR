@@ -129,6 +129,7 @@
             // off the wall or the ceiling: an anchor too (a shimmier, a floater), its ring the climb
             w.lastAnchor = emit("FALL", w, L, frame, { edgeX: w.x, edgeY: w.y, ring: w.ring.slice(), offWall: true });
           } else if (a === BA.SHRUGGING) emit("SHRUG", w, L, frame);
+          else if (a === BA.BLOCKING) emit("BLOCK", w, L, frame); // a blocker at its post: freed later with a bomber
           else if (JOBS.has(was) && !JOBS.has(a) && a !== BA.SHRUGGING) emit("WORK_END", w, L, frame, { job: was });
           else if (a === BA.CLIMBING && was === BA.WALKING) w.lastAnchor = emit("TURN", w, L, frame, { wallX: L.x, ring: w.ring.slice(), climbing: true });
         } else if (a === BA.WALKING && L.dx !== w.dx) {

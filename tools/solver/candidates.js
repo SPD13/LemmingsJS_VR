@@ -58,6 +58,18 @@
    */
   function candidates(events, outcome, ctx) {
     const { params, analysis, skillCounts, nodeFrame } = ctx;
+    const game = ctx.game;
+    /** Would the skill stop at once on what stands there - steel, a one-way wall met from the wrong side? */
+    const forbidden = (e, skill) => {
+      const A = SKILL_TO_ACTION[skill];
+      if (A === BA.BASHING || A === BA.MINING || A === BA.FENCING || A === BA.LASERING) {
+        if (e.type !== "TURN" && e.type !== "WORK_END") return false;
+        const dir = e.type === "TURN" ? -e.dx : e.dx, wx = (e.wallX !== undefined ? e.wallX : e.x) + dir * 2;
+        return game.hasIndestructibleAt(wx, e.y - 4, dir, A) || game.hasIndestructibleAt(wx, e.y - 6, dir, A);
+      }
+      if (A === BA.DIGGING) return game.hasIndestructibleAt(e.x, e.y + 1, e.dx, A) && game.hasIndestructibleAt(e.x, e.y + 2, e.dx, A);
+      return false;
+    };
     const out = [];
     const seen = new Set();
     const has = (skill) => (skillCounts[skill] || 0) > 0;
@@ -129,6 +141,7 @@
           if (!has(skill)) continue;
           if (PERM_BITS[skill] && (e.perms & PERM_BITS[skill])) continue;
           if (repeat && TERRAIN.has(skill) && e.type !== "DEATH") continue;
+          if (forbidden(e, skill)) continue; // steel, or a one-way wall from the wrong side: the skill would stop at once
           if (n >= params.skillsPerEvent && !repeat) break;
           const fatal = e.type === "DEATH" ? 1.3 : (e.type === "FALL" && e.fatal) ? 1.2 : 1;
           const prior = weight * lemWeight * fatal * orderWeight * (skillCounts[skill] > 1 ? 1 : 0.85);
@@ -172,6 +185,15 @@
           }
           if (any) n++;
         }
+      }
+    }
+    // a blocker holding the crowd is freed with a bomber once the rest is done: a candidate a while
+    // after it took its post, and at the end (a stuck crowd behind it)
+    if (has("BOMBER")) {
+      for (const e of events) {
+        if (e.type !== "BLOCK" || (ctx.lemFilter && !ctx.lemFilter.has(e.lemId))) continue;
+        push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: e.frame + 170, why: "BLOCK:free", prior: 0.5 });
+        if (outcome.lastFrame > e.frame + 200) push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: Math.max(nodeFrame, outcome.lastFrame - 60), why: "BLOCK:free", prior: 0.45 });
       }
     }
     // the release rate: at the root the extremes, after the first exit the fastest
