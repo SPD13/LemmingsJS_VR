@@ -16,6 +16,9 @@
   // the perms bits an event carries (events.js) that make a permanent skill pointless
   const PERM_BITS = { CLIMBER: 1, FLOATER: 2 | 4, GLIDER: 2 | 4, SWIMMER: 8, DISARMER: 16, SLIDER: 32 };
   const TERRAIN = new Set(["BUILDER", "PLATFORMER", "STACKER", "DIGGER", "BASHER", "MINER", "FENCER", "LASERER", "BOMBER", "STONER"]);
+  // the jobs worth keeping at: the skill given again each time it stops (a mesh a basher cuts a link
+  // of at a time, a staircase of builders), as one step of the search
+  const REPEATABLE = new Set(["BASHER", "MINER", "DIGGER", "BUILDER", "PLATFORMER", "FENCER", "STACKER", "LASERER"]);
 
   // the templates: event type -> [skill, where, weight]; where = "k" (the frames k pixels
   // before the anchor), "at" (the event's frame), "early" (the lemming's first frame)
@@ -29,7 +32,8 @@
     SHRUG: [["BUILDER", "at", 1.0], ["WALKER", "at", 0.6], ["BASHER", "at", 0.7], ["PLATFORMER", "at", 0.7], ["STACKER", "at", 0.5], ["MINER", "at", 0.5], ["DIGGER", "at", 0.5], ["BLOCKER", "at", 0.4], ["JUMPER", "at", 0.4], ["CLIMBER", "at", 0.3]],
     WORK_END: [["BUILDER", "at", 0.8], ["BASHER", "at", 0.8], ["MINER", "at", 0.7], ["DIGGER", "at", 0.7], ["BLOCKER", "at", 0.5], ["PLATFORMER", "at", 0.5], ["STACKER", "at", 0.4], ["CLIMBER", "at", 0.4], ["JUMPER", "at", 0.3]],
     CLIMB: [["SHIMMIER", "at", 0.9], ["JUMPER", "at", 0.4], ["BOMBER", "at", 0.3]],
-    TICK: [["DIGGER", "ring", 0.6], ["BASHER", "ring", 0.6], ["MINER", "ring", 0.5], ["BUILDER", "ring", 0.5], ["BOMBER", "ring", 0.4], ["BLOCKER", "ring", 0.5], ["CLIMBER", "at", 0.3]],
+    // a walk's samples: after the anchored moments (a wall, an edge, a death), so they come later in the frontier
+    TICK: [["DIGGER", "ring", 0.35], ["BASHER", "ring", 0.35], ["MINER", "ring", 0.3], ["BUILDER", "ring", 0.3], ["BOMBER", "ring", 0.25], ["BLOCKER", "ring", 0.3], ["CLIMBER", "at", 0.2]],
   };
   const DEATH_TEMPLATES = {
     water: [["SWIMMER", "at", 1.0], ["BUILDER", "anchor", 0.9], ["PLATFORMER", "anchor", 0.8], ["BLOCKER", "anchor", 0.7], ["STACKER", "anchor", 0.4], ["JUMPER", "anchor0", 0.4]],
@@ -157,7 +161,9 @@
           let any = false;
           for (const [frame, w] of frames) {
             if (frame < 0) continue;
-            push({ kind: "assign", lemId: rec.id, skill, frame, why: e.type + (e.cause ? ":" + e.cause : ""), prior: prior * w });
+            const why = e.type + (e.cause ? ":" + e.cause : "");
+            push({ kind: "assign", lemId: rec.id, skill, frame, why, prior: prior * w });
+            if (REPEATABLE.has(skill) && skillCounts[skill] > 1) push({ kind: "repeat", lemId: rec.id, skill, frame, why: why + " x", prior: prior * w * 0.8 });
             any = true;
           }
           if (any) n++;

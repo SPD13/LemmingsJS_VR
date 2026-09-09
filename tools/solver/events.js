@@ -20,8 +20,9 @@
   const { BA } = Lemmix;
 
   const RING = 24; // positions kept per lemming for the "k pixels before" anchors
-  const TICK_EVERY = 85;
+  const TICK_EVERY = 32; // a tick on a walk this often, its ring the last 24 frames: every stretch of floor gets an anchor
   const MAX_ROLLOUT = 17 * 60 * 12;
+  const STUCK_AFTER = 170; // frames of nothing changing before a pacing crowd counts as stuck
 
   const WORKING = new Set([BA.DIGGING, BA.BUILDING, BA.BASHING, BA.MINING, BA.PLATFORMING, BA.STACKING,
     BA.FENCING, BA.LASERING, BA.CLIMBING, BA.HOISTING, BA.SHIMMYING, BA.REACHING, BA.JUMPING, BA.FALLING,
@@ -167,13 +168,13 @@
         if (wi >= 0) {
           const L = game.lemmings[wi], w = watches[wi];
           if (L.removed || L.cannotReceiveSkills) { if (frame - w.lastEvent > 2) { leadDone = true; break; } }
-          else if (w.looping && frame - w.lastEvent > 2 * TICK_EVERY && world.terrainVersion === lastTerrain && !WORKING.has(L.action)) { stuck = true; break; }
+          else if (w.looping && frame - w.lastEvent > STUCK_AFTER && world.terrainVersion === lastTerrain && !WORKING.has(L.action)) { stuck = true; break; }
         }
       }
       // stuck: the counters and terrain unchanged, nothing to release, everyone pacing or blocking
       const counters = game.lemmingsIn + game.lemmingsRemoved;
       if (counters !== lastCounters || terrainChanged) { lastCounters = counters; lastChange = frame; }
-      if (frame - lastChange > 2 * TICK_EVERY && (game.lemmingsToRelease === 0 || game.userSetNuking)) {
+      if (frame - lastChange > STUCK_AFTER && (game.lemmingsToRelease === 0 || game.userSetNuking)) {
         let all = true, any = false;
         for (let i = 0; i < watches.length && all; i++) {
           const L = game.lemmings[i];

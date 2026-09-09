@@ -128,6 +128,36 @@
       return node;
     }
 
+    /**
+     * "Keep at it": the skill given to the lemming again each time its job
+     * ends and it walks on the same way (a basher through a mesh, a builder's
+     * staircase), until the skills run out, it turns, dies or is done, or
+     * the repeats or frames are spent - all within one step of the search.
+     */
+    _keepAt(L, skill) {
+      const world = this.world, game = world.game;
+      if (!L) return;
+      const action = Lemmix.SKILL_TO_ACTION[skill];
+      const dx = L.dx;
+      let repeats = 0, frames = 0, working = L.action === action;
+      while (repeats < 24 && frames < 4000 && !world.ended) {
+        world.step(1); frames++;
+        if (L.removed || L.cannotReceiveSkills || L.dx !== dx) break;
+        const now = L.action === action;
+        if (working && !now) {
+          // the job ended: on again at once, while the lemming walks (or shrugs, a builder out of bricks) the same way
+          if (L.action !== Lemmix.BA.WALKING && L.action !== Lemmix.BA.SHRUGGING && L.action !== Lemmix.BA.ASCENDING) break;
+          if (!world.assign(L, skill)) break;
+          world.step(1); frames++;
+          repeats++;
+          working = L.action === action;
+          if (!working) break;
+          continue;
+        }
+        working = now;
+      }
+    }
+
     /** The child of `node` by `cand`, or null when the action could not be taken. */
     _expand(node, cand, target, lemFilter) {
       const world = this.world;
@@ -135,11 +165,12 @@
       if (cand.frame > world.frame) world.step(cand.frame - world.frame);
       if (world.frame !== cand.frame) { this.dropped.ended++; return null; }
       let ok = false;
-      if (cand.kind === "assign") { const L = world.lemmingById(cand.lemId); ok = !!L && world.assign(L, cand.skill); }
+      if (cand.kind === "assign" || cand.kind === "repeat") { const L = world.lemmingById(cand.lemId); ok = !!L && world.assign(L, cand.skill); }
       else if (cand.kind === "si") ok = world.setSpawnInterval(cand.si);
       else if (cand.kind === "nuke") ok = world.nuke();
       if (!ok) { this.dropped.refused++; if (this.trace && this.log) this.log("  refused f=" + cand.frame + " " + describe(cand)); return null; }
       world.step(1);
+      if (cand.kind === "repeat") this._keepAt(world.lemmingById(cand.lemId), cand.skill);
       const plan = world.plan();
       this.expansions++;
       const child = this._makeNode(node, plan, target, lemFilter, false);
@@ -222,7 +253,7 @@
   }
 
   const planEntry = (e) => e.type === "assignment" ? e.skill + "@" + e.frame + ">" + e.lemId : e.type === "nuke" ? "NUKE@" + e.frame : "SI" + e.interval + "@" + e.frame;
-  const describe = (c) => c.kind === "assign" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "si" ? "SI=" + c.si : "NUKE";
+  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "si" ? "SI=" + c.si : "NUKE";
 
   /**
    * Solve the level `world` holds: { best, stats }. `opts` = { tier,
