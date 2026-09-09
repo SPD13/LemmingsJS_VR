@@ -59,6 +59,29 @@
   function candidates(events, outcome, ctx) {
     const { params, analysis, skillCounts, nodeFrame } = ctx;
     const game = ctx.game;
+    // the plan's first gate: the skill, where and which way; a candidate that matches is the planner's pick
+    // the plan's gates: the skill, where and which way; a candidate that matches one is the planner's pick
+    const steps = ctx.planned && ctx.planned.steps ? ctx.planned.steps : [];
+    const graph = ctx.planned && ctx.planned.graph;
+    const turnsIn = new Set(steps.filter((st) => st.turn).map((st) => st.gate.from));
+    const planned = (c, e) => {
+      if (!steps.length || !e) return 1;
+      // the plan wants a turn in a region: a blocker set there does it
+      if (turnsIn.size && c.skill === "BLOCKER" && graph && e.type !== "FALL" && e.type !== "DEATH" && turnsIn.has(Solver.Regions.regionOfLemming(graph, e.x, e.y))) return 2;
+      for (const st of steps) {
+        const gt = st.gate;
+        if (c.skill !== gt.skill) continue;
+        if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step, on any of the group when theirs
+          if (st.who === "lead" && (!ctx.planned.leadId || e.lemId !== ctx.planned.leadId)) continue;
+          return 2.5;
+        }
+        if (gt.kind === "unblock" && e.type !== "BLOCK") continue; // the bomber goes on the blocker itself
+        const near = Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= 16;
+        const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing ? -e.dx : e.dx) === gt.dir;
+        if (near && way) return 2.5;
+      }
+      return 1;
+    };
     /** Would the skill stop at once on what stands there - steel, a one-way wall met from the wrong side? */
     const forbidden = (e, skill) => {
       const A = SKILL_TO_ACTION[skill];
@@ -175,12 +198,13 @@
             case "back": for (const k of [8, 24]) frames.push([Math.max(nodeFrame, e.frame - k), 0.8]); break;
           }
           let any = false;
+          const boost = planned({ skill }, e);
           for (const [frame, w] of frames) {
             if (frame < 0) continue;
-            const why = e.type + (e.cause ? ":" + e.cause : "");
-            push({ kind: "assign", lemId: rec.id, skill, frame, why, prior: prior * w });
+            const why = e.type + (e.cause ? ":" + e.cause : "") + (boost > 1 ? "!" : "");
+            push({ kind: "assign", lemId: rec.id, skill, frame, why, prior: prior * w * boost });
             if (REPEATABLE.has(skill) && skillCounts[skill] > 1) {
-              push({ kind: "repeat", lemId: rec.id, skill, frame, why: why + " x", prior: prior * w * 0.8 });
+              push({ kind: "repeat", lemId: rec.id, skill, frame, why: why + " x", prior: prior * w * 0.8 * boost });
               // and again with a dozen pixels' walk between: holes staggered, a staircase with landings
               if (skill === "DIGGER" || skill === "MINER" || skill === "BUILDER") push({ kind: "repeat", gap: 12, lemId: rec.id, skill, frame, why: why + " x~", prior: prior * w * 0.7 });
             }
@@ -208,8 +232,8 @@
         // the spawn gap: the interval in force when both came out (a rough shift, refined by the engine's refusals)
         const shift = ctx.game.currSpawnInterval;
         const usable = perms.filter((p) => skillCounts[p.skill] >= 1);
-        if (!usable.length) continue;
-        push({ kind: "follow", lemId: next, perms: usable, shift, frame: Math.max(nodeFrame, usable[0].frame + shift), why: "follow " + leadId, prior: 0.7 });
+        if (!usable.length || usable.some((p) => p.frame + shift < nodeFrame)) continue; // the moment for one of them is past
+        push({ kind: "follow", lemId: next, perms: usable, shift, frame: usable[0].frame + shift, why: "follow " + leadId, prior: 1.2 });
       }
     }
     // a blocker holding the crowd is freed with a bomber once the rest is done: a candidate a while
@@ -217,8 +241,9 @@
     if (has("BOMBER")) {
       for (const e of events) {
         if (e.type !== "BLOCK" || (ctx.lemFilter && !ctx.lemFilter.has(e.lemId))) continue;
-        push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: e.frame + 170, why: "BLOCK:free", prior: 0.5 });
-        if (outcome.lastFrame > e.frame + 200) push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: Math.max(nodeFrame, outcome.lastFrame - 60), why: "BLOCK:free", prior: 0.45 });
+        const boost = planned({ skill: "BOMBER" }, e), why = "BLOCK:free" + (boost > 1 ? "!" : "");
+        push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: e.frame + 170, why, prior: 0.5 * boost });
+        if (outcome.lastFrame > e.frame + 200) push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: Math.max(nodeFrame, outcome.lastFrame - 60), why, prior: 0.45 * boost });
       }
     }
     // the release rate: at the root the extremes, after the first exit the fastest

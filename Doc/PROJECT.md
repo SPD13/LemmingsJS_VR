@@ -732,6 +732,28 @@ shape of it:
 - **Analysis** (`solver/analysis.js`): an exit-distance field over the map
   (open pixels cost one, solid six, steel sixty, at four-pixel cells), the
   most lemmings that can be saved, and the level's feature tags.
+- **Regions and gates** (`solver/regions.js`): the level as a walker sees
+  it, rebuilt whenever the terrain or the blockers change - floor cells
+  (air over solid, on the analysis' four-pixel grid) joined into regions a
+  lemming crosses on its own, each with two ends (a wall or a drop) and
+  gates out of it: a drop (free under the splat height, a floater's per
+  lemming beyond), a wall bashed level, mined down or climbed (steel and a
+  one-way wall's wrong side forbid what they forbid), a gap built across
+  (as many builders as its width and rise), the floor dug through, and a
+  blocker standing there (a bomber on it opens the way). A plan is a
+  Dijkstra over (region, heading) - heading the other way costs a turn: a
+  blocker and a bomber, unless a wall or a blocker ahead turns the lemming
+  for nothing and the exit does not take it first - and the plan for
+  everyone (`planAll`) sends one lemming first, the lead, tried from every
+  group of lemmings, through the terrain gates it will open (none, one,
+  greedily more while it helps: the lead's cheapest way alone is not the
+  one that digs what the crowd needs), free for everyone after it in
+  either direction; then each group pays its own way, per-lemming gates by
+  those lacking the skill, closed when the skill is short. The plan's cost
+  is the score's forward look (`80` a skill), and its gates boost the
+  candidates that match them - the right skill at the right spot and
+  heading, a blocker in the region that wants a turn, the bomber on the
+  blocker the plan bombs, a permanent skill on the lead or the group.
 - **Candidates** (`solver/candidates.js`): from events to (lemming, skill,
   frame), never at an arbitrary frame - templates per event (a fall: a
   builder or platformer k pixels short of the edge, a floater at once; a
@@ -748,7 +770,9 @@ shape of it:
   time, too few lemmings left at the node, no skill left) dropped, states
   seen with no more skills spent dropped (the hash covers the terrain, the
   lemmings, the counters and the plan's pending entries); the score
-  `1000·saved + 300·bound − 120·skills − 40·lost − distance/2 − frames/500`.
+  `1000·saved + 300·bound − 40·skills − 40·lost − 80·plan cost −
+  distance/2 − frames/500` (the lead pass: skills 20, distance whole,
+  lost ignored).
   A lead pass (skills to the first lemming out, one save is a success)
   seeds a crowd pass for the count; a pass that runs dry with time left
   runs again at the next tier's breadth. Tiers: 10 s, 2 min, 15 min.
