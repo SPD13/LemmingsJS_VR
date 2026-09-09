@@ -86,7 +86,7 @@
     }
 
     /** A node out of the world as it stands (after `plan` was applied to this frame): its rollout, score and edges. */
-    _makeNode(parent, plan, target, lemFilter, isRoot) {
+    _makeNode(parent, plan, target, lemFilter, isRoot, skipSeen) {
       const world = this.world, game = world.game;
       const node = {
         id: this.nodes++, parent, frame: world.frame, plan, state: world.save(), depth: parent ? parent.depth + 1 : 0,
@@ -96,7 +96,7 @@
       let skillsLeft = 0; for (const k of Object.keys(skillCounts)) skillsLeft += skillCounts[k];
       const hash = Solver.hashState(game, false);
       const seenWith = this.transposition.get(hash);
-      if (seenWith !== undefined && seenWith <= node.skillsUsed && !isRoot) { this.dropped.seen++; return null; }
+      if (seenWith !== undefined && seenWith <= node.skillsUsed && !isRoot && !skipSeen) { this.dropped.seen++; return null; }
       this.transposition.set(hash, node.skillsUsed);
       node.skillsAtNode = node.skillsUsed;
       const boundAtNode = Solver.upperBound(game, this.analysis), outOfTimeAtNode = game.isOutOfTime, nukedAtNode = game.userSetNuking;
@@ -107,7 +107,7 @@
       outcome.solved = outcome.saved >= target && (outcome.ended || outcome.outOfTime || outcome.stuck || outcome.leadDone);
       node.outcome = outcome;
       node.events = events;
-      node.score = Solver.score(node, this.analysis, target);
+      node.score = Solver.score(node, this.analysis, target, !!lemFilter);
       const dead = outcome.solved ? null : Solver.deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsLeft, nukedAtNode);
       node.dead = dead;
       if (dead) { this.dropped.dead++; node.state = null; node.events = null; return node; }
@@ -129,33 +129,28 @@
     }
 
     /**
-     * "Keep at it": the skill given to the lemming again each time its job
-     * ends and it walks on the same way (a basher through a mesh, a builder's
-     * staircase), until the skills run out, it turns, dies or is done, or
-     * the repeats or frames are spent - all within one step of the search.
+     * "Keep at it", one step: the lemming's job (`skill`'s action) waited to
+     * its end - a fall out of it to the landing - and the skill given again
+     * at once, while it walks (or shrugs, a builder out of bricks) the same
+     * way. True when it was given again; false when the chain is over (the
+     * lemming turned, died, is done, or the skill is refused).
      */
-    _keepAt(L, skill) {
-      const world = this.world, game = world.game;
-      if (!L) return;
+    _keepAtOnce(L, skill, dx, gap) {
+      const world = this.world, B = Lemmix.BA;
       const action = Lemmix.SKILL_TO_ACTION[skill];
-      const dx = L.dx;
-      let repeats = 0, frames = 0, working = L.action === action;
-      while (repeats < 24 && frames < 4000 && !world.ended) {
+      let frames = 0, walked = 0;
+      while (frames < 3000 && !world.ended) {
         world.step(1); frames++;
-        if (L.removed || L.cannotReceiveSkills || L.dx !== dx) break;
-        const now = L.action === action;
-        if (working && !now) {
-          // the job ended: on again at once, while the lemming walks (or shrugs, a builder out of bricks) the same way
-          if (L.action !== Lemmix.BA.WALKING && L.action !== Lemmix.BA.SHRUGGING && L.action !== Lemmix.BA.ASCENDING) break;
-          if (!world.assign(L, skill)) break;
-          world.step(1); frames++;
-          repeats++;
-          working = L.action === action;
-          if (!working) break;
-          continue;
-        }
-        working = now;
+        if (L.removed || L.cannotReceiveSkills || L.dx !== dx) return false;
+        if (L.action === action || L.action === B.FALLING || L.action === B.FLOATING || L.action === B.GLIDING) continue;
+        if (L.action !== B.WALKING && L.action !== B.SHRUGGING && L.action !== B.ASCENDING) return false;
+        // a gap: a few frames' walk first, so the next hole is not under the last (the crowd drops one floor at a time)
+        if (walked < (gap | 0) && L.action !== B.SHRUGGING) { walked++; continue; }
+        if (!world.assign(L, skill)) return false;
+        world.step(1);
+        return L.action === action || L.action === B.FALLING; // on the job again (a digger drops through at once)
       }
+      return false;
     }
 
     /** The child of `node` by `cand`, or null when the action could not be taken. */
@@ -170,10 +165,33 @@
       else if (cand.kind === "nuke") ok = world.nuke();
       if (!ok) { this.dropped.refused++; if (this.trace && this.log) this.log("  refused f=" + cand.frame + " " + describe(cand)); return null; }
       world.step(1);
-      if (cand.kind === "repeat") this._keepAt(world.lemmingById(cand.lemId), cand.skill);
-      const plan = world.plan();
+      if (cand.kind !== "repeat") return this._child(node, cand, target, lemFilter);
+      // "keep at it": the skill given again each time its job ends, a node per repetition, so
+      // every length of the chain (three floors dug, not four) is a state the search holds.
+      // The first node is the plain assignment's (a candidate of its own), so it is only the
+      // chain's start here, never a child twice.
+      const first = this._child(node, cand, target, lemFilter, true);
+      if (!first || first.dead) return null;
+      const children = [];
+      const dx = (world.lemmingById(cand.lemId) || {}).dx || 0;
+      let last = first;
+      for (let n = 0; n < this.params.repeats && !last.dead; n++) {
+        if (!this._goto(last)) break; // the node's state, or rebuilt from an ancestor's when the cache let it go
+        const L = world.lemmingById(cand.lemId); // a restore makes the lemmings afresh
+        if (!L || !this._keepAtOnce(L, cand.skill, dx, cand.gap)) break;
+        const next = this._child(last, Object.assign({}, cand, { frame: world.frame, why: cand.why + (n + 2) }), target, lemFilter);
+        if (!next) break;
+        children.push(next);
+        last = next;
+      }
+      return children;
+    }
+
+    /** The node of the world as it stands, after `cand` was applied, traced. */
+    _child(node, cand, target, lemFilter, skipSeen) {
+      const plan = this.world.plan();
       this.expansions++;
-      const child = this._makeNode(node, plan, target, lemFilter, false);
+      const child = this._makeNode(node, plan, target, lemFilter, false, skipSeen);
       if (!child && this.trace && this.log) this.log("  seen f=" + cand.frame + " " + describe(cand));
       if (this.trace && this.log && child) {
         const o = child.outcome;
@@ -246,10 +264,10 @@
         const edge = heap.pop();
         total--;
         if (this.best && edge.node.skillsUsed + 1 > this.best.skillsUsed && this.best.saved >= this.analysis.maxSavable) continue;
-        const child = this._expand(edge.node, edge.cand, target, lemFilter);
-        if (!child || child.dead) continue;
+        const made = this._expand(edge.node, edge.cand, target, lemFilter);
+        const children = Array.isArray(made) ? made : made ? [made] : [];
+        for (const child of children) if (!child.dead) pushEdges(child);
         if (this._done(target, lemFilter)) break;
-        pushEdges(child);
       }
       return this.best;
     }

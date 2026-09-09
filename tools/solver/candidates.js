@@ -63,7 +63,7 @@
     const has = (skill) => (skillCounts[skill] || 0) > 0;
     const push = (c) => {
       if (c.frame < nodeFrame || c.frame < 0) return;
-      const key = c.kind + "|" + (c.lemId || "") + "|" + (c.skill || c.si || "") + "|" + c.frame;
+      const key = c.kind + (c.gap ? "~" : "") + "|" + (c.lemId || "") + "|" + (c.skill || c.si || "") + "|" + c.frame;
       if (seen.has(key)) return;
       seen.add(key);
       out.push(c);
@@ -163,7 +163,11 @@
             if (frame < 0) continue;
             const why = e.type + (e.cause ? ":" + e.cause : "");
             push({ kind: "assign", lemId: rec.id, skill, frame, why, prior: prior * w });
-            if (REPEATABLE.has(skill) && skillCounts[skill] > 1) push({ kind: "repeat", lemId: rec.id, skill, frame, why: why + " x", prior: prior * w * 0.8 });
+            if (REPEATABLE.has(skill) && skillCounts[skill] > 1) {
+              push({ kind: "repeat", lemId: rec.id, skill, frame, why: why + " x", prior: prior * w * 0.8 });
+              // and again with a dozen pixels' walk between: holes staggered, a staircase with landings
+              if (skill === "DIGGER" || skill === "MINER" || skill === "BUILDER") push({ kind: "repeat", gap: 12, lemId: rec.id, skill, frame, why: why + " x~", prior: prior * w * 0.7 });
+            }
             any = true;
           }
           if (any) n++;

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-09T03:54:05.034Z",
+ "generated": "2026-09-09T04:42:18.862Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12713,7 +12713,7 @@
    "elapsedMs": 9090
   },
   "Lemmings_Redux/Gentle/Snuggle_up_to_a_Lemming.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Snuggle_up_to_a_Lemming.nxrp",
    "needed": 10,
    "count": 20,
@@ -12723,8 +12723,12 @@
    "features": [
     "steel"
    ],
-   "expansions": 542,
-   "elapsedMs": 9074
+   "expansions": 1818,
+   "elapsedMs": 9698,
+   "saved": 20,
+   "skillsUsed": 4,
+   "completionFrame": 666,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Tailor-made_for_blockers.nxlv": {
    "status": "solved",

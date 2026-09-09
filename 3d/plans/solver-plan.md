@@ -229,6 +229,24 @@ a tier-2 pass with the current solver has not been run). No verification
 mismatch remains. A tier-1 pass over every installed pack (1076 levels)
 runs after this note.
 
+### Later (8 September, evening)
+
+- **Keep at it** (`repeat` candidates): a terrain skill given again each
+  time its job ends, a search node per repetition (three floors dug, not
+  four), a fall out of the job waited to its landing, and a variant with a
+  dozen pixels' walk between repeats so holes stagger and a crowd drops one
+  floor at a time. Found: *You need bashers this time* (a mesh cut link by
+  link, 20/20 with 3 skills) and *Snuggle up to a Lemming* (three floors
+  dug, two pillars bashed, 20/20 with 4 skills).
+- **The lead pass's score**: a skill costs 20 there, not 120, and progress
+  weighs twice - the lead pass looks for a way in whatever it costs, the
+  crowd pass pays the objective's price. Before this, three digs with no
+  visible gain in the exit-distance field lost to any one-skill node.
+- A walk sampled every 32 frames for anchors, ranked after the anchored
+  moments; the search's memory bounded (a node's events and candidates
+  freed once its edges are queued, the frontier per depth capped, a 4 GB
+  heap for the launcher's jobs and the batch's workers).
+
 ### What limits the solver now
 
 1. **The progress signal.** The exit-distance field costs air one and solid
