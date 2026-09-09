@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-09T01:24:38.066Z",
+ "generated": "2026-09-09T01:30:10.599Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -1876,7 +1876,7 @@
    "optimal": false
   },
   "LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Dying_Not_Recommended.nxlv": {
-   "status": "error",
+   "status": "solved",
    "file": "LemmingsPlus_All_20201114/levels/Lemmings_Plus_I/Mild/Dying_Not_Recommended.nxrp",
    "needed": 20,
    "count": 40,
@@ -1884,9 +1884,12 @@
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [],
-   "expansions": 575,
-   "elapsedMs": 9861,
-   "error": "verification: the level did not end"
+   "expansions": 1301,
+   "elapsedMs": 9469,
+   "saved": 39,
+   "skillsUsed": 3,
+   "completionFrame": 1640,
+   "optimal": false
   },
   "LemmingsPlus_All_20201114/Lemmings_Plus_I/Mild/Falling_Away_From_Everything....nxlv": {
    "status": "unsolved",
@@ -12467,7 +12470,7 @@
    "optimal": false
   },
   "Lemmings_Redux/Gentle/Get_a_little_extra_help.nxlv": {
-   "status": "error",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Get_a_little_extra_help.nxrp",
    "needed": 10,
    "count": 20,
@@ -12475,9 +12478,12 @@
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [],
-   "expansions": 288,
-   "elapsedMs": 10335,
-   "error": "verification: the level did not end"
+   "expansions": 581,
+   "elapsedMs": 9922,
+   "saved": 17,
+   "skillsUsed": 3,
+   "completionFrame": 1787,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Going_Their_Separate_Ways.nxlv": {
    "status": "unsolved",
