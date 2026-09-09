@@ -50,6 +50,13 @@ Vfs.boot("").then(async () => {
   const jobState = new Map();    // level id -> "queued" | "running" | "solved" | "unsolved" | "error" | "cancelled"
   let sortKey = "level", sortDir = 1;
 
+  /** Seconds as "45s", "1m 10s", "15m". */
+  const human = (seconds) => {
+    seconds = Math.max(0, Math.round(seconds));
+    if (seconds < 60) return seconds + "s";
+    const m = Math.floor(seconds / 60), sec = seconds % 60;
+    return sec ? m + "m " + sec + "s" : m + "m";
+  };
   const mmss = (frames) => { const s = Math.floor(frames / 17); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
   const rowData = (l) => {
     const rec = Solutions.info(l.id);
@@ -119,8 +126,8 @@ Vfs.boot("").then(async () => {
       td("num" + (rec ? "" : " dim"), rec ? mmss(rec.completionFrame) : "");
       // which tier found it (and how long its search took); an unsolved level says the highest tier tried
       const tried = Solutions.index && Solutions.index.levels[l.id];
-      td(rec ? "" : "dim", rec ? "<span class='tier'>tier " + rec.tier + "</span> <span class='dim'>· " + Math.round(rec.elapsedMs / 1000) + " s</span>"
-        : tried && tried.tier ? "tried at <span class='tier'>tier " + tried.tier + "</span>" : "").title = rec ? "found by the tier " + rec.tier + " search in " + Math.round(rec.elapsedMs / 1000) + " s" : tried && tried.tier ? "unsolved at tier " + tried.tier : "never tried";
+      td(rec ? "" : "dim", rec ? "<span class='tier'>tier " + rec.tier + "</span> <span class='dim'>· " + human(rec.elapsedMs / 1000) + "</span>"
+        : tried && tried.tier ? "tried at <span class='tier'>tier " + tried.tier + "</span>" : "").title = rec ? "found by the tier " + rec.tier + " search in " + human(rec.elapsedMs / 1000) : tried && tried.tier ? "unsolved at tier " + tried.tier : "never tried";
       td("state", d.state === "running" ? "solving…" : d.state || "");
       const act = td("actions", "");
       // the level itself, to play, in a new tab - a real link with a new-tab target, which no
@@ -213,9 +220,10 @@ Vfs.boot("").then(async () => {
     let detail = "tier " + st.running.tier + ": " + (p.phase || "starting");
     if (p.best) detail += ", best " + p.best.saved + "/" + (p.needed || "?") + " with " + p.best.skillsUsed + " skills";
     else if (p.expansions) detail += ", " + p.expansions + " tries";
-    if (budget && elapsed > budget * 1.5 + 5) detail += " (past its " + budget + " s budget)";
-    txt.innerHTML = "<b>" + elapsed + " s</b> · " + escape(detail);
-    txt.title = detail + (budget ? " · budget " + budget + " s" : "");
+    if (budget && elapsed > budget * 1.5 + 5) detail += " (past its " + human(budget) + " budget)";
+    // the time gone out of the tier's limit: "1m 10s / 2m"
+    txt.innerHTML = "<b>" + human(elapsed) + (budget ? " / " + human(budget) : "") + "</b> · " + escape(detail);
+    txt.title = detail + (budget ? " · the tier's limit is " + human(budget) : "");
   }
 
   async function cancelLevel(id) {
@@ -272,7 +280,7 @@ Vfs.boot("").then(async () => {
       for (const d of st.done) if (d.status === "solved" && Solutions.has(d.id) && d.finishedAt > pageOpenedAt) fresh.add(d.id);
     }
     const parts = [];
-    if (st.running) parts.push("<span class='running'>solving <b>" + escape(st.running.id.split("/").slice(-1)[0]) + "</b> (tier " + st.running.tier + ", " + Math.round((Date.now() - st.running.startedAt) / 1000) + " s)</span>");
+    if (st.running) parts.push("<span class='running'>solving <b>" + escape(st.running.id.split("/").slice(-1)[0]) + "</b> (tier " + st.running.tier + ", " + human((Date.now() - st.running.startedAt) / 1000) + (st.running.budgetMs ? " of " + human(st.running.budgetMs / 1000) : "") + ")</span>");
     if (st.pending.length) parts.push("<b>" + st.pending.length + "</b> queued");
     const done = st.done.slice(-1)[0];
     if (done && !st.running && !st.pending.length) parts.push("last: " + escape(done.id.split("/").slice(-1)[0]) + " " + (done.status === "error" ? "<span class='err'>" + escape(done.line) + "</span>" : escape(done.line)));
