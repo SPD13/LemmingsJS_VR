@@ -746,10 +746,12 @@ shape of it:
   cells take for a wall walked at the pixels, and a blocker standing there
   (a bomber on it opens the way); water, fire and traps are ends too -
   deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
-  gone for all after, a once-only trap taking one lemming. A plan is a
-  Dijkstra over (region, heading) - heading the other way costs a turn: a
-  blocker and a bomber, unless a wall or a blocker ahead turns the lemming
-  for nothing and the exit does not take it first - and the plan for
+  gone for all after, a once-only trap taking one lemming; a force field
+  turns whoever walks against it. A plan is a Dijkstra over (region,
+  heading) - heading the other way costs a turn: a blocker and a bomber, a
+  stacker in the way, or a jump into an overhang, unless a wall, a blocker
+  or a force field ahead turns the lemming for nothing and the exit does
+  not take it first - and the plan for
   everyone (`planAll`) sends one lemming first, the lead, tried from every
   group of lemmings, through the terrain gates it will open (none, one,
   greedily more while it helps: the lead's cheapest way alone is not the

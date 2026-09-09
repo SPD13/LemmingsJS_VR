@@ -337,15 +337,33 @@ region above - the biggest single gain, since every NeoLemmix hill was a
 wall before. The permanent-skill boost goes only to the lead (or to a
 group whose own step it is); a jumper or shimmier is boosted at its spot.
 
-Still outside the model: a jump into a wall as a way to turn round
-(*Jumping Lem Flash* turns on it), stacks and stones as a staircase up a
-tall wall (*Stacks And Stones*), a climber grabbing an overhang as a
-shimmier mid-climb (*Climb Up, Hang On*), the route down through a
-bashable block behind a force field (*Trap Roulette*): all four stay
-unsolved at tier 1; *Split And Splat* improves to 54/60 with 5 skills
-(51 before), everything else holds (Keep your hair 29/30 with 11, Snuggle
-4, bashers 3, A Float 8, Amphibious 6). The blocker itself has no group:
-a blocking lemming stands in no region and counts as spent.
+And after that: **ways to turn round** besides a blocker and a bomber -
+a stacker in the lemming's way (1), or a jump into an overhang the region
+has (terrain within a jump's height over some cell of it: the engine turns
+a jumper that meets a wall mid-air, 1) - the plan's step says which
+(`how`) and the candidates of that skill in that region get the turn's
+boost; **force fields** as region ends (a lemming against the field is
+turned for nothing, one with it walks through); a **climber under a
+ceiling** too close over the wall's top (within two cells: no room to
+hoist) gets a climb-and-shimmy gate (a climber and a shimmier) along that
+ceiling; and the **shimmier's walk as the engine has it** - the ceiling
+must stay level (a cell's step up or down in front drops the lemming, so a
+toothed ceiling drops it at the first tooth), a ledge two cells under the
+ceiling is hoisted onto, a wall at head height lets it go.
+
+*Jumping Lem Flash* is solved with this at tier 2: the plan reads nine
+jumps with a turn into the pillar over the long floor (cost 9 from the
+hatch), the search lands them in 81 s (1/2 saved, 9 skills; tier 1 runs
+out with the plan in hand - each jump is a precise moment). Still
+unsolved: *Stacks And Stones* (the wall up to the exit is 92 px; stacks
+are 8 px walls and stones 10 px blocks, neither a step a walker climbs -
+the level's route is not a staircase and I have not found it), *Climb Up,
+Hang On* (with the teeth dropping every shimmier, the way from the
+plateau to the exit is not in the graph), *Trap Roulette* (the only
+non-steel terrain below the corridor is the level's edge block, which no
+gate opens). *Split And Splat* stays at 54/60 with 5 skills, everything
+else holds. The blocker itself has no group: a blocking lemming stands in
+no region and counts as spent.
 
 ### What limits the solver now
 

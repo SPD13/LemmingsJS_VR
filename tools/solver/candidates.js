@@ -33,7 +33,7 @@
     WORK_END: [["BUILDER", "at", 0.8], ["BASHER", "at", 0.8], ["MINER", "at", 0.7], ["DIGGER", "at", 0.7], ["BLOCKER", "at", 0.5], ["PLATFORMER", "at", 0.5], ["STACKER", "at", 0.4], ["CLIMBER", "at", 0.4], ["JUMPER", "at", 0.3]],
     CLIMB: [["SHIMMIER", "at", 0.9], ["JUMPER", "at", 0.4], ["BOMBER", "at", 0.3]],
     // a walk's samples: after the anchored moments (a wall, an edge, a death), so they come later in the frontier
-    TICK: [["DIGGER", "ring", 0.35], ["BASHER", "ring", 0.35], ["MINER", "ring", 0.3], ["BUILDER", "ring", 0.3], ["BOMBER", "ring", 0.25], ["BLOCKER", "ring", 0.3], ["CLIMBER", "at", 0.2]],
+    TICK: [["DIGGER", "ring", 0.35], ["BASHER", "ring", 0.35], ["MINER", "ring", 0.3], ["BUILDER", "ring", 0.3], ["BOMBER", "ring", 0.25], ["BLOCKER", "ring", 0.3], ["JUMPER", "ring", 0.25], ["STACKER", "ring", 0.2], ["CLIMBER", "at", 0.2]],
   };
   const DEATH_TEMPLATES = {
     water: [["SWIMMER", "at", 1.0], ["BUILDER", "anchor", 0.9], ["PLATFORMER", "anchor", 0.8], ["BLOCKER", "anchor", 0.7], ["STACKER", "anchor", 0.4], ["JUMPER", "anchor0", 0.4]],
@@ -62,14 +62,16 @@
     // the plan's gates: the skill, where and which way; a candidate that matches one is the planner's pick
     const steps = ctx.planned && ctx.planned.steps ? ctx.planned.steps : [];
     const graph = ctx.planned && ctx.planned.graph;
-    const turnsIn = new Set(steps.filter((st) => st.turn).map((st) => st.gate.from));
+    const turnsIn = new Map(); // region -> the skill that turns the lemming there (a blocker, a stacker, a jump into an overhang)
+    for (const st of steps) if (st.turn) turnsIn.set(st.gate.from, st.how || "BLOCKER");
     const planned = (c, e) => {
       if (!steps.length || !e) return 1;
-      // the plan wants a turn in a region: a blocker set there does it
-      if (turnsIn.size && c.skill === "BLOCKER" && graph && e.type !== "FALL" && e.type !== "DEATH" && turnsIn.has(Solver.Regions.regionOfLemming(graph, e.x, e.y))) return 2;
+      // the plan wants a turn in a region: whatever does it there
+      if (turnsIn.size && (c.skill === "BLOCKER" || c.skill === "STACKER" || c.skill === "JUMPER") && graph && e.type !== "FALL" && e.type !== "DEATH"
+        && turnsIn.get(Solver.Regions.regionOfLemming(graph, e.x, e.y)) === c.skill) return 2;
       for (const st of steps) {
         const gt = st.gate;
-        if (c.skill !== gt.skill) continue;
+        if (c.skill !== gt.skill && c.skill !== gt.also) continue;
         if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step, on any of the group when theirs
           if (st.who === "lead" && (!ctx.planned.leadId || e.lemId !== ctx.planned.leadId)) continue;
           if (PERM_BITS[gt.skill]) return 2.5; // a permanent skill: given anywhere before the gate

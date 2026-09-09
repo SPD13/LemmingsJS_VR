@@ -48,7 +48,7 @@
   const JUMP_UP = 4;           // cells a jump rises (18 px)
   const JUMP_LEDGE = 5;        // cells a jump gets up onto: the arc, plus the hoist over a ledge within 5 px of its head
   const STACK_UP = 3;          // cells a stack (8 px) plus a walker's step (6 px) climbs
-  const WATER = 1, FIRE = 2, TRAP = 3, TRAPONCE = 4;
+  const WATER = 1, FIRE = 2, TRAP = 3, TRAPONCE = 4, FORCELEFT = 5, FORCERIGHT = 6;
   const PERM = new Set(["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"]);
 
   /** The cell grid of a physics map: 0 air, 1 solid, 2 steel; and the one-way bits per cell (1 left, 2 right, 4 down, 8 up). */
@@ -82,7 +82,7 @@
     for (let cy = 0; cy < ch - 1; cy++) for (let cx = 0; cx < cw; cx++) if (at(cx, cy) === 0 && at(cx, cy + 1) !== 0 && at(cx, cy - 1) === 0) floor[cx + cy * cw] = 1;
     // hazards: water drowns, fire burns, a trap kills - none of their cells is floor to walk on
     const hazard = new Uint8Array(cw * ch);
-    const HAZARD = { WATER, FIRE, TRAP, TRAPONCE };
+    const HAZARD = { WATER, FIRE, TRAP, TRAPONCE, FORCELEFT, FORCERIGHT };
     for (const gd of level.gadgets) {
       const hz = HAZARD[gd.effect] || 0;
       if (!hz || !gd.triggerRect) continue;
@@ -118,11 +118,33 @@
       }
       let x0 = Infinity, x1 = -Infinity, ymin = Infinity, ymax = -Infinity;
       for (const j of list) { const jx = j % cw, jy = (j / cw) | 0; if (jx < x0) x0 = jx; if (jx > x1) x1 = jx; if (jy < ymin) ymin = jy; if (jy > ymax) ymax = jy; }
-      regions.push({ id, cells: list, x0, x1, ymin, ymax, exit: false, hatch: false, ends: {}, gates: [] });
+      // an overhang: terrain within a jump's height over some cell, which a jump into turns the jumper round
+      let overhang = false;
+      for (const j of list) { const jx = j % cw, jy = (j / cw) | 0; for (let k = 2; k <= 4 && !overhang; k++) if (at(jx, jy - k) !== 0) overhang = true; if (overhang) break; }
+      regions.push({ id, cells: list, x0, x1, ymin, ymax, exit: false, hatch: false, overhang, ends: {}, gates: [] });
     }
     const regionAt = (cx, cy) => (cx < 0 || cy < 0 || cx >= cw || cy >= ch) ? -1 : region[cx + cy * cw];
     const phys = physics || level.physics;
     const solid = (x, y) => x >= 0 && y >= 0 && x < w && y < h && (phys[x + y * w] & PM.SOLID) !== 0;
+    /**
+     * Where a shimmier hanging from the ceiling cell row `c` at column `cx`
+     * gets to heading `dir`, as the engine moves it: along the ceiling while
+     * it stays level (a step of a cell up or down in front drops it, as do
+     * the teeth of a toothed ceiling), onto a ledge whose top is two cells
+     * under the ceiling (hoisted), else the fall where the ceiling ends or a
+     * wall meets its head. A region id, or -1 (nowhere new, or the same).
+     */
+    const ceilingWalk = (cx, c, dir, fromId) => {
+      let x = cx;
+      while (x + dir >= 0 && x + dir < cw) {
+        const nx2 = x + dir;
+        if (at(nx2, c) !== 0 && at(nx2, c + 1) === 0 && at(nx2, c + 2) === 0) { x = nx2; continue; }
+        if (at(nx2, c + 1) !== 0) { const l = landing(x, c + 1); return l && l.region !== fromId ? l.region : -1; } // a tooth, a wall at head height: let go
+        if (at(nx2, c + 2) !== 0) { const id = regionAt(nx2, c + 1); return id !== fromId ? id : -1; } // a ledge at hanging height: hoisted onto
+        const l = landing(nx2, c + 1); return l && l.region !== fromId ? l.region : -1; // the ceiling ends: the fall
+      }
+      return -1;
+    };
     /**
      * A wall the cells see that a walker climbs on foot - a slope, steps of
      * six pixels or less at the pixels: from the end cell (ex, ey) heading
@@ -225,7 +247,13 @@
           }
           if (to >= 0) gate(r.id, to, "jump", "JUMPER", 1, ex, ey, dir, { perLemming: true });
         };
-        if (blockedAt(nx, ey)) {
+        if (hz === FORCELEFT || hz === FORCERIGHT) {
+          // a force field: it turns whoever comes against it and lets the others through on foot
+          r.ends[side] = { kind: "force", dir: hz === FORCELEFT ? -1 : 1 };
+          let far = nx; while (far >= 0 && far < cw && hazardAt(far, ey) === hz) far += dir;
+          let to = -1; for (const dy of [0, -1, 1]) { const id = regionAt(far, ey + dy); if (id >= 0 && id !== r.id) { to = id; break; } }
+          if (to >= 0 && r.ends[side].dir === dir) gate(r.id, to, "walk", null, 0, ex, ey, dir);
+        } else if (blockedAt(nx, ey)) {
           // a blocker: it turns whoever comes, a bomber on it opens the way (both ways) to what stands beyond
           r.ends[side] = { kind: "blocker" };
           let beyondRegion = -1;
@@ -292,11 +320,17 @@
               if (height <= STACK_UP) gate(r.id, topRegion, "stack", "STACKER", 1, ex, ey, dir, { height });
             }
           }
+          // a ceiling over the climber's own column before the wall's top: its head meets it and it falls - or,
+          // a shimmier, hangs on and gets along the ceiling its way
+          for (let cc = ey - 3; cc > top - 3 && cc >= 0; cc--) {
+            if (at(ex, cc) === 0 || at(ex, cc + 1) !== 0) continue;
+            const end = ceilingWalk(ex, cc, dir, r.id);
+            if (end >= 0 && end !== r.id) gate(r.id, end, "climbshimmy", "CLIMBER", 2, ex, ey, dir, { perLemming: true, also: "SHIMMIER", ceiling: cc });
+            break;
+          }
         }
       }
-      // a shimmier: a ceiling within reach over a floor cell (two or three cells up, 8 to 13 px), followed its way -
-      // the ceiling stepping up or down a cell at a time, as it does with the hang - until it ends (the fall from
-      // there) or a ledge stands in the way at hanging height (walked onto)
+      // a shimmier: a ceiling within reach over a floor cell (two or three cells up, 8 to 13 px), followed its way
       for (const dir of [-1, 1]) {
         let found = false;
         const ordered = dir > 0 ? r.cells : r.cells.slice().reverse();
@@ -304,20 +338,10 @@
           if (found) break;
           const jx = j % cw, jy = (j / cw) | 0;
           if (at(jx, jy - 1) !== 0) continue;
-          let c = at(jx, jy - 2) !== 0 ? jy - 2 : at(jx, jy - 3) !== 0 ? jy - 3 : -1;
+          const c = at(jx, jy - 2) !== 0 ? jy - 2 : at(jx, jy - 3) !== 0 ? jy - 3 : -1;
           if (c < 0) continue;
-          let x = jx, to = -1;
-          while (x + dir >= 0 && x + dir < cw) {
-            const nx2 = x + dir;
-            let next = -1;
-            for (const dc of [0, 1, -1]) { const cc = c + dc; if (cc >= 0 && cc < jy && at(nx2, cc) !== 0 && at(nx2, cc + 1) === 0) { next = cc; break; } }
-            if (next >= 0) { x = nx2; c = next; continue; }
-            if (at(nx2, c + 1) !== 0 && at(nx2, c) === 0) { to = regionAt(nx2, c); } // a ledge at hanging height: onto it
-            else if (at(nx2, c) === 0 && at(nx2, c + 1) === 0) { const l = landing(nx2, c + 1); to = l ? l.region : -1; } // the ceiling ends: the fall
-            else { const l = landing(x, c + 1); to = l ? l.region : -1; } // a wall at head height: let go where it hangs
-            break;
-          }
-          if (to >= 0 && to !== r.id && x !== jx) { gate(r.id, to, "shimmy", "SHIMMIER", 1, jx, jy, dir, { perLemming: true }); found = true; }
+          const to = ceilingWalk(jx, c, dir, r.id);
+          if (to >= 0 && to !== r.id) { gate(r.id, to, "shimmy", "SHIMMIER", 1, jx, jy, dir, { perLemming: true }); found = true; }
         }
       }
       // the floor dug through, from anywhere in the region: the region below
@@ -371,13 +395,22 @@
    * walked back through the other way).
    */
   const TURN_COST = 2;
-  /** What taking gate `gt` costs a lemming heading `d` in `reg` besides the gate: nothing when it heads that way or a wall ahead turns it, else a blocker and a bomber. */
+  /**
+   * What taking gate `gt` costs a lemming heading `d` in `reg` besides the
+   * gate: nothing when it heads that way or a wall, a blocker or a force
+   * field ahead turns it (not in the exit's region, where the exit takes it
+   * first); else a turn of its own - a blocker and a bomber (2), a stacker
+   * in its way (1), or a jump into an overhang the region has (1).
+   */
   function turnCost(reg, d, gt, skills) {
     if (gt.dir === 0 || gt.dir === d) return { extra: 0, turn: false };
-    // a wall or a blocker ahead turns the lemming for nothing - unless the exit takes it first
     const ahead = reg.ends[d > 0 ? "right" : "left"];
-    if (ahead && (ahead.kind === "wall" || ahead.kind === "blocker") && !reg.exit) return { extra: 0, turn: false };
-    return { extra: skills.BLOCKER > 0 && skills.BOMBER > 0 ? TURN_COST : Infinity, turn: true };
+    if (ahead && !reg.exit && (ahead.kind === "wall" || ahead.kind === "blocker" || (ahead.kind === "force" && ahead.dir !== d))) return { extra: 0, turn: false };
+    let extra = Infinity, how = null;
+    if (skills.BLOCKER > 0 && skills.BOMBER > 0) { extra = TURN_COST; how = "BLOCKER"; }
+    if (skills.STACKER > 0 && 1 < extra) { extra = 1; how = "STACKER"; }
+    if (skills.JUMPER > 0 && reg.overhang && 1 < extra) { extra = 1; how = "JUMPER"; }
+    return { extra, turn: extra !== Infinity, how };
   }
 
   function sweep(graph, from, skills, crowd, opened) {
@@ -402,10 +435,11 @@
         const per = gt.perLemming ? (crowd && crowd.lacking && crowd.lacking[gt.skill] !== undefined ? crowd.lacking[gt.skill] : crowd && crowd.n !== undefined ? crowd.n : crowd || 1) : 1;
         // closed: the skill is out, or too few of it for everyone in the group who lacks it
         if (!free && gt.skill && (!(skills[gt.skill] > 0) || per > skills[gt.skill])) continue;
-        const { extra, turn } = turnCost(reg, d, gt, skills);
+        if (!free && gt.also && !(skills[gt.also] > 0)) continue;
+        const { extra, turn, how } = turnCost(reg, d, gt, skills);
         if (extra === Infinity) continue;
         const cost = c + extra + (free ? 0 : gt.cost * per);
-        push(gt.to, gt.dir === 0 ? d : gt.dir, cost, { from: k, step: { gate: gt, dir: gt.dir === 0 ? d : gt.dir, turn } });
+        push(gt.to, gt.dir === 0 ? d : gt.dir, cost, { from: k, step: { gate: gt, dir: gt.dir === 0 ? d : gt.dir, turn, how } });
       }
     }
     return { dist, prev, key };
@@ -486,14 +520,14 @@
           for (const d of [1, -1]) {
             const k = sw.key(T.from, d);
             if (!sw.dist.has(k)) continue;
-            const { extra, turn } = turnCost(reg, d, T, skills);
+            const { extra, turn, how } = turnCost(reg, d, T, skills);
             if (extra === Infinity) continue;
             const c = sw.dist.get(k) + extra + T.cost;
-            if (!via || c < via.c) via = { c, k, turn };
+            if (!via || c < via.c) via = { c, k, turn, how };
           }
           if (!via) return null;
           cost += via.c;
-          steps = steps.concat(stepsTo(sw, via.k), [{ gate: T, dir: T.dir, turn: via.turn }]);
+          steps = steps.concat(stepsTo(sw, via.k), [{ gate: T, dir: T.dir, turn: via.turn, how: via.how }]);
           opened.add(T);
           pos = { region: T.to, dir: T.dir };
         }
