@@ -134,9 +134,9 @@ Vfs.boot("").then(async () => {
           q.textContent = "queued" + (at > 0 ? " #" + at : "");
           job.appendChild(q);
         } else {
-          const bar = document.createElement("div"); bar.className = "bar";
-          bar.innerHTML = "<div class='fill'></div><div class='txt'>solving…</div>";
-          job.appendChild(bar);
+          const solving = document.createElement("span"); solving.className = "solving";
+          solving.innerHTML = "<span class='spin'></span><span class='txt'>solving…</span>";
+          job.appendChild(solving);
         }
         const cancel = document.createElement("button"); cancel.textContent = "cancel"; cancel.className = "cancel";
         cancel.title = d.state === "queued" ? "take this level out of the queue" : "stop the search on this level";
@@ -188,30 +188,23 @@ Vfs.boot("").then(async () => {
   let lastSerial = -1, polling = null, lastStatus = null, ticker = null;
   const pageOpenedAt = Date.now();
 
-  /** The running level's bar: how far into its budget the search is, its phase and its best so far. */
+  /** The running level's line: the time gone, the search's phase and its best so far, beside the spinner. */
   function updateBars() {
     const st = lastStatus;
     if (!st || !st.running) return;
     const tr = Array.from(dom.rows.querySelectorAll("tr")).find((t) => t.dataset.id === st.running.id);
     if (!tr) return;
-    const bar = tr.querySelector(".bar");
-    if (!bar) return;
+    const txt = tr.querySelector(".solving .txt");
+    if (!txt) return;
     const p = st.running.progress || {};
-    const elapsed = Date.now() - st.running.startedAt;
-    const budget = st.running.budgetMs || 1;
-    const done = p.phase === "done" || p.phase === "verifying";
-    const frac = done ? 1 : Math.min(0.97, elapsed / budget);
-    const fill = bar.querySelector(".fill");
-    fill.style.width = Math.round(frac * 100) + "%";
-    fill.classList.toggle("done", done);
-    let text = p.phase || "starting";
-    if (p.best) text += " · best " + p.best.saved + "/" + (p.needed || "?") + ", " + p.best.skillsUsed + " skills";
-    else if (p.expansions) text += " · " + p.expansions + " tries";
-    // past the budget the search is finishing (the optimiser's last trials, the verification); a job long past it is stuck
-    if (elapsed > budget * 1.5 + 5000) text += " · " + Math.round(elapsed / 1000) + " s, past its " + Math.round(budget / 1000) + " s budget";
-    else text += " · " + Math.min(Math.round(elapsed / 1000), Math.round(budget / 1000)) + "/" + Math.round(budget / 1000) + " s";
-    bar.querySelector(".txt").textContent = text;
-    bar.title = text;
+    const elapsed = Math.round((Date.now() - st.running.startedAt) / 1000);
+    const budget = Math.round((st.running.budgetMs || 0) / 1000);
+    let detail = p.phase || "starting";
+    if (p.best) detail += ", best " + p.best.saved + "/" + (p.needed || "?") + " with " + p.best.skillsUsed + " skills";
+    else if (p.expansions) detail += ", " + p.expansions + " tries";
+    if (budget && elapsed > budget * 1.5 + 5) detail += " (past its " + budget + " s budget)";
+    txt.innerHTML = "<b>" + elapsed + " s</b> · " + escape(detail);
+    txt.title = detail + (budget ? " · budget " + budget + " s" : "");
   }
 
   async function cancelLevel(id) {
