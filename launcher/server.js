@@ -11,6 +11,7 @@ const fs = require("fs");
 const { buildIndex } = require("../tools/levels-index");
 const { buildStylesIndex } = require("../tools/styles-index");
 const { buildMusicIndex } = require("../tools/music-index");
+const { spawn } = require("child_process");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -169,6 +170,109 @@ function readJsonBody(req, res, write) {
  * origins. Resolves to {port, close()} once listening; rejects on listen
  * errors (e.g. the port is already in use).
  */
+// ---- the solver queue -------------------------------------------------------
+// The solutions page (solutions.html) asks the server to solve levels: POST
+// /solve with {levels: [ids], tier, budget} queues them, and they run one
+// after the other as child processes of tools/nx-solve.js (its single-level
+// mode, which writes solutions/<level>.nxrp and the index itself), so a
+// solution shows up as soon as its level is done. GET /solve/status.json is
+// the queue as it stands; POST /solve/cancel drops the queue (and, with
+// {running: true}, kills the job under way).
+const SOLVE_TIERS = { 1: 10, 2: 120, 3: 900 };
+const solveQueue = { pending: [], running: null, done: [], serial: 0 };
+
+function solveStatus() {
+  const r = solveQueue.running;
+  return {
+    running: r ? { id: r.id, tier: r.tier, budget: r.budget, startedAt: r.startedAt, log: r.log.slice(-6) } : null,
+    pending: solveQueue.pending.map((j) => ({ id: j.id, tier: j.tier, budget: j.budget })),
+    done: solveQueue.done.slice(-200),
+    serial: solveQueue.serial,
+  };
+}
+
+/** The ids of every Lemmix level the index holds (an id is the level's path in the tree, not always on disk). */
+function solvableIds(absRoot) {
+  const ids = new Set();
+  const walk = (node) => {
+    for (const level of node.levels || []) if (level.url && /\.nxlv$/i.test(level.id || "")) ids.add(level.id);
+    for (const child of node.children || []) walk(child);
+  };
+  walk(buildIndex(absRoot));
+  return ids;
+}
+
+function solveNext(absRoot) {
+  if (solveQueue.running || !solveQueue.pending.length) return;
+  const job = solveQueue.pending.shift();
+  job.startedAt = Date.now();
+  job.log = [];
+  solveQueue.running = job;
+  const args = [path.join(absRoot, "tools", "nx-solve.js"), job.id, "--tier", String(job.tier)];
+  if (job.budget) args.push("--budget", String(job.budget));
+  let child;
+  try {
+    child = spawn(process.execPath, args, { cwd: absRoot, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (e) {
+    finish(job, "error", "could not start the solver: " + e.message);
+    return;
+  }
+  job.child = child;
+  const onLine = (chunk) => {
+    for (const line of String(chunk).split("\n")) if (line.trim()) job.log.push(line.length > 300 ? line.slice(0, 300) : line);
+    if (job.log.length > 60) job.log.splice(0, job.log.length - 60);
+  };
+  child.stdout.on("data", onLine);
+  child.stderr.on("data", onLine);
+  child.on("error", (e) => finish(job, "error", String(e.message || e)));
+  child.on("exit", (code, signal) => {
+    if (job.finished) return;
+    const status = signal ? "cancelled" : code === 0 ? "solved" : code === 3 ? "unsolved" : "error";
+    const line = job.log.filter((l) => /  (solved|unsolved|ERROR)/.test(l)).pop() || job.log[job.log.length - 1] || "";
+    finish(job, status, line.replace(/^.*\.nxlv  /, ""));
+  });
+  function finish(j, status, line) {
+    if (j.finished) return;
+    j.finished = true;
+    solveQueue.running = null;
+    solveQueue.done.push({ id: j.id, status, line, tier: j.tier, finishedAt: Date.now(), elapsedMs: Date.now() - j.startedAt });
+    solveQueue.serial++;
+    solveNext(absRoot);
+  }
+}
+
+function solveEnqueue(absRoot, body) {
+  const tier = [1, 2, 3].includes(body.tier | 0) ? body.tier | 0 : 1;
+  const budget = body.budget > 0 ? Math.min(3600, Math.max(1, +body.budget)) : 0;
+  const ids = Array.isArray(body.levels) ? body.levels : [];
+  const known = ids.length ? solvableIds(absRoot) : new Set();
+  const queued = new Set(solveQueue.pending.map((j) => j.id));
+  if (solveQueue.running) queued.add(solveQueue.running.id);
+  let added = 0, refused = 0;
+  for (const raw of ids) {
+    const id = typeof raw === "string" && known.has(raw) ? raw : null;
+    if (!id) { refused++; continue; }
+    if (queued.has(id)) continue;
+    queued.add(id);
+    solveQueue.pending.push({ id, tier, budget });
+    added++;
+  }
+  solveQueue.serial++;
+  solveNext(absRoot);
+  return { added, refused };
+}
+
+function solveCancel(body) {
+  const ids = Array.isArray(body.levels) ? new Set(body.levels) : null;
+  const before = solveQueue.pending.length;
+  solveQueue.pending = ids ? solveQueue.pending.filter((j) => !ids.has(j.id)) : [];
+  let killed = false;
+  const r = solveQueue.running;
+  if (r && r.child && (body.running || (ids && ids.has(r.id)))) { try { r.child.kill("SIGTERM"); killed = true; } catch (e) {} }
+  solveQueue.serial++;
+  return { dropped: before - solveQueue.pending.length, killed };
+}
+
 function createStaticServer(root, port, tls = null) {
   const absRoot = path.resolve(root);
   return new Promise((resolve, reject) => {
@@ -195,6 +299,27 @@ function createStaticServer(root, port, tls = null) {
           const json = JSON.stringify(levelDirs(path.join(absRoot, "levels")));
           res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
           res.end(json);
+          return;
+        }
+
+        // the solver queue (solutions.html): what it holds, levels to add, the queue dropped
+        if (req.method === "GET" && /^\/solve\/status\.json$/.test(urlPath)) {
+          const json = JSON.stringify(solveStatus());
+          res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
+          res.end(json);
+          return;
+        }
+        if (req.method === "POST" && (urlPath === "/solve" || urlPath === "/solve/cancel")) {
+          let body = "";
+          req.on("data", (chunk) => { body += chunk; if (body.length > 1e6) req.destroy(); });
+          req.on("end", () => {
+            let parsed;
+            try { parsed = JSON.parse(body || "{}"); } catch (e) { res.writeHead(400); res.end("invalid JSON"); return; }
+            const result = urlPath === "/solve" ? solveEnqueue(absRoot, parsed) : solveCancel(parsed);
+            const json = JSON.stringify(Object.assign(result, solveStatus()));
+            res.writeHead(200, { "Content-Type": MIME[".json"], "Content-Length": Buffer.byteLength(json), "Cache-Control": "no-store" });
+            res.end(json);
+          });
           return;
         }
 

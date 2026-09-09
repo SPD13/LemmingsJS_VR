@@ -148,7 +148,10 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   the nuke stands at the hatch. The markers show for any replay - a
   loaded file, the panel's replay of your own attempt - and go the moment
   you take control (any assignment, rate change or nuke), as the replay
-  itself does. A level completed by its solution records no clear.
+  itself does. A level completed by its solution records no clear. The
+  library's *solutions* button opens the solutions page: every level, which
+  have a solution and how good it is, a search and a pack filter, and in
+  server mode the buttons that have the launcher solve more.
 - **hotkeys** are NeoLemmix's (`js/hotkeys.js`, from its LemmixHotkeys.pas
   and the manual's list): a key does one function, some with a detail (which
   skill, how many frames, hold or toggle, which special skip), and Shift,

@@ -781,6 +781,24 @@ takes control (the sim's `cutVersion` moves on when a cut removes entries;
 watched this way records no clear and no talisman ("SOLUTION — LEVEL
 COMPLETE").
 
+**The solutions page** (`solutions.html`, `3d/js/solutions.js`; the
+*solutions* button in the library's head): every Lemmix level as a row in
+play order - a check when a solution exists, saved / lemmings (and the
+count asked), skills used, the clock at the end, the tier and the search
+time - with the solved count and percentage at the head, library.js's
+fuzzy search, a filter by level folder or pack, solved/unsolved, sortable
+columns, checkboxes with select-all-shown, *play solution* (the level in a
+new tab with `?solution=1`). In server mode it drives the launcher's
+**solver queue** (`launcher/server.js`): `POST /solve` `{levels, tier,
+budget}` queues levels (ids checked against the index), run one after the
+other as child processes of `tools/nx-solve.js` in its single-level mode
+(which writes the `.nxrp` and the index itself); `GET /solve/status.json`
+is the queue (running job with its log tail, pending, done with each
+verdict line, a serial the page polls every two seconds); `POST
+/solve/cancel` drops the queue (`{running: true}` kills the job under
+way). When a job ends the page re-fetches `solutions/index.json` and marks
+the row green if a solution arrived.
+
 **Action markers** (`3d/js/replay-markers.js`): while a replay is engaged,
 every entry of the record stands on the board from frame 0 - an
 assignment as a ring where the lemming stood with the skill's picture

@@ -116,6 +116,17 @@ node tools/nx-solve.js --verify             every solution replayed through a fr
 `<level>` is a level id or a unique part of one (`Just_Nuke`); the plan
 behind it, the search and its results are in `3d/plans/solver-plan.md`.
 
+The **solutions page** (`solutions.html`, the *solutions* button in the
+world library's head) lists every level with a check where a solution
+exists and what it is worth - lemmings saved, skills used, the clock at
+the end, the tier that found it - with how many levels have one at the
+top, a fuzzy search and a pack filter, and *play solution* opening the
+level in a new tab with its solution replaying. In server mode the page
+also solves levels: a row's *solve*, or *solve selected* over the checked
+rows, sends them to the launcher's queue, which runs `nx-solve.js` on them
+one after the other (`POST /solve`, `GET /solve/status.json`,
+`POST /solve/cancel`); the page marks each new solution as it lands.
+
 ## Releases
 
 The site carries a release version: `version.json` at the repo root, and

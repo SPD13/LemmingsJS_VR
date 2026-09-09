@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="lem3d-version" content="1.0.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lemmix JS+VR — solutions</title>
+<link rel="icon" type="image/png" href="img/lemmix_vr_logo.png">
+<link rel="apple-touch-icon" href="img/lemmix_vr_logo.png">
+<style>
+  /* the look of index.html's HUD, restated (no shared stylesheet) */
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10141c; }
+  body { font-family: ui-monospace, Menlo, Consolas, monospace; color: #cdd6e4; font-size: 12px; line-height: 1.6; }
+  a { color: #7fd6e8; text-decoration: none; }
+  a:hover { color: #a9e6f4; }
+  h1 { font-size: 15px; color: #6fce7e; letter-spacing: 0.08em; margin: 0; }
+  button {
+    font: inherit; font-size: 11px; color: #cdd6e4; background: #1c2432;
+    border: 1px solid #33405a; border-radius: 4px; padding: 3px 10px; cursor: pointer; white-space: nowrap;
+  }
+  button:hover { background: #263043; }
+  button.primary { background: #173442; border-color: #7fd6e8; color: #7fd6e8; }
+  button.primary:hover { background: #26485c; }
+  button.warn { border-color: #6b3a2f; color: #e07a6a; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  input, select {
+    font: inherit; font-size: 12px; color: #f0f3f8; background: #0b0f16;
+    border: 1px solid #33405a; border-radius: 4px; padding: 5px 8px; box-sizing: border-box;
+  }
+  input:focus, select:focus { outline: none; border-color: #6fce7e; }
+  input[type=checkbox] { width: 14px; height: 14px; padding: 0; margin: 0; accent-color: #6fce7e; cursor: pointer; }
+
+  #page { display: flex; flex-direction: column; height: 100%; }
+  #head {
+    padding: 14px 18px 10px; border-bottom: 1px solid #2a3446; background: rgba(10, 14, 22, 0.82);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  #head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  #summary { font-size: 13px; color: #f0f3f8; }
+  #summary b { color: #6fce7e; }
+  #summary .pct { color: #ffd866; }
+  #summary .sub { color: #8fa1bb; font-size: 11px; margin-left: 10px; }
+  #tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #tools label { color: #8fa1bb; font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+  #search { width: 260px; }
+  #server { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #server[hidden] { display: none; }
+  #queue { color: #8fa1bb; font-size: 11px; min-height: 16px; }
+  #queue b { color: #cdd6e4; font-weight: 600; }
+  #queue .running { color: #ffd866; }
+  #queue .err { color: #e07a6a; }
+  #note { color: #8fa1bb; font-size: 11px; }
+
+  #main { flex: 1; min-height: 0; overflow: auto; padding: 0 18px 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  thead th {
+    position: sticky; top: 0; z-index: 1; background: #10141c; color: #8fa1bb; font-weight: 600; font-size: 11px;
+    text-align: left; padding: 10px 8px 6px; border-bottom: 1px solid #2a3446; white-space: nowrap; cursor: pointer; user-select: none;
+  }
+  thead th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  thead th.sorted { color: #f0f3f8; }
+  tbody td { padding: 4px 8px; border-bottom: 1px solid #1a2231; white-space: nowrap; vertical-align: middle; }
+  tbody tr:hover td { background: #161c28; }
+  tbody tr.solved td.mark { color: #6fce7e; font-weight: 700; }
+  tbody tr.fresh td { background: #16281a; }
+  tbody tr.queued td.state { color: #8fa1bb; }
+  tbody tr.running td.state { color: #ffd866; }
+  tbody tr.failed td.state { color: #e07a6a; }
+  td.level { max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
+  td.level .where { color: #8fa1bb; }
+  td.level .name { color: #f0f3f8; }
+  td.level .title { color: #8fa1bb; font-size: 11px; margin-left: 8px; }
+  td.mark { text-align: center; width: 24px; }
+  td.dim { color: #5a6a7c; }
+  td.actions { text-align: right; }
+  td.actions button { padding: 2px 8px; font-size: 10px; margin-left: 4px; }
+  .badge {
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    border-radius: 3px; padding: 1px 6px; border: 1px solid; color: #7fd6e8; border-color: #2f5f6b;
+  }
+  #empty { color: #8fa1bb; padding: 20px 0; }
+  #empty[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="page">
+  <div id="head">
+    <div id="head-row">
+      <div>
+        <h1>SOLUTIONS</h1>
+        <div id="summary">loading…</div>
+      </div>
+      <a id="back" href="index.html" title="back to the game">‹ Back to the game</a>
+    </div>
+    <div id="tools">
+      <input id="search" type="search" placeholder="search levels (fuzzy)" autocomplete="off" spellcheck="false" title="every word must match, letters in order: 'jst nk' finds Just Nuke Them!">
+      <label>pack <select id="pack"><option value="">all packs</option></select></label>
+      <label>show <select id="show">
+        <option value="all">all levels</option>
+        <option value="solved">solved</option>
+        <option value="unsolved">unsolved</option>
+      </select></label>
+      <label><input id="select-all" type="checkbox"> select all shown</label>
+      <span id="note"></span>
+    </div>
+    <div id="server" hidden>
+      <span class="badge">server</span>
+      <label>tier <select id="tier">
+        <option value="1">1 · 10 s</option>
+        <option value="2">2 · 2 min</option>
+        <option value="3">3 · 15 min</option>
+      </select></label>
+      <label>budget <input id="budget" type="number" min="1" max="3600" placeholder="s" style="width: 70px" title="seconds, instead of the tier's"></label>
+      <button id="solve-selected" class="primary" disabled>solve selected</button>
+      <button id="cancel-queue" class="warn" hidden>cancel queue</button>
+      <span id="queue"></span>
+    </div>
+  </div>
+  <div id="main">
+    <table id="table">
+      <thead><tr>
+        <th></th>
+        <th data-sort="level">level</th>
+        <th data-sort="solved" title="a solution exists">✔</th>
+        <th data-sort="saved" class="num" title="lemmings saved / lemmings, and how many the level asks">saved</th>
+        <th data-sort="skills" class="num" title="skills the solution uses">skills</th>
+        <th data-sort="time" class="num" title="the level's clock when the last lemming is in">time</th>
+        <th data-sort="tier" class="num" title="the tier that found it (1: 10 s, 2: 2 min, 3: 15 min) and how long the search took">tier</th>
+        <th data-sort="state">state</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" hidden>No level matches.</div>
+  </div>
+</div>
+<script src="3d/js/vfs.js"></script>
+<script src="3d/js/library.js"></script>
+<script src="3d/js/solutions.js"></script>
+</body>
+</html>
