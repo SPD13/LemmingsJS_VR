@@ -46,6 +46,7 @@
   #summary { font-size: 13px; color: #f0f3f8; }
   #summary b { color: #6fce7e; }
   #summary .pct { color: #ffd866; }
+  #summary .nf { color: #e07a6a; }
   #summary .sub { color: #8fa1bb; font-size: 11px; margin-left: 10px; }
   #tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   #tools label { color: #8fa1bb; font-size: 11px; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
@@ -69,6 +70,8 @@
   tbody td { padding: 4px 8px; border-bottom: 1px solid #1a2231; white-space: nowrap; vertical-align: middle; }
   tbody tr:hover td { background: #161c28; }
   tbody tr.solved td.mark { color: #6fce7e; font-weight: 700; }
+  tbody tr.notfound td.mark { color: #e07a6a; font-weight: 700; }
+  tbody tr.notfound td.found { color: #e07a6a; }
   tbody tr.fresh td { background: #16281a; }
   tbody tr.queued td.state { color: #8fa1bb; }
   tbody tr.running td.state { color: #ffd866; }
@@ -118,7 +121,8 @@
       <label>show <select id="show">
         <option value="all">all levels</option>
         <option value="solved">solved</option>
-        <option value="unsolved">unsolved</option>
+        <option value="unsolved">unsolved, tiers left to try</option>
+        <option value="notfound">not found at tier 3</option>
       </select></label>
       <label><input id="select-all" type="checkbox"> select all shown</label>
       <span id="note"></span>
@@ -142,7 +146,7 @@
       <thead><tr>
         <th></th>
         <th data-sort="level">level</th>
-        <th data-sort="solved" title="a solution exists">✔</th>
+        <th data-sort="solved" title="a green check: a solution exists; a red cross: none found, the widest tier (3, 15 minutes) tried">✔</th>
         <th data-sort="saved" class="num" title="lemmings saved / lemmings, and how many the level asks">saved</th>
         <th data-sort="skills" class="num" title="skills the solution uses">skills</th>
         <th data-sort="time" class="num" title="the level's clock when the last lemming is in">time</th>
