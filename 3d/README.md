@@ -356,7 +356,13 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   the board hangs at, and a board grabbed or rescaled afterwards moves inside
   the room. On the desktop the same room stands around the diorama. It is
   built after the board is up, a plane per frame, and its cost is in
-  `__lem3d.environment.stats`. A style's profile (`3d/profiles/nx-<style>.json`)
+  `__lem3d.environment.stats`. A lemming that falls out through the bottom
+  of the board (CindyLand in Lemmings Redux, a dug-through floor) is not
+  cut off at the edge as the original cuts it: the game drops it a few
+  pixels under the edge, and the diorama keeps it falling, whole, through
+  the room to its floor - the physical floor in a headset, half a metre
+  under the board on the desktop - and only there is it gone. The 2D view
+  keeps the original's cut. A style's profile (`3d/profiles/nx-<style>.json`)
   may carry an `environment` section: `mode` (`clump` or `tile`), a
   `wallpaper` (`style:name` from the style's `backgrounds/`), `backgrounds`
   (`name: prop|wallpaper`), a `palette` (`material` hex list, `bg`),

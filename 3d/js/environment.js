@@ -643,6 +643,18 @@ class Environment {
       + ", centre " + (this._center ? Math.round(this._center.x) + "," + Math.round(this._center.z) : "nominal"));
   }
 
+  /**
+   * The floor's height in world units: the physical floor in a session, a
+   * little below the board on the desktop. The room's root is the diorama's
+   * placement at the time the room was placed, so its own transform - a yaw
+   * and a uniform scale, which leave a height alone - takes the local floor
+   * back to the world, whatever the diorama has been scaled to since.
+   */
+  floorWorldY() {
+    if (this._yFloor === undefined) this.placeDesktop();
+    return this.root.position.y + (this.root.scale.y || 1) * this._yFloor;
+  }
+
   /** On the desktop: the identity, the floor a little below the board, the
    *  rings round the place a player would stand. */
   placeDesktop() {

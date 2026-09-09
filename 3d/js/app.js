@@ -34,6 +34,16 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   // normal objects (hatch/exit/traps) sit just behind them at the same depth
   const LEMMING_Z = TERRAIN_DEPTH / 2 - SPRITE_DEPTH / 2;
   const OBJECT_Z = LEMMING_Z - 0.8;
+  // A lemming that falls out through the level's bottom edge is dropped by
+  // the sim a few pixels under it; the diorama keeps it falling, whole and
+  // uncut, down through the room to its floor (syncFallers in the bridge).
+  // So the lemmings' draws are cut this far below the edge, which no room
+  // floor reaches - the other sprites stay cut at the edge, as the original
+  // cuts them; a lemming this close above the edge can be over it, and gone,
+  // by the next tick; a plain faller drops this many pixels a tick.
+  const FALL_OUT_REACH = 1 << 16;
+  const FALL_OUT_MARGIN = 12;
+  const FALL_SPEED = 3;
   // a NeoLemmix NO_OVERWRITE gadget (a firepit's base under a pillar's top,
   // a trap set into a wall): under the terrain where they overlap, which the
   // slab's depth test gives, so in the slab with the other objects - a hair
@@ -3091,7 +3101,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     // every sprite cut to the level's rectangle, as the original's level
     // bitmap cuts them (clipFrameToBounds): a lava strip laid past the edge
     // so its animation shows no seam ends flush with the slab, not beyond it
-    lemCapture.setBounds(level.width, level.height);
+    // (the lemmings alone run on below the edge, on their way to the floor)
+    lemCapture.setBounds(level.width, level.height, level.height + FALL_OUT_REACH);
     objCapture.setBounds(level.width, level.height);
 
     const gui = new GuiPanel(guiRoot, game, resources);
@@ -3155,6 +3166,80 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     const prevActions = new Map(); // lemming id -> action name, for SFX cues
     const prevBricks = new Map();  // lemming id -> bricks laid, for the warning
     let doorSfxPlayed = false;     // the hatches open together; one sound
+
+    // The lemmings that fell out through the bottom edge. The sim removes one
+    // a few pixels under the edge (checkLevelBoundaries; Lemming.process in
+    // the classic engine), where the original's picture ended anyway; here
+    // there is a room under the board, so a copy takes the fall over from
+    // where the sim let go - the same pose, the frames running on, down at
+    // the speed it had - until its feet reach the room's floor, and only
+    // then is it gone. `nearBottom` keeps the last tick's pose of every
+    // faller close enough to the edge to be over it by the next tick: the
+    // sim does not say why a lemming was removed, so the one that goes from
+    // there, while falling, is the one that fell out.
+    const fallers = new Map();    // lemming id -> the falling copy
+    const nearBottom = new Map(); // lemming id -> its pose at the last tick
+    const FALL_ACTIONS = new Set(["falling", "floating", "gliding"]);
+    const noteNearBottom = (lem, action) => {
+      if (!FALL_ACTIONS.has(action) || lem.y + FALL_OUT_MARGIN < level.height) {
+        nearBottom.delete(lem.id);
+        return;
+      }
+      const last = nearBottom.get(lem.id);
+      nearBottom.set(lem.id, {
+        action, x: lem.x, y: lem.y,
+        // the fall's speed, read off the last two ticks (a floater's or a
+        // glider's is not a faller's, and a glider moves sideways too)
+        dx: last ? lem.x - last.x : 0,
+        dy: last ? Math.max(1, lem.y - last.y) : FALL_SPEED,
+        // the classic engine takes the action with the lemming (Lemming.remove),
+        // and the action is what draws it; a Lemmix lemming draws itself
+        system: lem.action && typeof lem.action.draw === "function" ? lem.action : null,
+        frame: lem.frameIndex != null ? lem.frameIndex : lem.frame,
+      });
+    };
+    const noteFallOut = (lem) => {
+      const last = nearBottom.get(lem.id);
+      if (!last) return;
+      nearBottom.delete(lem.id);
+      if (flatOn) return; // the 2D view is the original's: nothing below the picture
+      fallers.set(lem.id, Object.assign({ lem }, last));
+    };
+    // the room's floor in the level's own pixels (y down from the top edge):
+    // through the diorama's placement, which a headset's grips change mid-session
+    const floorProbe = new THREE.Vector3();
+    const floorYInLevel = () => {
+      worldGroup.updateWorldMatrix(true, false);
+      worldGroup.getWorldPosition(floorProbe);
+      floorProbe.y = environment.floorWorldY();
+      return worldGroup.worldToLocal(floorProbe).y;
+    };
+    const syncFallers = (redrawOnly) => {
+      if (!fallers.size) return;
+      const floorY = floorYInLevel();
+      for (const [id, f] of fallers) {
+        if (!redrawOnly) {
+          f.x += f.dx;
+          f.y += f.dy;
+          f.frame++;
+          // the classic floater's frames index a table (ActionFloatingSystem.floatFrame)
+          // that its action loops from the open parachute, at 8, on reaching the end
+          const FS = Lemmings.ActionFloatingSystem;
+          if (f.system && f.action === "floating" && FS && f.frame >= FS.floatFrame.length) f.frame = 8;
+        }
+        if (f.y >= floorY) { fallers.delete(id); continue; }
+        // a stand-in for the lemming: its pose and place, no longer removed
+        // and with no countdown over it, drawn as the lemming was and under
+        // its key, so the sprite slides on between ticks as it did
+        const ghost = Object.create(f.lem);
+        ghost.removed = false; ghost.teleporting = false; ghost.portalWarpFrame = 0;
+        ghost.explosionTimer = 0; ghost.countdownAction = null;
+        ghost.x = f.x; ghost.y = f.y; ghost.frame = f.frame; ghost.frameIndex = f.frame;
+        lemCapture.tag = id;
+        if (f.system) f.system.draw(lemCapture, ghost);
+        else if (typeof ghost.render === "function") ghost.render(lemCapture);
+      }
+    };
     // (named, so the page can run it once after the game jumps to another frame)
     // (`redrawOnly`: the same frame again - a hover changed how a lemming is drawn - with no sound)
     const syncScene = (redrawOnly) => {
@@ -3302,10 +3387,15 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
         } else if (prevBricks.has(lem.id)) {
           prevBricks.delete(lem.id);
         }
-        if (lem.removed) continue;
+        if (lem.removed) {
+          if (!redrawOnly) noteFallOut(lem);
+          continue;
+        }
+        if (!redrawOnly) noteNearBottom(lem, action);
         lemCapture.tag = lem.id;
         lem.render(lemCapture);
       }
+      syncFallers(redrawOnly);
       if (trapSfxAt) {
         tickSfx = { sfx: SFX.TRAP, x: trapSfxAt.x, y: trapSfxAt.y };
         trapSfxAt = null;
@@ -3320,6 +3410,7 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     // what the bridge remembers from tick to tick, dropped when the game jumps
     const resetSceneMemory = () => {
       prevActions.clear(); prevBricks.clear(); doorSfxPlayed = false; trapSfxAt = null;
+      fallers.clear(); nearBottom.clear();
       lastTickTime = performance.now();
     };
 
@@ -3537,6 +3628,9 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
         on = !!on;
         if (flatOn === on) return;
         flatOn = on;
+        // the 2D view cuts the lemmings at the picture's edge, as the original does
+        lemCapture.setBounds(level.width, level.height, on ? level.height : level.height + FALL_OUT_REACH);
+        if (on) fallers.clear();
         terrain.setFlat(on, FLAT_TERRAIN_Z);
         if (session.editor) session.editor.setFlat(on);
         session.setPortalsVisible(!on);
