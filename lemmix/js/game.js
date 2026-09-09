@@ -181,11 +181,16 @@
     get replaying() { return this.sim.replaying; }
 
     /** Replay mode on: the record is being played back and the player has not taken over. */
-    engageReplay(kind) { this.replayMode = { kind: kind || "attempt", cutVersion: this.sim.cutVersion }; }
+    engageReplay(kind) { this.replayMode = { kind: kind || "attempt", cutVersion: this.sim.cutVersion, recordVersion: this.sim.recordVersion }; }
     disengageReplay() { this.replayMode = null; }
     get replayEngaged() { return !!this.replayMode && this.sim.cutVersion === this.replayMode.cutVersion; }
-    /** The replay engaged is a level's stored solution (a watch, never a clear of the player's). */
-    get watchingSolution() { return this.replayEngaged && this.replayMode.kind === "solution"; }
+    /**
+     * The replay engaged is a level's stored solution, untouched since it was
+     * loaded: a win is the solver's, never a clear of the player's. Any action
+     * of the player's - a cut, or an addition in replay-insert mode - makes
+     * the attempt the player's own, and its result is recorded as such.
+     */
+    get watchingSolution() { return this.replayEngaged && this.replayMode.kind === "solution" && this.sim.recordVersion === this.replayMode.recordVersion; }
     get replayInsert() { return this.sim.replayInsert; }
     toggleReplayInsert() { this.sim.replayInsert = !this.sim.replayInsert; if (this.gui) this.gui.render(true); }
     toggleClearPhysics() {
