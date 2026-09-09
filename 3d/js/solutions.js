@@ -123,16 +123,17 @@ Vfs.boot("").then(async () => {
         : tried && tried.tier ? "tried at <span class='tier'>tier " + tried.tier + "</span>" : "").title = rec ? "found by the tier " + rec.tier + " search in " + Math.round(rec.elapsedMs / 1000) + " s" : tried && tried.tier ? "unsolved at tier " + tried.tier : "never tried";
       td("state", d.state === "running" ? "solving…" : d.state || "");
       const act = td("actions", "");
-      // the level itself, to play, in a new tab
-      const play = document.createElement("button"); play.textContent = "play level";
-      play.title = "open the level in a new tab, to play it";
-      play.addEventListener("click", () => window.open(Vfs.link("index.html?level=" + encodeURIComponent(l.id)), "_blank"));
-      act.appendChild(play);
+      // the level itself, to play, in a new tab - a real link with a new-tab target, which no
+      // popup blocker stops and a middle click or a command-click honours as well
+      const link = (text, href, title, cls) => {
+        const a = document.createElement("a"); a.className = "btn" + (cls ? " " + cls : ""); a.textContent = text; a.title = title;
+        a.href = href; a.target = "_blank"; a.rel = "noopener";
+        a.addEventListener("click", (e) => e.stopPropagation());
+        return a;
+      };
+      act.appendChild(link("play level", Vfs.link("index.html?level=" + encodeURIComponent(l.id)), "open the level in a new tab, to play it"));
       if (d.solved) {
-        const play = document.createElement("button"); play.textContent = "▶ play solution"; play.className = "primary";
-        play.title = "the level in a new tab, its solution replaying from the start";
-        play.addEventListener("click", () => window.open(Vfs.link("index.html?level=" + encodeURIComponent(l.id) + "&solution=1"), "_blank"));
-        act.appendChild(play);
+        act.appendChild(link("\u25B6 play solution", Vfs.link("index.html?level=" + encodeURIComponent(l.id) + "&solution=1"), "the level in a new tab, its solution replaying from the start", "primary"));
       }
       if (serverMode && (d.state === "queued" || d.state === "running")) {
         // in the queue: no second press - "Queued" with its place, or the search's progress bar, and a cancel
