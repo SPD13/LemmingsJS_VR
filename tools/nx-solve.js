@@ -215,10 +215,18 @@ async function main() {
     const { record, nxrp } = await solveLevel(one, env, { tier, budgetMs, trace: opts.trace, log, eventsOnly: opts.events, progress });
     if (opts.events) return;
     console.log(one.id + "  " + describeRecord(record));
-    if (record.status === "error") { process.exitCode = 1; return; }
-    if (record.status !== "solved") { process.exitCode = 3; return; }
-    const file = opts.nxrp ? path.resolve(opts.nxrp) : path.join(outDir, record.file);
     const old = index.levels[one.id];
+    if (record.status !== "solved") {
+      // unsolved (or in error) at this tier: the record says so - the highest tier tried moves on, a solution found
+      // earlier stays as it is (the page shows "tried at tier n", and "not found" after the widest)
+      if (!opts.noIndex && !opts.nxrp && !opts.events) {
+        index.levels[one.id] = old && old.status === "solved" ? Object.assign({}, old, { tier: Math.max(old.tier || 0, record.tier) }) : (old && (old.tier || 0) > record.tier ? old : record);
+        writeIndex(outDir, index);
+      }
+      process.exitCode = record.status === "error" ? 1 : 3;
+      return;
+    }
+    const file = opts.nxrp ? path.resolve(opts.nxrp) : path.join(outDir, record.file);
     if (opts.nxrp || betterRecord(record, old) || opts.force) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, nxrp);
