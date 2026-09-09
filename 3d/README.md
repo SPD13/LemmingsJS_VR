@@ -746,6 +746,11 @@ Exiting VR restores the desktop camera and scale exactly as they were.
   a reload and a replay churn the same way. Any stretch of lava or acid gets
   the same treatment — NeoLemmix marks those horizontally resizable where a
   flamethrower or a candle is not — and `shape: "flat"` opts an object out.
+  Every sprite, slices and flat objects and lemmings alike, is cut to the
+  level's rectangle (`clipFrameToBounds` in `js/bridge.js`), as the
+  original's level bitmap cuts them: authors lay a stretch of lava a few
+  pixels past the edge so its animation shows no seam, and it ends flush with
+  the slab rather than floating beyond it.
 - `js/depth.js` — depth compositing (plan §5.1). A per-pixel depth-class
   buffer (backdrop / terrain / relief / overlay) is built by replaying the
   compositor's terrain piece list with the original draw-flag semantics.

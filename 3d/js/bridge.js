@@ -706,6 +706,71 @@ class SpriteGeometryCache {
 }
 
 /**
+ * A sprite cut to the level's rectangle, as the original draws it.
+ *
+ * NeoLemmix draws its objects and lemmings onto a bitmap the size of the
+ * level, so whatever lies past an edge is simply not there. Level authors
+ * lean on that: a stretch of lava is often placed a few pixels past the edge
+ * (WIDTH 64 at X 270 on a 320-wide level) so its animation shows no gap where
+ * the tiled sprite ends, and the bitmap cuts it flush with the edge. The
+ * diorama draws each sprite as a mesh of its own, and a mesh has no bitmap to
+ * cut it, so the overhang would float beyond the slab. This gives back the
+ * cut: the part of the frame inside the level, as a frame of its own, with
+ * its offsets moved so it is drawn at the same place.
+ *
+ * `x, y` are where the sprite is drawn (the frame's own offsets come on top,
+ * as in every draw call); `flipY` says the frame's rows are drawn bottom to
+ * top, so the rows that survive are counted from the other end. The result is
+ * the frame itself when it lies entirely inside, null when it lies entirely
+ * outside, and otherwise a cropped copy - memoised on the frame and the cut,
+ * so a frame drawn at the same place every tick is cut once.
+ */
+const clippedFrames = new WeakMap(); // frame -> Map(cut -> cropped frame)
+
+function clipFrameToBounds(frame, x, y, flipY, boundsW, boundsH) {
+  const w = frame.width, h = frame.height;
+  const left = x + (frame.offsetX || 0), top = y + (frame.offsetY || 0);
+  const x0 = Math.max(0, left), y0 = Math.max(0, top);
+  const x1 = Math.min(boundsW, left + w), y1 = Math.min(boundsH, top + h);
+  if (x0 <= left && y0 <= top && x1 >= left + w && y1 >= top + h) return frame;
+  if (x1 <= x0 || y1 <= y0) return null;
+  // the cut, in the frame's own pixels
+  const sx = x0 - left, cw = x1 - x0, ch = y1 - y0;
+  const sy = flipY ? h - (y1 - top) : y0 - top;
+  const key = sx + "," + sy + "," + cw + "," + ch;
+  let cuts = clippedFrames.get(frame);
+  if (!cuts) { cuts = new Map(); clippedFrames.set(frame, cuts); }
+  let cut = cuts.get(key);
+  if (cut) return cut;
+  const offsetX = (frame.offsetX || 0) + sx;
+  const offsetY = (frame.offsetY || 0) + (y0 - top);
+  const srcMask = frame.getMask();
+  const srcData = frame.getBuffer ? frame.getBuffer() : null;
+  if (srcData && Lemmings.Frame) {
+    cut = new Lemmings.Frame(cw, ch, offsetX, offsetY);
+  } else {
+    // a Mask (a stencil with no colour), or a frame stand-in: the same shape
+    cut = { width: cw, height: ch, offsetX, offsetY,
+      data: srcData ? new Uint32Array(cw * ch) : new Int8Array(cw * ch),
+      mask: srcData ? new Int8Array(cw * ch) : null };
+    cut.getMask = function () { return srcData ? this.mask : this.data; };
+    if (srcData) {
+      cut.getBuffer = function () { return this.data; };
+      cut.getData = function () { return new Uint8ClampedArray(this.data.buffer); };
+    }
+  }
+  const dstMask = cut.getMask();
+  const dstData = srcData ? cut.getBuffer() : null;
+  for (let r = 0; r < ch; r++) {
+    const from = (sy + r) * w + sx, to = r * cw;
+    dstMask.set(srcMask.subarray(from, from + cw), to);
+    if (dstData) dstData.set(srcData.subarray(from, from + cw), to);
+  }
+  cuts.set(key, cut);
+  return cut;
+}
+
+/**
  * Fake display: implements every draw method the game's render paths use and
  * records the calls. `tag` lets the caller associate captured draws with a
  * lemming id so positions can be interpolated between ticks.
@@ -716,6 +781,29 @@ class SpriteCapture {
     this.particles = [];
     this.tag = null;
     this._ordinals = new Map();
+    // the level's rectangle, once known: every draw is cut to it
+    // (clipFrameToBounds), as the original's level bitmap cuts them
+    this.boundsW = 0;
+    this.boundsH = 0;
+  }
+  /** Cut every draw from now on to a level this wide and this tall. */
+  setBounds(w, h) {
+    this.boundsW = w | 0;
+    this.boundsH = h | 0;
+  }
+  /**
+   * The draw cut to the level: `off` when nothing of it lies inside. The item
+   * is kept even then, since the object list is read back by index.
+   */
+  _cut(item) {
+    if (!(this.boundsW > 0 && this.boundsH > 0)) return item;
+    const src = item.frame || item.mask;
+    const cut = clipFrameToBounds(src, item.x, item.y, item.flipY, this.boundsW, this.boundsH);
+    if (cut === src) return item;
+    if (!cut) item.off = true;
+    else if (item.frame) item.frame = cut;
+    else item.mask = cut;
+    return item;
   }
   begin() {
     this.items.length = 0;
@@ -730,10 +818,10 @@ class SpriteCapture {
     return this.tag + ":" + n;
   }
   drawFrame(frame, x, y) {
-    this.items.push({ frame, x, y, flipY: false, layer: 0, key: this._key() });
+    this.items.push(this._cut({ frame, x, y, flipY: false, layer: 0, key: this._key() }));
   }
   drawFrameFlags(frame, x, y, props) {
-    this.items.push({
+    this.items.push(this._cut({
       frame, x, y,
       flipY: !!props.isUpsideDown,
       // -2 behind the slab (noOverwrite: the DOS flag, a NeoLemmix moving
@@ -744,13 +832,13 @@ class SpriteCapture {
       // a one-way arrow: a decal cut to the one-way pixels rather than to the terrain
       oneWay: !!props.oneWay,
       key: this._key(),
-    });
+    }));
   }
   drawFrameCovered(frame, x, y, r, g, b) {
     this.drawFrame(frame, x, y);
   }
   drawMask(mask, x, y) {
-    this.items.push({ mask, x, y, flipY: false, layer: 0, key: this._key() });
+    this.items.push(this._cut({ mask, x, y, flipY: false, layer: 0, key: this._key() }));
   }
   setPixel(x, y, r, g, b) {
     this.particles.push(x, y, r, g, b);
@@ -807,6 +895,13 @@ class BillboardPool {
     const nextPositions = interpolate ? new Map() : null;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      if (item.off) {
+        // drawn entirely outside the level: nothing to show, as the original shows nothing
+        const mesh = this._acquire(i);
+        mesh.visible = false;
+        mesh.userData.interp = null;
+        continue;
+      }
       const entry = item.frame
         ? this.geometryCache.forFrame(item.frame)
         : this.geometryCache.forMask(item.mask);

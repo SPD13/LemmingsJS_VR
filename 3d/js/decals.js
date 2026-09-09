@@ -90,7 +90,7 @@ class TerrainDecals {
     }
     this.painted.length = 0;
     for (const item of items) {
-      if (!item.frame) continue;
+      if (!item.frame || item.off) continue;
       if (oneWayOnly && !item.oneWay) continue;
       const frame = item.frame;
       const fw = frame.width, fh = frame.height;
