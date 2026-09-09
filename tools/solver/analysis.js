@@ -13,54 +13,64 @@
   const { PM } = Lemmix;
 
   const CELL = 4;            // the field's resolution, in level pixels
-  const COST_AIR = 1, COST_SOLID = 6, COST_STEEL = 60;
+  const COST_AIR = 1, COST_FALL = 0.5, COST_RISE = 4, COST_SOLID = 6, COST_STEEL = 60;
 
-  /** The exit-distance field: cell costs by a bucketed Dijkstra from every exit's trigger area. */
+  /**
+   * The exit-distance field: a lemming's way to an exit over cells, by a
+   * bucketed Dijkstra from every exit's trigger area over the moves a
+   * lemming can make - a step along costs one, a fall next to nothing,
+   * a rise four (a builder, a climber), a solid cell six (a tunnel), steel
+   * sixty - so a ledge above the exit is not "close" when the only way down
+   * is a splat into a walled corridor, and a staircase toward the exit
+   * shows gain brick by brick.
+   */
   function exitField(level) {
     const w = level.width, h = level.height;
     const cw = Math.ceil(w / CELL), ch = Math.ceil(h / CELL);
-    const cost = new Uint8Array(cw * ch);
+    const solid = new Uint8Array(cw * ch);
     const phys = level.physics;
     for (let cy = 0; cy < ch; cy++) for (let cx = 0; cx < cw; cx++) {
-      let solid = 0, steel = 0, n = 0;
+      let n = 0, s = 0, steel = 0;
       for (let y = cy * CELL; y < Math.min(h, (cy + 1) * CELL); y++) for (let x = cx * CELL; x < Math.min(w, (cx + 1) * CELL); x++) {
         const b = phys[x + y * w]; n++;
-        if (b & PM.SOLID) { solid++; if (b & PM.STEEL) steel++; }
+        if (b & PM.SOLID) { s++; if (b & PM.STEEL) steel++; }
       }
-      cost[cx + cy * cw] = steel > n / 2 ? COST_STEEL : solid > n / 2 ? COST_SOLID : COST_AIR;
+      solid[cx + cy * cw] = steel > n / 2 ? 2 : s > n / 2 ? 1 : 0;
     }
     const dist = new Float32Array(cw * ch).fill(Infinity);
     const buckets = [];
-    const push = (d, i) => { (buckets[d] || (buckets[d] = [])).push(i); };
+    const push = (d, i) => { const k = Math.round(d * 2); (buckets[k] || (buckets[k] = [])).push(i); };
     const exits = level.gadgets.filter((g) => g.effectBase === "EXIT" || g.effectBase === "LOCKEXIT");
     for (const g of exits) {
       const r = g.triggerRect;
-      for (let y = r.y0; y < r.y1; y += 1) for (let x = r.x0; x < r.x1; x += 1) {
+      for (let y = r.y0; y < r.y1; y++) for (let x = r.x0; x < r.x1; x++) {
         const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
         if (cx < 0 || cy < 0 || cx >= cw || cy >= ch) continue;
         const i = cx + cy * cw;
         if (dist[i] !== 0) { dist[i] = 0; push(0, i); }
       }
     }
-    for (let d = 0; d < buckets.length; d++) {
-      const b = buckets[d];
+    // the cost of the move into cell t, going dy rows down (a fall) or up (a rise)
+    const cost = (t, dy) => solid[t] === 2 ? COST_STEEL : solid[t] === 1 ? COST_SOLID : dy > 0 ? COST_FALL : dy < 0 ? COST_RISE : COST_AIR;
+    for (let k = 0; k < buckets.length; k++) {
+      const b = buckets[k];
       if (!b) continue;
-      for (let k = 0; k < b.length; k++) {
-        const i = b[k];
-        if (dist[i] !== d) continue;
-        const cx = i % cw, cy = (i / cw) | 0;
+      for (let q = 0; q < b.length; q++) {
+        const t = b[q], d = dist[t];
+        if (Math.round(d * 2) !== k) continue;
+        const tx = t % cw, ty = (t / cw) | 0;
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           if (!dx && !dy) continue;
-          const nx = cx + dx, ny = cy + dy;
-          if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) continue;
-          const j = nx + ny * cw;
-          const nd = d + cost[j];
-          if (nd < dist[j]) { dist[j] = nd; push(nd, j); }
+          const px = tx - dx, py = ty - dy; // the cell the move came from
+          if (px < 0 || py < 0 || px >= cw || py >= ch) continue;
+          const p = px + py * cw;
+          const nd = d + cost(t, dy);
+          if (nd < dist[p]) { dist[p] = nd; push(nd, p); }
         }
       }
     }
     return {
-      cw, ch, dist, cost, exits,
+      cw, ch, dist, solid, exits,
       at(x, y) {
         const cx = Math.max(0, Math.min(cw - 1, Math.floor(x / CELL))), cy = Math.max(0, Math.min(ch - 1, Math.floor(y / CELL)));
         return dist[cx + cy * cw] * CELL;
@@ -129,6 +139,6 @@
   }
 
   Solver.analyse = analyse;
-  Solver.ANALYSIS = { CELL, COST_AIR, COST_SOLID, COST_STEEL };
+  Solver.ANALYSIS = { CELL, COST_AIR, COST_FALL, COST_RISE, COST_SOLID, COST_STEEL };
   if (typeof module !== "undefined" && module.exports) module.exports = { analyse, exitField, features, maxSavable };
 })(typeof window !== "undefined" ? window : globalThis);
