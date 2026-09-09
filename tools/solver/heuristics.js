@@ -98,6 +98,9 @@
     let s = savedWeight * Math.min(o.saved, target) + 300 * bound - (leadOnly ? 20 : 40) * node.skillsUsed - (leadOnly ? 0 : 40 * o.lost);
     s -= (leadOnly ? 1.0 : 0.5) * (o.leadDist || 0); // progress: how near anyone came to an exit
     if (!leadOnly) s -= 2 * (o.crowdDist || 0);      // and how near the crowd stands
+    // the plan through the regions and gates: what it still costs to get in - an opened tunnel, a
+    // freed blocker, a lemming turned the right way all show here at once; no plan at all is dear
+    if (o.planCost !== undefined) s -= 80 * (o.planCost === null ? 25 : Math.min(o.planCost, 25));
     s -= (o.endFrame === Infinity ? o.lastFrame : o.endFrame) / 500;
     if (o.stuck) s -= 20;
     if (o.solved) s += 5000;

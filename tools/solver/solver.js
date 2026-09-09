@@ -100,8 +100,12 @@
       this.transposition.set(hash, node.skillsUsed);
       node.skillsAtNode = node.skillsUsed;
       const boundAtNode = Solver.upperBound(game, this.analysis), outOfTimeAtNode = game.isOutOfTime, nukedAtNode = game.userSetNuking;
+      // the regions and gates as the terrain now stands, and the plan through them for the lead and the crowd
+      const planned = this._plan(target, lemFilter);
       const { events, outcome } = Solver.rollout(world, { field: this.analysis.field, leadId: lemFilter && lemFilter.size === 1 ? Array.from(lemFilter)[0] : null });
       outcome.bound = boundAtNode;
+      outcome.planCost = planned ? planned.cost : null; // null: no way the graph knows of
+      node.planned = planned;
       node.skillsUsed = outcome.skillsUsed; // the plan's own, pending entries fired
       outcome.leadDist = outcome.saved > 0 ? 0 : (outcome.minDist === Infinity ? this.analysis.spanDist : outcome.minDist);
       outcome.solved = outcome.saved >= target && (outcome.ended || outcome.outOfTime || outcome.stuck || outcome.leadDone);
@@ -113,7 +117,7 @@
       if (dead) { this.dropped.dead++; node.state = null; node.events = null; return node; }
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
         game, skillCounts, activeSkills: game.activeSkills, params: this.params, analysis: this.analysis,
-        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan,
+        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan, planned,
       });
       this._hold(node);
       if (outcome.solved) {
@@ -230,7 +234,7 @@
       if (!L0) return null;
       for (const p of cand.perms) {
         const f = p.frame + cand.shift;
-        if (f < world.frame) continue;
+        if (f < world.frame) return null;
         world.step(f - world.frame);
         if (world.frame !== f) return null;
         const L = world.lemmingById(cand.lemId);
@@ -250,9 +254,55 @@
       if (this.trace && this.log && child) {
         const o = child.outcome;
         this.log("  #" + this.expansions + " n" + child.id + "<n" + node.id + " f=" + cand.frame + " " + describe(cand) + " -> saved " + o.saved + "/" + target + " lost " + o.lost + " skills " + child.skillsUsed
-          + (o.stuck ? " stuck" : "") + (o.outOfTime ? " time" : "") + (child.dead ? " DEAD:" + child.dead : "") + (o.solved ? " SOLVED" : "") + " score " + child.score.toFixed(0));
+          + (o.stuck ? " stuck" : "") + (o.outOfTime ? " time" : "") + (child.dead ? " DEAD:" + child.dead : "") + (o.solved ? " SOLVED" : "") + " plan " + (child.planned ? child.planned.cost + (child.planned.leadId ? "/" + child.planned.leadId : "") : "-") + " score " + child.score.toFixed(0));
       }
       return child;
+    }
+
+    /**
+     * The region graph for the terrain as it stands (rebuilt when the terrain
+     * changed since the last), and the plan from the lead's region and heading,
+     * the crowd where most of it is, to an exit: { cost, lead, crowd } or null.
+     */
+    _plan(target, lemFilter) {
+      const world = this.world, game = world.game, R = Solver.Regions;
+      if (!R) return null;
+      // the graph as the terrain and the blockers now stand
+      const BLOCKING = Lemmix.BA.BLOCKING;
+      const blockers = game.lemmings.filter((L) => !L.removed && L.action === BLOCKING).map((L) => ({ x: L.x, y: L.y }));
+      const version = world.terrainVersion + "|" + blockers.map((b) => b.x + "," + b.y).join(";");
+      if (!this._graph || this._graphVersion !== version) {
+        try { this._graph = R.build(world.level, game.physics, blockers); } catch (e) { this._graph = null; }
+        this._graphVersion = version;
+      }
+      const graph = this._graph;
+      if (!graph) return null;
+      const skills = world.skillCounts();
+      const alive = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills);
+      const needed = Math.max(1, Math.min(target, alive.length + game.lemmingsToRelease) - game.lemmingsIn);
+      const perms = R.PERMS, has = { CLIMBER: "isClimber", FLOATER: "isFloater", GLIDER: "isGlider", SWIMMER: "isSwimmer", DISARMER: "isDisarmer", SLIDER: "isSlider" };
+      // the lemmings by region: how many, which way most of them walk, how many lack each permanent skill
+      const groups = new Map();
+      const add = (r, L, n) => {
+        let g = groups.get(r);
+        if (!g) { g = { region: r, n: 0, dx: 0, lacking: {}, lem: null, leadLacking: null, leadPerms: -1 }; for (const p of perms) g.lacking[p] = 0; groups.set(r, g); }
+        g.n += n; g.dx += L ? L.dx * n : 0;
+        const mine = {}; let count = 0;
+        for (const p of perms) { const lacks = !L || !L[has[p]]; if (lacks) g.lacking[p] += n; mine[p] = lacks ? 1 : 0; if (!lacks) count++; }
+        // the group's lead: whichever of them has the most permanent skills already
+        if (count > g.leadPerms) { g.leadPerms = count; g.lem = L; g.leadLacking = mine; }
+      };
+      let one = null;
+      if (lemFilter) { const id = Array.from(lemFilter)[0]; one = alive.find((L) => L.identifier.toUpperCase() === id.toUpperCase()) || null; if (!one) return null; }
+      for (const L of one ? [one] : alive) { const r = R.regionOfLemming(graph, L.x, L.y); if (r >= 0) add(r, L, 1); }
+      if (!one && game.lemmingsToRelease > 0) { const hr = graph.regions.find((r) => r.hatch); if (hr) add(hr.id, null, game.lemmingsToRelease); }
+      if (!groups.size) return null;
+      // a group heads one way when all of it does, else either way (one of them heads into any gate)
+      const list = Array.from(groups.values()).map((g) => ({ region: g.region, dir: Math.abs(g.dx) === g.n ? Math.sign(g.dx) : 0, n: g.n, lacking: g.lacking, leadLacking: g.leadLacking, lem: g.lem }));
+      const all = R.planAll(graph, list, skills, one ? 1 : needed);
+      if (!all) return null;
+      const lg = all.leadGroup;
+      return Object.assign(all, { graph, leadId: lg && lg.lem ? lg.lem.identifier : null, leadRegion: lg ? lg.region : -1 });
     }
 
     /** A milestone for whoever watches: the phase, the work done, the best so far. */

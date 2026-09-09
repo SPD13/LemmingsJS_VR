@@ -264,6 +264,64 @@ runs after this note.
   done to be undone* (the blocker freed) - two-step macros the search
   could take as one edge, the way the keep-at-it step does.
 
+### Later (9 September): the region-and-gate planner
+
+`tools/solver/regions.js` gives the search the forward look the
+exit-distance field lacks. The terrain (four-pixel cells) is cut into
+*regions* - floor a walker crosses on its own, a step up or down at a
+time - each with two ends, a wall or a drop, and *gates* out of it: a drop
+(free under the splat height, a floater per lemming beyond it), a wall
+bashed level, mined down or climbed to its top (steel and the wrong side
+of a one-way wall forbid what they forbid), a gap or a rise built across
+(k builders for its width and height), the floor dug through, and a
+**blocker** standing there - the graph is rebuilt whenever the terrain or
+the set of blockers changes, a blocker cutting its floor in two with a
+bomber on it as the gate between the halves. A plan is a Dijkstra over
+(region, heading): a lemming heading one way reaches that end first; a
+gate the other way costs a *turn* (a blocker and a bomber, 2) unless a
+wall or a blocker ahead turns it for nothing - and not in the exit's
+region, where the exit takes it first.
+
+The plan for everyone (`planAll`): the lemmings grouped by region (those
+still to come at the hatch's landing), one lemming first - the *lead*,
+tried from every group, the one of the group with the most permanent
+skills - through the terrain gates it will open, free for everyone after
+it and walked back through the other way (a bash from the far side of a
+one-way wall); which gates to open is chosen outright - none, each one,
+then greedily one more while the total falls - because the lead's cheapest
+way alone (over the wall and back down with its floater, cost 0) is never
+the one that digs the crowd's tunnel. Then every group pays its own way,
+per-lemming gates by those lacking the skill and closed to a group with
+more lacking it than there are of the skill (twenty lemmings and ten
+climbers: the climb is not the crowd's way). Only the lemmings still needed
+count, the dearest left out.
+
+In the search: the plan's cost is a score term (80 a skill, a level the
+graph sees no way through 25), so a blocker set where the plan wants a
+turn scores *above* its parent - the crux of every "two-step" - and the
+plan's gates boost the candidates that match them (×2.5 the right skill at
+the gate's spot and heading, ×2 a blocker in the region that wants a
+turn, the bomber on the blocker the plan bombs, a permanent skill on the
+lead or on a group that pays it). The trace prints the plan's cost and
+lead per node.
+
+Results: *Keep your hair on, Mr. Lemming* - unsolved before at tiers 1
+and 2, 24 skills at tier 3 - is solved at **tier 1** (29/30 with 11
+skills, four athletes over the wall) and at **tier 2** the by-hand way
+(29/30 with 7 skills, 82 s; the blocker bombed is the one lost, so the
+30/30 builders' staircase of tier 3 stays the record under the saved-first
+objective). Plan costs along the way: 5 at the root, 3 with the second
+athlete over, 2 with the blocker set, 1 after the bash, 0 after the
+bomber. No regression: the fixtures (25), *Snuggle up* (4 skills), *You
+need bashers* (3), *Just Digging* (2), *Fence & Mine* (4), *Up For A Walk*
+(2), *Amphibious* (6), all at tier 1. A plan is computed at every node
+(the graph cached by terrain version and blocker set); on a 320×160 level
+it is a few milliseconds.
+
+Not modelled yet: platformers and stackers as gates, jumpers and
+shimmiers, water and traps as region ends, one-way arrows on the floor
+for a digger, a blocker's own group (a blocking lemming has no region).
+
 ### What limits the solver now
 
 1. **The progress signal.** The exit-distance field costs air one and solid
@@ -272,10 +330,10 @@ runs after this note.
    until the lemming is in. A field that walks down (a fall is free
    downward, a climb impossible without a skill) would rank the staircase
    and the jump chain rightly. The biggest lever.
-2. **Combinations.** A blocker whose only value is holding the crowd for a
-   later bomber scores below doing nothing; the search only finds it when
-   the follow-up is within the same pass's breadth. Two-step lookahead on
-   the lead lemming (a macro of two candidates) is the cheap answer.
+2. **Combinations.** The planner (above) now prices a blocker set for a
+   turn and a bomber to free it; what it does not see - a platformer, a
+   stacker, a jump, a shimmy, water, a trap - still scores as doing
+   nothing until the follow-up shows.
 3. **Timing anchors.** The shimmier from a climb, a jumper at a spot with no
    edge or wall near it, a bomber at a wall's foot: `CLIMB` events every
    eight pixels and `TICK` ring samples cover some; a per-pixel sweep along

@@ -59,6 +59,33 @@ async function main() {
     check("the builder at the edge", r.best && r.best.plan.every((e) => e.type !== "assignment" || (e.x >= 100 && e.x <= 121)), r.best && r.best.plan);
   }
 
+  console.log("regions and gates: the planner reads a wall, steel and a blocker");
+  {
+    const R = Solver.Regions;
+    const level = crossing(300, 5, 5, { BASHER: 3, CLIMBER: 3, BLOCKER: 1, BOMBER: 1 });
+    level.fill(150, 30, 160, 60, PM.SOLID);
+    const g = R.build(level, level.physics);
+    const hatch = g.regions.find((r) => r.hatch), exit = g.regions.find((r) => r.exit);
+    check("hatch and exit regions apart", hatch && exit && hatch !== exit, g.regions.length);
+    check("a bash gate out of the hatch's region", hatch && hatch.gates.some((gt) => gt.kind === "bash" && gt.skill === "BASHER"), hatch && hatch.gates.map((gt) => gt.kind));
+    const p = R.planAll(g, [{ region: hatch.id, dir: 0, n: 5, lacking: { CLIMBER: 5, FLOATER: 5 } }], { BASHER: 3, CLIMBER: 3, BLOCKER: 1, BOMBER: 1 }, 5);
+    check("the crowd's plan: one basher for all", p && p.cost === 1 && p.steps[0].gate.kind === "bash", p && { cost: p.cost, steps: p.steps.map((st) => st.gate.kind) });
+    const steel = crossing(300, 5, 5, { BASHER: 3, CLIMBER: 5 });
+    steel.fill(150, 30, 160, 60, PM.SOLID | PM.STEEL);
+    const gs = R.build(steel, steel.physics);
+    const hs = gs.regions.find((r) => r.hatch);
+    check("steel: no bash gate, a climb gate", hs && !hs.gates.some((gt) => gt.kind === "bash") && hs.gates.some((gt) => gt.kind === "climb"), hs && hs.gates.map((gt) => gt.kind));
+    const ps = R.planAll(gs, [{ region: hs.id, dir: 0, n: 5, lacking: { CLIMBER: 5, FLOATER: 5 } }], { BASHER: 3, CLIMBER: 5 }, 5);
+    check("steel: a climber per lemming", ps && ps.cost === 5, ps && ps.cost);
+    const few = R.planAll(gs, [{ region: hs.id, dir: 0, n: 5, lacking: { CLIMBER: 5, FLOATER: 5 } }], { BASHER: 3, CLIMBER: 3 }, 5);
+    check("steel and three climbers for five: no plan", !few, few && few.cost);
+    // a blocker on the floor cuts the hatch's region: a bomber on it is the gate
+    const gb = R.build(level, level.physics, [{ x: 100, y: 60 }]);
+    const left = gb.regionOf(50, 59), right = gb.regionOf(130, 59);
+    check("a blocker splits the floor", left >= 0 && right >= 0 && left !== right, [left, right]);
+    check("with a bomber as the gate", left >= 0 && gb.regions[left].gates.some((gt) => gt.kind === "unblock" && gt.skill === "BOMBER"), left >= 0 && gb.regions[left].gates.map((gt) => gt.kind));
+  }
+
   console.log("a wall needs one basher, steel needs a climber");
   {
     const level = crossing(300, 5, 5, { BASHER: 3, CLIMBER: 3 });
