@@ -126,7 +126,11 @@
   .lib-star.on { color: #f5c542; }
   .lib-star.on svg path { fill: currentColor; }
   .lib-best { color: #6fce7e; font-variant-numeric: tabular-nums; }
-  .lib-solution { color: #7fd6e8; font-size: 11px; margin-right: 6px; white-space: nowrap; }
+  .lib-solution {
+    color: #7fd6e8; font-size: 11px; margin-right: 6px; white-space: nowrap; font: inherit; font-size: 11px;
+    background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 0 5px; cursor: pointer;
+  }
+  .lib-solution:hover { color: #a9e6f4; border-color: #2f5f6b; background: rgba(127, 214, 232, 0.12); }
   .lib-tile.cleared { background: #16281a; border-color: #2f6b3d; }
   .lib-tile.cleared:hover { background: #1c3522; }
   .lib-sub {

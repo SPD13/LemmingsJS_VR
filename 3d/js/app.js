@@ -5723,8 +5723,9 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
   }
 
   // world library: the level packs, browsed like the levels/ directory
-  const library = new WorldLibrary(factory, "", async (levelId) => {
+  const library = new WorldLibrary(factory, "", async (levelId, opts) => {
     state.levelId = levelId;
+    if (opts && opts.solution) state.solution = true; // the tile's "solution" mark: the level with its solution replaying
     await loadLevel();
     // the catalog is a way into a level in either mode; only the tagging
     // workbench opens the editor with it

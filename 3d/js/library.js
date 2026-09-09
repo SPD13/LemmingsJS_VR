@@ -569,14 +569,15 @@ class WorldLibrary {
 
   /** Enter a level, from either browser: the library comes down and the
    *  level loads. This is what lifts the lock the page starts under. */
-  enter(levelId) {
+  /** Into a level; `opts.solution` asks for it with its stored solution replaying. */
+  enter(levelId, opts) {
     this.locked = false;
     this.dom.close.hidden = false;
     this._clearSearch(false); // next time, the library opens on the level's directory
     this.setRecent(false, false);
     this.setFavorites(false, false);
     this.close();
-    this.enterLevel(levelId);
+    this.enterLevel(levelId, opts || {});
   }
 
   /** The directory being looked at (the root until the tree is loaded). */
@@ -1067,10 +1068,13 @@ class WorldLibrary {
     // playing: a level with a stored solution says so; a cleared level is marked and wears its best time
     if (!this.editMode) {
       if (Solutions.has(level.id)) {
-        const mark = document.createElement("span");
+        // a click plays it: the level opens with its solution replaying (the tile itself only opens the level)
+        const mark = document.createElement("button");
+        mark.type = "button";
         mark.className = "lib-solution";
         mark.textContent = "\u25B6 solution";
-        mark.title = "a solution is available - watch it from the level";
+        mark.title = "play the solution: the level with its stored solution replaying, every action marked on the board";
+        mark.addEventListener("click", (e) => { e.stopPropagation(); this.enter(level.id, { solution: true }); });
         label.insertBefore(mark, star);
       }
       const best = LevelProgress.best(level.id);

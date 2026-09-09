@@ -136,8 +136,9 @@ a session. `?emboss=1&smooth=1` is the usual VR URL.
   forward, W replay-insert mode (your actions add to the replay instead of
   cutting it), C cancel the replay, Enter/Backspace save and load a state
 - **watch the solution**: a NeoLemmix level the solver has solved
-  (`solutions/`, see the root README) wears "▶ solution" in the catalog and
-  a play-in-a-ring button in the HUD's row (in a headset, on the bar beside
+  (`solutions/`, see the root README) wears "▶ solution" in the catalog (a
+  click on it plays the solution straight away) and a play-in-a-ring
+  button in the HUD's row (in a headset, on the bar beside
   restart; the `Watch Solution` hotkey has no default key). It restarts
   the level with the solution as the replay, at normal speed, the REPLAY
   badge on, and every action of the replay marked on the board from the
