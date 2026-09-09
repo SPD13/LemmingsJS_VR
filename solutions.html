@@ -72,6 +72,8 @@
   td.level .title { color: #8fa1bb; font-size: 11px; margin-left: 8px; }
   td.mark { text-align: center; width: 24px; }
   td.dim { color: #5a6a7c; }
+  td .tier { color: #ffd866; font-weight: 600; }
+  td.dim .tier { color: #5a6a7c; font-weight: 400; }
   td.actions { text-align: right; }
   td.actions button { padding: 2px 8px; font-size: 10px; margin-left: 4px; }
   td.actions .job { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
@@ -122,6 +124,7 @@
         <option value="3">3 · 15 min</option>
       </select></label>
       <label>budget <input id="budget" type="number" min="1" max="3600" placeholder="s" style="width: 70px" title="seconds, instead of the tier's"></label>
+      <label title="a level unsolved at its tier goes on to the next tier at once (2 min, then 15 min), before the queue moves on"><input id="escalate" type="checkbox" checked> next tier when unsolved</label>
       <button id="solve-selected" class="primary" disabled>solve selected</button>
       <button id="cancel-queue" class="warn" hidden>cancel queue</button>
       <span id="queue"></span>
@@ -136,7 +139,7 @@
         <th data-sort="saved" class="num" title="lemmings saved / lemmings, and how many the level asks">saved</th>
         <th data-sort="skills" class="num" title="skills the solution uses">skills</th>
         <th data-sort="time" class="num" title="the level's clock when the last lemming is in">time</th>
-        <th data-sort="tier" class="num" title="the tier that found it (1: 10 s, 2: 2 min, 3: 15 min) and how long the search took">tier</th>
+        <th data-sort="tier" title="the tier that found the solution (1: 10 s, 2: 2 min, 3: 15 min per level, each wider than the last) and how long its search took; for an unsolved level, the highest tier tried">found at</th>
         <th data-sort="state">state</th>
         <th></th>
       </tr></thead>

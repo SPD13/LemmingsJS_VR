@@ -18,7 +18,7 @@ Vfs.boot("").then(async () => {
   const $ = (id) => document.getElementById(id);
   const dom = {
     summary: $("summary"), search: $("search"), pack: $("pack"), show: $("show"), selectAll: $("select-all"), note: $("note"),
-    server: $("server"), tier: $("tier"), budget: $("budget"), solveSelected: $("solve-selected"), cancel: $("cancel-queue"),
+    server: $("server"), tier: $("tier"), budget: $("budget"), escalate: $("escalate"), solveSelected: $("solve-selected"), cancel: $("cancel-queue"),
     queue: $("queue"), rows: $("rows"), empty: $("empty"), table: $("table"),
   };
   $("back").href = Vfs.link("index.html");
@@ -55,7 +55,8 @@ Vfs.boot("").then(async () => {
     const rec = Solutions.info(l.id);
     return {
       solved: !!rec, saved: rec ? rec.saved : -1, skills: rec ? rec.skillsUsed : Infinity, time: rec ? rec.completionFrame : Infinity,
-      tier: rec ? rec.tier : 0, state: jobState.get(l.id) === "solved" && !rec ? "" : jobState.get(l.id) || "", rec,
+      tier: rec ? rec.tier : -((Solutions.index && Solutions.index.levels[l.id] || {}).tier || 0),
+      state: jobState.get(l.id) === "solved" && !rec ? "" : jobState.get(l.id) || "", rec,
     };
   };
 
@@ -116,7 +117,10 @@ Vfs.boot("").then(async () => {
       td("num" + (rec ? "" : " dim"), rec ? rec.saved + " / " + rec.count + " <span class='dim'>(" + rec.needed + ")</span>" : (l.level.lemmings || "") + " <span class='dim'>(" + (l.level.save || "") + ")</span>");
       td("num" + (rec ? "" : " dim"), rec ? String(rec.skillsUsed) : "");
       td("num" + (rec ? "" : " dim"), rec ? mmss(rec.completionFrame) : "");
-      td("num" + (rec ? "" : " dim"), rec ? rec.tier + " <span class='dim'>· " + Math.round(rec.elapsedMs / 1000) + " s</span>" : "");
+      // which tier found it (and how long its search took); an unsolved level says the highest tier tried
+      const tried = Solutions.index && Solutions.index.levels[l.id];
+      td(rec ? "" : "dim", rec ? "<span class='tier'>tier " + rec.tier + "</span> <span class='dim'>· " + Math.round(rec.elapsedMs / 1000) + " s</span>"
+        : tried && tried.tier ? "tried at <span class='tier'>tier " + tried.tier + "</span>" : "").title = rec ? "found by the tier " + rec.tier + " search in " + Math.round(rec.elapsedMs / 1000) + " s" : tried && tried.tier ? "unsolved at tier " + tried.tier : "never tried";
       td("state", d.state === "running" ? "solving…" : d.state || "");
       const act = td("actions", "");
       // the level itself, to play, in a new tab
@@ -136,7 +140,8 @@ Vfs.boot("").then(async () => {
         if (d.state === "queued") {
           const q = document.createElement("span"); q.className = "queued";
           const at = lastStatus ? lastStatus.pending.findIndex((j) => j.id === l.id) + 1 : 0;
-          q.textContent = "queued" + (at > 0 ? " #" + at : "");
+          const job = lastStatus && lastStatus.pending.find((j) => j.id === l.id);
+          q.textContent = "queued" + (at > 0 ? " #" + at : "") + (job ? " · tier " + job.tier : "");
           job.appendChild(q);
         } else {
           const solving = document.createElement("span"); solving.className = "solving";
@@ -204,7 +209,7 @@ Vfs.boot("").then(async () => {
     const p = st.running.progress || {};
     const elapsed = Math.round((Date.now() - st.running.startedAt) / 1000);
     const budget = Math.round((st.running.budgetMs || 0) / 1000);
-    let detail = p.phase || "starting";
+    let detail = "tier " + st.running.tier + ": " + (p.phase || "starting");
     if (p.best) detail += ", best " + p.best.saved + "/" + (p.needed || "?") + " with " + p.best.skillsUsed + " skills";
     else if (p.expansions) detail += ", " + p.expansions + " tries";
     if (budget && elapsed > budget * 1.5 + 5) detail += " (past its " + budget + " s budget)";
@@ -221,7 +226,7 @@ Vfs.boot("").then(async () => {
     render();
   }
   async function enqueue(ids) {
-    const body = { levels: ids, tier: parseInt(dom.tier.value, 10) };
+    const body = { levels: ids, tier: parseInt(dom.tier.value, 10), escalate: dom.escalate.checked };
     const budget = parseFloat(dom.budget.value);
     if (budget > 0) body.budget = budget;
     try {
