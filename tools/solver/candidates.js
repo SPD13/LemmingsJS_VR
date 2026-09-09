@@ -28,6 +28,7 @@
       ["FLOATER", "at", 0.4], ["GLIDER", "at", 0.3], ["SWIMMER", "at", 0.3], ["DISARMER", "at", 0.3], ["SLIDER", "at", 0.2], ["CLONER", "at", 0.3], ["BOMBER", "at", 0.2], ["STACKER", "at", 0.2], ["PLATFORMER", "at", 0.2]],
     SHRUG: [["BUILDER", "at", 1.0], ["WALKER", "at", 0.6], ["BASHER", "at", 0.7], ["PLATFORMER", "at", 0.7], ["STACKER", "at", 0.5], ["MINER", "at", 0.5], ["DIGGER", "at", 0.5], ["BLOCKER", "at", 0.4], ["JUMPER", "at", 0.4], ["CLIMBER", "at", 0.3]],
     WORK_END: [["BUILDER", "at", 0.8], ["BASHER", "at", 0.8], ["MINER", "at", 0.7], ["DIGGER", "at", 0.7], ["BLOCKER", "at", 0.5], ["PLATFORMER", "at", 0.5], ["STACKER", "at", 0.4], ["CLIMBER", "at", 0.4], ["JUMPER", "at", 0.3]],
+    CLIMB: [["SHIMMIER", "at", 0.9], ["JUMPER", "at", 0.4], ["BOMBER", "at", 0.3]],
     TICK: [["DIGGER", "ring", 0.6], ["BASHER", "ring", 0.6], ["MINER", "ring", 0.5], ["BUILDER", "ring", 0.5], ["BOMBER", "ring", 0.4], ["BLOCKER", "ring", 0.5], ["CLIMBER", "at", 0.3]],
   };
   const DEATH_TEMPLATES = {
@@ -174,11 +175,24 @@
       const firstExit = events.find((e) => e.type === "EXIT");
       if (firstExit && ctx.game.currSpawnInterval > 4) push({ kind: "si", si: 4, frame: firstExit.frame, why: "EXIT", prior: 0.45 });
     }
-    // the nuke: the count made and the rest going nowhere
+    // the nuke: the count made and the rest going nowhere - or, with no skill that
+    // could change anything (none at all, or a crowd going nowhere), the explosions
+    // themselves as the plan (Just Nuke Them!), at the root and where the crowd stalls
     if (outcome.saved >= analysis.needCount && analysis.needCount > 0) {
       const exits = events.filter((e) => e.type === "EXIT");
       const lastExit = exits.length ? exits[exits.length - 1].frame : nodeFrame;
       if (outcome.stuck || !outcome.ended || outcome.endFrame - lastExit > 340) push({ kind: "nuke", frame: lastExit + 1, why: "done", prior: 0.4 });
+    } else if (!ctx.game.userSetNuking) {
+      let skillsLeft = 0;
+      for (const k of Object.keys(skillCounts)) skillsLeft += skillCounts[k];
+      if (skillsLeft === 0 || outcome.stuck) {
+        const firstTurn = events.find((e) => e.type === "TURN" || e.type === "FALL");
+        push({ kind: "nuke", frame: nodeFrame, why: "root", prior: skillsLeft === 0 ? 0.8 : 0.2 });
+        if (firstTurn) push({ kind: "nuke", frame: firstTurn.frame, why: "crowd", prior: skillsLeft === 0 ? 0.7 : 0.2 });
+        if (outcome.stuck) push({ kind: "nuke", frame: Math.max(nodeFrame, outcome.lastFrame - 2 * 85), why: "stuck", prior: skillsLeft === 0 ? 0.6 : 0.25 });
+        // with no skill at all the nuke's moment is the whole question: every ten seconds of the rollout
+        if (skillsLeft === 0) for (let f = nodeFrame + 170; f < outcome.lastFrame; f += 170) push({ kind: "nuke", frame: f, why: "sweep", prior: 0.5 });
+      }
     }
     return out;
   }

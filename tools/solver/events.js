@@ -66,8 +66,9 @@
     const startFrame = game.currentIteration;
     const startSaved = game.lemmingsIn, startRemoved = game.lemmingsRemoved;
     let lastTerrain = world.terrainVersion, lastCounters = startSaved + startRemoved, lastChange = startFrame;
-    let stuck = false, frames = 0;
+    let stuck = false, frames = 0, leadDone = false;
     const field = opts.field || null;
+    const leadId = opts.leadId ? String(opts.leadId).toUpperCase() : null; // the lead pass: the rollout is over when this lemming is
     let minDist = Infinity; // the nearest any controllable lemming came to an exit
     const permsOf = (L) => (L.isClimber ? 1 : 0) | (L.isFloater ? 2 : 0) | (L.isGlider ? 4 : 0) | (L.isSwimmer ? 8 : 0) | (L.isDisarmer ? 16 : 0) | (L.isSlider ? 32 : 0);
     const emit = (type, w, L, frame, extra) => {
@@ -123,6 +124,9 @@
           else if (a === BA.WALKING && AIRBORNE.has(was)) emit("LAND", w, L, frame);
           else if (a === BA.FALLING && !L.initialFall && (was === BA.WALKING || was === BA.ASCENDING || JOBS.has(was))) {
             w.lastAnchor = emit("FALL", w, L, frame, { edgeX: w.x, edgeY: w.y, ring: w.ring.slice() });
+          } else if (a === BA.FALLING && (was === BA.CLIMBING || was === BA.SHIMMYING || was === BA.REACHING)) {
+            // off the wall or the ceiling: an anchor too (a shimmier, a floater), its ring the climb
+            w.lastAnchor = emit("FALL", w, L, frame, { edgeX: w.x, edgeY: w.y, ring: w.ring.slice(), offWall: true });
           } else if (a === BA.SHRUGGING) emit("SHRUG", w, L, frame);
           else if (JOBS.has(was) && !JOBS.has(a) && a !== BA.SHRUGGING) emit("WORK_END", w, L, frame, { job: was });
           else if (a === BA.CLIMBING && was === BA.WALKING) w.lastAnchor = emit("TURN", w, L, frame, { wallX: L.x, ring: w.ring.slice(), climbing: true });
@@ -140,6 +144,8 @@
         if (w.lastEvent >= 0 && frame - w.lastEvent >= TICK_EVERY && a === BA.WALKING) {
           emit("TICK", w, L, frame, { ring: w.ring.slice() });
         }
+        // up a wall: every few pixels a moment for a shimmier (the ceiling above) or a jump off
+        if (a === BA.CLIMBING && (L.y & 7) === 0) emit("CLIMB", w, L, frame);
         w.push(frame, L);
         w.action = a; w.dx = L.dx; w.x = L.x; w.y = L.y;
       }
@@ -154,6 +160,15 @@
       for (const s of game.sounds) {
         if (s.name === "oing2" || s.name === "skill_add") events.push({ type: "TRIGGER", kind: "pickup", frame, x: s.x, y: s.y });
         else if (s.name === "portal") events.push({ type: "TRIGGER", kind: "portal", frame, x: s.x, y: s.y });
+      }
+      // the lead pass: the lead gone (saved or lost) or pacing a loop for a while ends the rollout
+      if (leadId) {
+        const wi = watches.findIndex((w) => w.id.toUpperCase() === leadId);
+        if (wi >= 0) {
+          const L = game.lemmings[wi], w = watches[wi];
+          if (L.removed || L.cannotReceiveSkills) { if (frame - w.lastEvent > 2) { leadDone = true; break; } }
+          else if (w.looping && frame - w.lastEvent > 2 * TICK_EVERY && world.terrainVersion === lastTerrain && !WORKING.has(L.action)) { stuck = true; break; }
+        }
       }
       // stuck: the counters and terrain unchanged, nothing to release, everyone pacing or blocking
       const counters = game.lemmingsIn + game.lemmingsRemoved;
@@ -172,11 +187,11 @@
     const outcome = {
       saved: game.lemmingsIn, lost: game.lemmingsRemoved - game.lemmingsIn, alive: game.lemmingsOut,
       toRelease: game.lemmingsToRelease, endFrame: world.ended ? game.currentIteration : Infinity,
-      stuck, ended: world.ended, outOfTime: game.isOutOfTime, capped: !world.ended && !stuck && !game.isOutOfTime,
+      stuck, ended: world.ended, outOfTime: game.isOutOfTime, capped: !world.ended && !stuck && !game.isOutOfTime && !leadDone, leadDone,
       lastFrame: game.currentIteration, skillsUsed: world.skillsUsed(), need: level.needCount, minDist,
     };
     if (outcome.outOfTime && !outcome.ended) outcome.endFrame = game.currentIteration;
-    outcome.solved = outcome.saved >= level.needCount && level.needCount > 0 && (outcome.ended || outcome.outOfTime || stuck);
+    outcome.solved = outcome.saved >= level.needCount && level.needCount > 0 && (outcome.ended || outcome.outOfTime || stuck || leadDone);
     return { events, outcome, frames };
   }
 

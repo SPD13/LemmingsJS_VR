@@ -96,16 +96,16 @@
       if (seenWith !== undefined && seenWith <= node.skillsUsed && !isRoot) { this.dropped.seen++; return null; }
       this.transposition.set(hash, node.skillsUsed);
       node.skillsAtNode = node.skillsUsed;
-      const boundAtNode = Solver.upperBound(game, this.analysis), outOfTimeAtNode = game.isOutOfTime;
-      const { events, outcome } = Solver.rollout(world, { field: this.analysis.field });
+      const boundAtNode = Solver.upperBound(game, this.analysis), outOfTimeAtNode = game.isOutOfTime, nukedAtNode = game.userSetNuking;
+      const { events, outcome } = Solver.rollout(world, { field: this.analysis.field, leadId: lemFilter && lemFilter.size === 1 ? Array.from(lemFilter)[0] : null });
       outcome.bound = boundAtNode;
       node.skillsUsed = outcome.skillsUsed; // the plan's own, pending entries fired
       outcome.leadDist = outcome.saved > 0 ? 0 : (outcome.minDist === Infinity ? this.analysis.spanDist : outcome.minDist);
-      outcome.solved = outcome.saved >= target && (outcome.ended || outcome.outOfTime || outcome.stuck);
+      outcome.solved = outcome.saved >= target && (outcome.ended || outcome.outOfTime || outcome.stuck || outcome.leadDone);
       node.outcome = outcome;
       node.events = events;
       node.score = Solver.score(node, this.analysis, target);
-      const dead = outcome.solved ? null : Solver.deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsLeft);
+      const dead = outcome.solved ? null : Solver.deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsLeft, nukedAtNode);
       node.dead = dead;
       if (dead) { this.dropped.dead++; node.state = null; return node; }
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
@@ -149,6 +149,13 @@
       return child;
     }
 
+    /** Nothing left to search for: every lemming saved with no skill - or, seeding the crowd (a lead pass), the target made with none. */
+    _done(target, lemFilter) {
+      const b = this.best;
+      if (!b || b.skillsUsed !== 0) return false;
+      return b.saved >= this.analysis.maxSavable || (!!lemFilter && b.saved >= target);
+    }
+
     /**
      * Search from `seeds` (plans) for `target` saved, giving skills only to
      * `lemFilter`'s lemmings when given, until `deadline` (ms, absolute) or
@@ -173,20 +180,28 @@
         if (seed.frame > 0) this.world.step(seed.frame);
         const node = this._makeNode(null, Solver.copyPlan(seed.plan), target, lemFilter, seed.frame === 0 && !seed.plan.length);
         if (node) { node.isRoot = true; pushEdges(node); }
-        if (this.best && this.best.saved >= this.analysis.maxSavable && this.best.skillsUsed === 0) return this.best;
+        if (this._done(target, lemFilter)) return this.best;
       }
-      let turn = 0;
+      // which depth's turn: the one with the fewest pops so far, weighted toward the
+      // shallow ones (a plain rotation goes straight down, every expansion opening a
+      // new deeper heap that is visited next)
+      const pops = new Map();
       while (total > 0 && now() < deadline) {
-        const depths = Array.from(open.keys()).filter((d) => open.get(d).size > 0).sort((a, b) => a - b);
-        if (!depths.length) break;
-        const heap = open.get(depths[turn % depths.length]);
-        turn++;
+        let heap = null, bestKey = Infinity;
+        for (const [d, h] of open) {
+          if (!h.size) continue;
+          const key = ((pops.get(d) || 0) + 1) * (1 + 0.5 * d);
+          if (key < bestKey) { bestKey = key; heap = h; pops.set(-1, d); }
+        }
+        if (!heap) break;
+        const d = pops.get(-1);
+        pops.set(d, (pops.get(d) || 0) + 1);
         const edge = heap.pop();
         total--;
         if (this.best && edge.node.skillsUsed + 1 > this.best.skillsUsed && this.best.saved >= this.analysis.maxSavable) continue;
         const child = this._expand(edge.node, edge.cand, target, lemFilter);
         if (!child || child.dead) continue;
-        if (child.solved && child.outcome.saved >= this.analysis.maxSavable && child.skillsUsed === 0) break;
+        if (this._done(target, lemFilter)) break;
         pushEdges(child);
       }
       return this.best;
