@@ -58,19 +58,22 @@ Vfs.boot("").then(async () => {
     return sec ? m + "m " + sec + "s" : m + "m";
   };
   const mmss = (frames) => { const s = Math.floor(frames / 17); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  // no solution after the widest tier: "not found" (a red cross) - the solver gave the level all it has
+  const notFound = (id) => { const t = Solutions.index && Solutions.index.levels[id]; return !!(t && t.status !== "solved" && t.tier >= 3); };
   const rowData = (l) => {
     const rec = Solutions.info(l.id);
     return {
-      solved: !!rec, saved: rec ? rec.saved : -1, skills: rec ? rec.skillsUsed : Infinity, time: rec ? rec.completionFrame : Infinity,
+      solved: !!rec, notFound: !rec && notFound(l.id), saved: rec ? rec.saved : -1, skills: rec ? rec.skillsUsed : Infinity, time: rec ? rec.completionFrame : Infinity,
       tier: rec ? rec.tier : -((Solutions.index && Solutions.index.levels[l.id] || {}).tier || 0),
       state: jobState.get(l.id) === "solved" && !rec ? "" : jobState.get(l.id) || "", rec,
     };
   };
 
   function summary() {
-    const total = levels.length, solved = levels.filter((l) => Solutions.has(l.id)).length;
+    const total = levels.length, solved = levels.filter((l) => Solutions.has(l.id)).length, nf = levels.filter((l) => notFound(l.id)).length;
     const pct = total ? Math.round(1000 * solved / total) / 10 : 0;
     dom.summary.innerHTML = "<b>" + solved + "</b> of <b>" + total + "</b> levels have a solution <span class='pct'>(" + pct + "%)</span>"
+      + (nf ? " · <span class='nf'>" + nf + " not found at tier 3</span>" : "")
       + "<span class='sub'>" + folders.size + " level folders, " + packs.length + " packs · " + (serverMode ? "server mode: the launcher can solve levels" : "static mode: solutions are those shipped") + "</span>";
   }
 
@@ -83,7 +86,8 @@ Vfs.boot("").then(async () => {
       if (pack.startsWith("pack:") && l.pack !== pack.slice(5)) continue;
       const d = rowData(l);
       if (show === "solved" && !d.solved) continue;
-      if (show === "unsolved" && d.solved) continue;
+      if (show === "unsolved" && (d.solved || d.notFound)) continue;
+      if (show === "notfound" && !d.notFound) continue;
       let score = 0;
       if (q) {
         score = fuzzyScore(q, l.where.join(" ") + " " + l.level.title + " " + l.id.replace(/[_/]/g, " "));
@@ -94,8 +98,9 @@ Vfs.boot("").then(async () => {
     const cmp = (a, b) => {
       if (dom.search.value.trim() && sortKey === "level") return b.score - a.score;
       const k = sortKey;
-      let x = k === "level" ? a.l.order : k === "solved" ? (a.d.solved ? 1 : 0) : k === "state" ? a.d.state : a.d[k];
-      let y = k === "level" ? b.l.order : k === "solved" ? (b.d.solved ? 1 : 0) : k === "state" ? b.d.state : b.d[k];
+      const mark = (d) => (d.solved ? 1 : d.notFound ? -1 : 0);
+      let x = k === "level" ? a.l.order : k === "solved" ? mark(a.d) : k === "state" ? a.d.state : a.d[k];
+      let y = k === "level" ? b.l.order : k === "solved" ? mark(b.d) : k === "state" ? b.d.state : b.d[k];
       if (x === y) return a.l.order - b.l.order;
       return (x < y ? -1 : 1) * sortDir;
     };
@@ -111,7 +116,7 @@ Vfs.boot("").then(async () => {
     for (const { l, d } of rows) {
       const tr = document.createElement("tr");
       tr.dataset.id = l.id;
-      tr.className = (d.solved ? "solved " : "") + (fresh.has(l.id) ? "fresh " : "") + (d.state === "queued" ? "queued" : d.state === "running" ? "running" : d.state === "error" || d.state === "unsolved" ? "failed" : "");
+      tr.className = (d.solved ? "solved " : d.notFound ? "notfound " : "") + (fresh.has(l.id) ? "fresh " : "") + (d.state === "queued" ? "queued" : d.state === "running" ? "running" : d.state === "error" || d.state === "unsolved" ? "failed" : "");
       const td = (cls, html) => { const c = document.createElement("td"); if (cls) c.className = cls; c.innerHTML = html; tr.appendChild(c); return c; };
       // the checkbox
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = selected.has(l.id);
@@ -119,15 +124,15 @@ Vfs.boot("").then(async () => {
       const c0 = document.createElement("td"); c0.appendChild(cb); tr.appendChild(c0);
       const title = l.level.title && l.level.title !== l.where[l.where.length - 1] ? "<span class='title'>" + escape(l.level.title) + "</span>" : "";
       td("level", "<span class='where'>" + escape(l.where.join(" › ")) + " </span><span class='name'>" + l.ordinal + "</span>" + title).title = l.id;
-      td("mark", d.solved ? "✔" : "");
+      td("mark", d.solved ? "\u2714" : d.notFound ? "\u2718" : "").title = d.solved ? "a solution exists" : d.notFound ? "not found: no solution after tier 3, the widest search" : "";
       const rec = d.rec;
       td("num" + (rec ? "" : " dim"), rec ? rec.saved + " / " + rec.count + " <span class='dim'>(" + rec.needed + ")</span>" : (l.level.lemmings || "") + " <span class='dim'>(" + (l.level.save || "") + ")</span>");
       td("num" + (rec ? "" : " dim"), rec ? String(rec.skillsUsed) : "");
       td("num" + (rec ? "" : " dim"), rec ? mmss(rec.completionFrame) : "");
       // which tier found it (and how long its search took); an unsolved level says the highest tier tried
       const tried = Solutions.index && Solutions.index.levels[l.id];
-      td(rec ? "" : "dim", rec ? "<span class='tier'>tier " + rec.tier + "</span> <span class='dim'>· " + human(rec.elapsedMs / 1000) + "</span>"
-        : tried && tried.tier ? "tried at <span class='tier'>tier " + tried.tier + "</span>" : "").title = rec ? "found by the tier " + rec.tier + " search in " + human(rec.elapsedMs / 1000) : tried && tried.tier ? "unsolved at tier " + tried.tier : "never tried";
+      td(rec ? "" : d.notFound ? "found" : "dim", rec ? "<span class='tier'>tier " + rec.tier + "</span> <span class='dim'>· " + human(rec.elapsedMs / 1000) + "</span>"
+        : d.notFound ? "not found" : tried && tried.tier ? "tried at <span class='tier'>tier " + tried.tier + "</span>" : "").title = rec ? "found by the tier " + rec.tier + " search in " + human(rec.elapsedMs / 1000) : tried && tried.tier ? "unsolved at tier " + tried.tier : "never tried";
       td("state", d.state === "running" ? "solving…" : d.state || "");
       const act = td("actions", "");
       // the level itself, to play, in a new tab - a real link with a new-tab target, which no
