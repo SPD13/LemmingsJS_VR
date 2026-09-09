@@ -143,7 +143,7 @@ async function main() {
     level.fill(120, 60, 150, 100, 0);
     const r = solve(level, 3000);
     check("unsolved", !r.best, r.best);
-    check("under 5 expansions", r.stats.expansions < 5, r.stats.expansions);
+    check("under 40 expansions (the nuke's moments tried, nothing else)", r.stats.expansions < 40, r.stats.expansions);
   }
 
   console.log("two skills wanted on one frame land on two frames");

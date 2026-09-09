@@ -73,11 +73,11 @@
    * `outcome` the rollout's; with no skill left the rollout is the branch's
    * whole future.
    */
-  function deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsAtNode) {
+  function deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsAtNode, nuked) {
     if (outcome.saved >= target) return null;
     if (outOfTimeAtNode) return "time";
     if (boundAtNode < target) return "count";
-    if (skillsAtNode === 0 && !outcome.capped) return "skills";
+    if (skillsAtNode === 0 && nuked && !outcome.capped) return "skills"; // nothing left to do, the nuke included
     return null;
   }
 
