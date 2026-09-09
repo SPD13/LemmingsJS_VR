@@ -550,7 +550,19 @@
         }
         // every step, marked whose it is: the lead's per-lemming gates are the lead's alone
         const all = lw.steps.map((st) => Object.assign({}, st, { who: "lead" }));
-        for (const g of parts) for (const st of g.steps) all.push(Object.assign({}, st, { who: "group" }));
+        for (const g of parts) for (const st of g.steps) all.push(Object.assign({}, st, { who: "group", group: g }));
+        // the whole route's skills must fit the stock: four climbs for one lemming with three climbers is no way
+        const used = {};
+        const spend = (skill, n) => { if (!skill) return; used[skill] = (used[skill] || 0) + n; };
+        for (const st of all) {
+          const gt = st.gate;
+          if (gt.twin || (lw.opened.has(gt) && st.who === "group")) continue;
+          const per = gt.perLemming ? (st.who === "lead" ? (lead.lacking[gt.skill] !== undefined ? lead.lacking[gt.skill] : 1) : (st.group.lacking && st.group.lacking[gt.skill] !== undefined ? st.group.lacking[gt.skill] : st.group.n)) : 1;
+          spend(gt.skill, gt.cost * per);
+          if (gt.also) spend(gt.also, per);
+          if (st.turn && st.how === "BLOCKER") { spend("BLOCKER", 1); spend("BOMBER", 1); } else if (st.turn && st.how) spend(st.how, 1);
+        }
+        for (const k of Object.keys(used)) if (used[k] > (skills[k] || 0)) return null;
         return { cost: total, steps: all, lead: lw.steps, leadGroup, groups: parts, order };
       };
       const consider = (r) => { if (r && (!best || r.cost < best.cost)) best = r; return r; };

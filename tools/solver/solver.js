@@ -53,6 +53,8 @@
       this.log = opts.log || null; this.trace = !!opts.trace;
       this.onProgress = opts.onProgress || null; // (info) => the page's progress bar: phase, expansions, best so far
       this.phase = "";
+      this.noise = 0; this.rng = Math.random; // a restart's noise on the priors, from a seeded generator
+      this.trimmed = false; // whether a frontier ever lost edges to its cap (else a restart would only repeat the search)
       this._lastReport = 0;
       this.nodes = 0; this.expansions = 0; this.dropped = { dead: 0, seen: 0, refused: 0, ended: 0 };
       this.transposition = new Map();
@@ -102,7 +104,8 @@
       const boundAtNode = Solver.upperBound(game, this.analysis), outOfTimeAtNode = game.isOutOfTime, nukedAtNode = game.userSetNuking;
       // the regions and gates as the terrain now stands, and the plan through them for the lead and the crowd
       const planned = this._plan(target, lemFilter);
-      const { events, outcome } = Solver.rollout(world, { field: this.analysis.field, leadId: lemFilter && lemFilter.size === 1 ? Array.from(lemFilter)[0] : null });
+      const { events, outcome } = Solver.rollout(world, { field: this.analysis.field, leadId: lemFilter && lemFilter.size === 1 ? Array.from(lemFilter)[0] : null,
+        tickEvery: this.params.tickEvery, predict: !lemFilter && this.params.predict !== false && !(typeof process !== "undefined" && process.env.NX_NO_PREDICT) });
       outcome.bound = boundAtNode;
       outcome.planCost = planned ? planned.cost : null; // null: no way the graph knows of
       node.planned = planned;
@@ -254,7 +257,7 @@
       if (this.trace && this.log && child) {
         const o = child.outcome;
         this.log("  #" + this.expansions + " n" + child.id + "<n" + node.id + " f=" + cand.frame + " " + describe(cand) + " -> saved " + o.saved + "/" + target + " lost " + o.lost + " skills " + child.skillsUsed
-          + (o.stuck ? " stuck" : "") + (o.outOfTime ? " time" : "") + (child.dead ? " DEAD:" + child.dead : "") + (o.solved ? " SOLVED" : "") + " plan " + (child.planned ? child.planned.cost + (child.planned.leadId ? "/" + child.planned.leadId : "") : "-") + " score " + child.score.toFixed(0));
+          + (o.stuck ? " stuck" : "") + (o.predicted ? " foretold[" + o.foretold.slice(0, 4).join(" ") + (o.foretold.length > 4 ? " +" + (o.foretold.length - 4) : "") + "]" : "") + (o.outOfTime ? " time" : "") + (child.dead ? " DEAD:" + child.dead : "") + (o.solved ? " SOLVED" : "") + " plan " + (child.planned ? child.planned.cost + (child.planned.leadId ? "/" + child.planned.leadId : "") : "-") + " score " + child.score.toFixed(0));
       }
       return child;
     }
@@ -278,7 +281,10 @@
       const graph = this._graph;
       if (!graph) return null;
       const skills = world.skillCounts();
-      const alive = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills);
+      // a blocker is spent unless a walker frees it: then it is a lemming of the region beside it, a walker dearer
+      const walkers = skills.WALKER > 0;
+      const blocking = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills && L.action === BLOCKING);
+      const alive = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills && (walkers || L.action !== BLOCKING));
       const needed = Math.max(1, Math.min(target, alive.length + game.lemmingsToRelease) - game.lemmingsIn);
       const perms = R.PERMS, has = { CLIMBER: "isClimber", FLOATER: "isFloater", GLIDER: "isGlider", SWIMMER: "isSwimmer", DISARMER: "isDisarmer", SLIDER: "isSlider" };
       // the lemmings by region: how many, which way most of them walk, how many lack each permanent skill
@@ -294,13 +300,18 @@
       };
       let one = null;
       if (lemFilter) { const id = Array.from(lemFilter)[0]; one = alive.find((L) => L.identifier.toUpperCase() === id.toUpperCase()) || null; if (!one) return null; }
-      for (const L of one ? [one] : alive) { const r = R.regionOfLemming(graph, L.x, L.y); if (r >= 0) add(r, L, 1); }
+      for (const L of one ? [one] : alive) {
+        let r = R.regionOfLemming(graph, L.x, L.y);
+        if (r < 0 && L.action === BLOCKING) r = Math.max(R.regionOfLemming(graph, L.x - R.CELL, L.y), R.regionOfLemming(graph, L.x + R.CELL, L.y));
+        if (r >= 0) add(r, L, 1);
+      }
       if (!one && game.lemmingsToRelease > 0) { const hr = graph.regions.find((r) => r.hatch); if (hr) add(hr.id, null, game.lemmingsToRelease); }
       if (!groups.size) return null;
       // a group heads one way when all of it does, else either way (one of them heads into any gate)
       const list = Array.from(groups.values()).map((g) => ({ region: g.region, dir: Math.abs(g.dx) === g.n ? Math.sign(g.dx) : 0, n: g.n, lacking: g.lacking, leadLacking: g.leadLacking, lem: g.lem }));
       const all = R.planAll(graph, list, skills, one ? 1 : needed);
       if (!all) return null;
+      if (walkers && blocking.length && !one) all.cost += Math.min(blocking.length, needed); // the walkers that free them
       const lg = all.leadGroup;
       return Object.assign(all, { graph, leadId: lg && lg.lem ? lg.lem.identifier : null, leadRegion: lg ? lg.region : -1 });
     }
@@ -336,12 +347,12 @@
       const pushEdges = (node) => {
         let heap = open.get(node.depth);
         if (!heap) { heap = new Heap((e) => e.f); open.set(node.depth, heap); }
-        for (const c of node.candidates || []) { heap.push({ node, cand: c, f: node.score + 100 * c.prior }); total++; }
+        for (const c of node.candidates || []) { heap.push({ node, cand: c, f: node.score + 100 * c.prior * (this.noise ? 1 + this.noise * (this.rng() - 0.5) : 1) }); total++; }
         // the node's events and candidates have done their work: the edges hold what the
         // search still needs, and a long search keeps tens of thousands of nodes alive
         node.events = null; node.candidates = null;
         const cap = Math.max(4000, this.params.beam * 2);
-        if (heap.size > cap * 2) { total -= heap.size; heap.trim(cap); total += heap.size; }
+        if (heap.size > cap * 2) { total -= heap.size; heap.trim(cap); total += heap.size; this.trimmed = true; }
       };
       for (const seed of seeds) {
         this.world.reset(seed.plan);
@@ -429,6 +440,23 @@
       if (tier >= 3) break;
       if (best) { seeds.push({ plan: best.plan, frame: 0 }); }
     }
+    // restarts: the frontier ran dry at the widest breadth with time to spare - the same search again with the
+    // priors jiggled (a seeded generator, so a run repeats), each from the root, the lead's way in and the best
+    // so far, keeping whatever comes out better
+    // (a search that expanded its every edge untrimmed would only repeat itself: no restart then)
+    for (let r = 0; r < (search.params.restarts || 0) && search.trimmed && now() < searchEnd && !(best && best.saved >= analysis.maxSavable); r++) {
+      let seed = 0x9e3779b9 ^ (r + 1);
+      search.rng = () => { seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) >>> 0); seed = (Math.imul(seed ^ (seed >>> 12), 0x297a2d39) >>> 0); return ((seed ^ (seed >>> 15)) >>> 0) / 4294967296; };
+      search.noise = 0.6;
+      search.transposition.clear();
+      search.phase = "restart " + (r + 1);
+      search.report();
+      const before = search.expansions;
+      const again = search.run(seeds, need, null, searchEnd);
+      if (log) log("restart " + (r + 1) + ": " + (again ? "saved " + again.saved + " with " + again.skillsUsed + " skills at frame " + again.completionFrame : "nothing") + ", " + (search.expansions - before) + " expansions");
+      if (again && (!best || compare(again, best) > 0)) { best = again; seeds.push({ plan: best.plan, frame: 0 }); }
+    }
+    search.noise = 0;
     // the optimiser, in the slice reserved for it (and whatever the search left)
     if (best) {
       search.phase = "optimising";
