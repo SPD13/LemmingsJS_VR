@@ -208,7 +208,8 @@ function solveNext(absRoot) {
   job.startedAt = Date.now();
   job.log = [];
   solveQueue.running = job;
-  const args = [path.join(absRoot, "tools", "nx-solve.js"), job.id, "--tier", String(job.tier)];
+  // a long search holds a lot of state: room for it (the default heap ran out at tier 3)
+  const args = ["--max-old-space-size=4096", path.join(absRoot, "tools", "nx-solve.js"), job.id, "--tier", String(job.tier)];
   if (job.budget) args.push("--budget", String(job.budget));
   let child;
   try {
@@ -241,8 +242,9 @@ function solveNext(absRoot) {
     if (job.finished) return;
     // the verdict is the solver's own line, never the exit code alone (a killed process may exit 0)
     const verdict = job.log.filter((l) => /  (solved|unsolved|ERROR)/.test(l)).pop() || "";
-    const status = job.cancelled || signal ? "cancelled" : /  solved /.test(verdict) ? "solved" : /  unsolved/.test(verdict) || code === 3 ? "unsolved" : "error";
-    const line = (verdict || job.log[job.log.length - 1] || "").replace(/^.*\.nxlv  /, "");
+    const status = job.cancelled ? "cancelled" : /  solved /.test(verdict) ? "solved" : /  unsolved/.test(verdict) || code === 3 ? "unsolved" : "error";
+    let line = (verdict || job.log[job.log.length - 1] || "").replace(/^.*\.nxlv  /, "");
+    if (status === "error" && signal) line = "the solver crashed (" + signal + ")" + (line ? ": " + line : "");
     finish(job, status, status === "cancelled" ? "cancelled" : line);
   });
   function finish(j, status, line) {

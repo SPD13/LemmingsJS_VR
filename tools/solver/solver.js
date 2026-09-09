@@ -110,7 +110,7 @@
       node.score = Solver.score(node, this.analysis, target);
       const dead = outcome.solved ? null : Solver.deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsLeft, nukedAtNode);
       node.dead = dead;
-      if (dead) { this.dropped.dead++; node.state = null; return node; }
+      if (dead) { this.dropped.dead++; node.state = null; node.events = null; return node; }
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
         game, skillCounts, activeSkills: game.activeSkills, params: this.params, analysis: this.analysis,
         lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level,
@@ -215,7 +215,10 @@
         let heap = open.get(node.depth);
         if (!heap) { heap = new Heap((e) => e.f); open.set(node.depth, heap); }
         for (const c of node.candidates || []) { heap.push({ node, cand: c, f: node.score + 100 * c.prior }); total++; }
-        const cap = Math.max(4000, this.params.beam * 8);
+        // the node's events and candidates have done their work: the edges hold what the
+        // search still needs, and a long search keeps tens of thousands of nodes alive
+        node.events = null; node.candidates = null;
+        const cap = Math.max(4000, this.params.beam * 2);
         if (heap.size > cap * 2) { total -= heap.size; heap.trim(cap); total += heap.size; }
       };
       for (const seed of seeds) {
