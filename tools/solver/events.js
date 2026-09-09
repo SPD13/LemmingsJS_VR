@@ -86,7 +86,10 @@
     // the lemmings already out get a watch (and a SPAWN-like anchor for early skills)
     for (const L of game.lemmings) {
       const w = new Watch(L); watches.push(w);
-      if (!L.removed && !L.cannotReceiveSkills) emit("PRESENT", w, L, startFrame);
+      if (!L.removed && !L.cannotReceiveSkills) {
+        emit("PRESENT", w, L, startFrame);
+        if (L.action === BA.BLOCKING) emit("BLOCK", w, L, startFrame); // a blocker at its post already: to be freed later
+      }
     }
 
     while (frames < cap && !world.ended) {

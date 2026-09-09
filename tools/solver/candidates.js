@@ -64,7 +64,7 @@
       const A = SKILL_TO_ACTION[skill];
       if (A === BA.BASHING || A === BA.MINING || A === BA.FENCING || A === BA.LASERING) {
         if (e.type !== "TURN" && e.type !== "WORK_END") return false;
-        const dir = e.type === "TURN" ? -e.dx : e.dx, wx = (e.wallX !== undefined ? e.wallX : e.x) + dir * 2;
+        const dir = e.type === "TURN" && !e.climbing ? -e.dx : e.dx, wx = (e.wallX !== undefined ? e.wallX : e.x) + dir * 2;
         return game.hasIndestructibleAt(wx, e.y - 4, dir, A) || game.hasIndestructibleAt(wx, e.y - 6, dir, A);
       }
       if (A === BA.DIGGING) return game.hasIndestructibleAt(e.x, e.y + 1, e.dx, A) && game.hasIndestructibleAt(e.x, e.y + 2, e.dx, A);
@@ -150,9 +150,9 @@
           switch (where) {
             case "at": frames.push([e.frame, 1]); break;
             case "early": frames.push([firstFrame, 1]); break;
-            case "k0": frames.push([frameShortOf(e.ring || [], e.edgeX !== undefined ? e.edgeX : e.wallX, e.type === "TURN" ? -e.dx : e.dx, 0), 1]); break;
+            case "k0": frames.push([frameShortOf(e.ring || [], e.edgeX !== undefined ? e.edgeX : e.wallX, e.type === "TURN" && !e.climbing ? -e.dx : e.dx, 0), 1]); break;
             case "k": {
-              const dir = e.type === "TURN" ? -e.dx : e.dx, edge = e.edgeX !== undefined ? e.edgeX : e.wallX;
+              const dir = e.type === "TURN" && !e.climbing ? -e.dx : e.dx, edge = e.edgeX !== undefined ? e.edgeX : e.wallX;
               for (const k of params.offsets) frames.push([frameShortOf(e.ring || [], edge, dir, k), 1 / (1 + k / 8)]);
               break;
             }
@@ -164,7 +164,7 @@
             case "anchor": case "anchor0": case "anchorat": {
               if (!anchor) { frames.push([Math.max(nodeFrame, e.frame - 24), 0.6]); break; }
               if (where === "anchorat") { frames.push([anchor.frame, 1]); break; }
-              const dir = anchor.type === "TURN" ? -anchor.dx : anchor.dx, edge = anchor.edgeX !== undefined ? anchor.edgeX : anchor.wallX;
+              const dir = anchor.type === "TURN" && !anchor.climbing ? -anchor.dx : anchor.dx, edge = anchor.edgeX !== undefined ? anchor.edgeX : anchor.wallX;
               const ks = where === "anchor0" ? [0] : params.offsets;
               for (const k of ks) frames.push([frameShortOf(anchor.ring || [], edge, dir, k), 1 / (1 + k / 8)]);
               break;
@@ -185,6 +185,28 @@
           }
           if (any) n++;
         }
+      }
+    }
+    // "follow the lead": the permanent skills the plan gave one lemming, given to the next one out
+    // the same way (the frames shifted by their spawn gap), one edge - the second athlete over the wall
+    if (!ctx.lemFilter && ctx.plan) {
+      const PERMS = new Set(["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"]);
+      const byLemPerms = new Map();
+      for (const e of ctx.plan) if (e.type === "assignment" && PERMS.has(e.skill)) { if (!byLemPerms.has(e.lemId)) byLemPerms.set(e.lemId, []); byLemPerms.get(e.lemId).push({ skill: e.skill, frame: e.frame }); }
+      const spawnFrame = new Map();
+      for (const e of events) if (e.type === "SPAWN" || e.type === "PRESENT") if (!spawnFrame.has(e.lemId)) spawnFrame.set(e.lemId, e.frame);
+      for (const [leadId, perms] of byLemPerms) {
+        const m = /^N(\d+)$/.exec(leadId);
+        if (!m) continue;
+        const next = "N" + (parseInt(m[1], 10) + 1);
+        const rec = byLem.get(next);
+        if (!rec || perms.every((p) => skillCounts[p.skill] < 1)) continue;
+        if (rec.events.some((e) => e.perms && perms.every((p) => e.perms & (PERM_BITS[p.skill] || 0)))) continue; // has them already
+        // the spawn gap: the interval in force when both came out (a rough shift, refined by the engine's refusals)
+        const shift = ctx.game.currSpawnInterval;
+        const usable = perms.filter((p) => skillCounts[p.skill] >= 1);
+        if (!usable.length) continue;
+        push({ kind: "follow", lemId: next, perms: usable, shift, frame: Math.max(nodeFrame, usable[0].frame + shift), why: "follow " + leadId, prior: 0.7 });
       }
     }
     // a blocker holding the crowd is freed with a bomber once the rest is done: a candidate a while
