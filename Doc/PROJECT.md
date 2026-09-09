@@ -791,9 +791,11 @@ played one turns solid and stays; a step back turns them translucent again
 by the same comparison; the moment the replay is no longer engaged they
 all go. In clear physics mode only the rings show.
 
-Results so far: the Introduction pack at tier 1 (10 s a level) gives 9 of
-120 levels; `3d/plans/solver-plan.md` carries the ladder of levels the
-solver is taken through and what each rung taught.
+Results so far: the Introduction pack at tier 1 (10 s a level) gives 12 of
+120 levels, every solution verified; `3d/plans/solver-plan.md` carries the
+ladder of levels the solver is taken through, what each rung taught, and
+what limits the search now (the exit-distance field knows no gravity, so a
+staircase of builders or a chain of jumps shows no progress until the end).
 ---
 
 ## 3. Play mode and edit mode

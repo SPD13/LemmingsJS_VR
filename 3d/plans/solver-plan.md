@@ -163,3 +163,89 @@ This plan lives at `3d/plans/solver-plan.md` (kept in step with the work, with a
 - Solutions needing a skill at a frame no event anchors are missed at low tiers; tier 3's K set and TICK sampling narrow that gap. Unsolved ≠ impossible.
 - Memory: a state ≈ 2·W·H bytes + ~1 KB per lemming (≈ 1.1 MB on 1600×320 with 80 lemmings); tier 3's cache scales down by level area; lower `--jobs` for tier 3.
 - Objective details: "skills used" = Σ `usedSkillCount` (a walker counts, nuke and release-rate changes do not); completion frame = the first frame `stateIsUnplayable` holds (what `COMPLETION_FRAME` writes).
+
+
+## Results (8 September 2026)
+
+What is built, on branch `solution`: the engine touch-ups, `tools/solver/`
+(world, events, analysis, heuristics, candidates, solver, optimise, verify,
+worker), `tools/nx-solve.js` in both modes, `tools/nx-fixtures.js` and
+`tools/nx-solve-test.js` (30 fixtures, all green; the physics fixtures
+untouched at 74), the page's solution mode (button, VR tool, hotkey,
+`?solution=1`, no clear recorded) and the action markers
+(`3d/js/replay-markers.js`), the docs. Checked in the browser: a solution
+loads at frame 0 with the badge and every marker; the countdowns run; a
+played marker stays solid; the level completes as "SOLUTION — LEVEL
+COMPLETE" with `lem3d-cleared` unchanged; a click on a lemming removes
+every marker and the badge in the same tick; the tiles say "▶ solution";
+the flat view shows the same markers.
+
+### What the search does, as it stands
+
+Against the plan: the frontier is one heap per depth, the depth with the
+fewest pops so far (weighted toward the shallow ones) taking the turn - a
+single best-first heap plunged, since a parent that saved two lemmings
+outranks the seed whatever its followers' prospects, and a plain rotation
+over depths went straight down, every expansion opening a new deeper heap.
+Seeds carry their plan in the state hash (else a seeded node hashed like the
+root and was dropped as seen). The world runs in replay-insert mode so a
+seeded plan's later entries survive an insertion. A pass that runs dry with
+time to spare runs again at the next tier's breadth. The lead pass's
+rollouts end when the lead is saved or lost, and stop at once when the
+target is met with no skill. The nuke is a plan of its own when there is no
+skill at all (every ten seconds of the rollout tried) and an option when the
+crowd stalls. Every dying lemming gets its own rescue at its own anchor
+(a follower dies at the end of the partial bridge, not at the first edge),
+unranked lemmings get permanent skills at every event, the lead and tail get
+everything. Loop detection keys (x, y, dx, action, animation frame) with
+the terrain unchanged. A gadget's `effect` is now part of a saved state -
+without it a disarmed trap came back on a restore and a solution failed its
+verification.
+
+### The ladder
+
+| rung | level | tier 1 (10 s) |
+|---|---|---|
+| 1 | synthetic walk / gap / wall / crowd / water / trap fixtures | all solved (`nx-solve-test`) |
+| 2 | Just Digging Into NeoLemmix (20/5) | 20/20, 2 diggers |
+| 2 | Let's Take A Bash At It! (30/10) | 30/30, 5 bashers |
+| 2 | A Float, A Glide (8/6) | 8/8, 8 skills |
+| 2 | Building Flat And Building High (30/5) | unsolved: a staircase of builders with no progress signal between them |
+| 2 | Jumping Lem Flash (2/1) | unsolved: a chain of eight or more jumps; the exit-distance field pulls the wrong way (it ignores gravity) |
+| 2 | Laserslide (3/2) | 3/3, 6 skills |
+| 3 | Fence & Mine For A Diagonal Line (15/5) | 15/15, 4 skills |
+| 3 | Amphibious Engineer Squad (4/3) | 4/4, 6 skills |
+| 3 | Just Nuke Them! (80/8) | 29/80 with the nuke alone |
+| 3 | They Can't Mash Us All! (60/6) | 12/60 with a release-rate change alone |
+| 3 | Climb Up, Hang On, Get Along! (3/2) | unsolved: the shimmier's moment on the wall is not found (10k refused assignments) |
+| 3 | Block And Blow, Stacks And Stones, Cloner Cliffs | unsolved: two- and three-skill combinations whose first step shows no progress |
+| 4 | Up For A Walk (40/40, updraft) | 40/40, 2 skills |
+| 4 | Split And Splat (60/40) | 51/60, 5 skills |
+| 5 | Platstop (5/5), Concentrated Force (50/44) | solved |
+
+Introduction pack, 120 levels: **12 solved at tier 1** (2.6 min on 7
+workers), 10 at tier 2 (92 min, before the last round of solver changes;
+a tier-2 pass with the current solver has not been run). No verification
+mismatch remains. A tier-1 pass over every installed pack (1076 levels)
+runs after this note.
+
+### What limits the solver now
+
+1. **The progress signal.** The exit-distance field costs air one and solid
+   six with no gravity, so a lemming above the exit "is close" though it
+   cannot get down, and a builder's staircase toward the exit shows no gain
+   until the lemming is in. A field that walks down (a fall is free
+   downward, a climb impossible without a skill) would rank the staircase
+   and the jump chain rightly. The biggest lever.
+2. **Combinations.** A blocker whose only value is holding the crowd for a
+   later bomber scores below doing nothing; the search only finds it when
+   the follow-up is within the same pass's breadth. Two-step lookahead on
+   the lead lemming (a macro of two candidates) is the cheap answer.
+3. **Timing anchors.** The shimmier from a climb, a jumper at a spot with no
+   edge or wall near it, a bomber at a wall's foot: `CLIMB` events every
+   eight pixels and `TICK` ring samples cover some; a per-pixel sweep along
+   a walk is the wide answer at tier 3.
+4. **Cost.** A rollout on a crowded level runs to the last lemming's spawn
+   and beyond (2000-3000 frames, 30-100 ms), so tier 1 affords 300-1000
+   expansions. Ending a crowd rollout once every lemming out is on a path a
+   predecessor already took would halve it.
