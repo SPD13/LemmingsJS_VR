@@ -68,7 +68,7 @@ async function main() {
     check("one skill", r.best && r.best.skillsUsed === 1, r.best && r.best.plan.map(Solver.planEntry));
     const steel = crossing(300, 5, 5, { BASHER: 3, CLIMBER: 5 });
     steel.fill(150, 30, 160, 60, PM.SOLID | PM.STEEL);
-    const r2 = solve(steel);
+    const r2 = solve(steel, 6000); // five climbers, one per lemming: a chain the search takes a few seconds to follow
     check("steel: solved by climbers", r2.best && r2.best.saved === 5 && skillsIn(r2.best.plan, "BASHER") === 0, r2.best && r2.best.plan.map(Solver.planEntry));
     const none = crossing(300, 5, 5, { BASHER: 3 });
     none.fill(150, 30, 160, 60, PM.SOLID | PM.STEEL);
