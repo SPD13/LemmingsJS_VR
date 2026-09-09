@@ -125,11 +125,28 @@ Vfs.boot("").then(async () => {
         play.addEventListener("click", () => window.open(Vfs.link("index.html?level=" + encodeURIComponent(l.id) + "&solution=1"), "_blank"));
         act.appendChild(play);
       }
-      if (serverMode) {
+      if (serverMode && (d.state === "queued" || d.state === "running")) {
+        // in the queue: no second press - "Queued" with its place, or the search's progress bar, and a cancel
+        const job = document.createElement("span"); job.className = "job";
+        if (d.state === "queued") {
+          const q = document.createElement("span"); q.className = "queued";
+          const at = lastStatus ? lastStatus.pending.findIndex((j) => j.id === l.id) + 1 : 0;
+          q.textContent = "queued" + (at > 0 ? " #" + at : "");
+          job.appendChild(q);
+        } else {
+          const bar = document.createElement("div"); bar.className = "bar";
+          bar.innerHTML = "<div class='fill'></div><div class='txt'>solving…</div>";
+          job.appendChild(bar);
+        }
+        const cancel = document.createElement("button"); cancel.textContent = "cancel"; cancel.className = "cancel";
+        cancel.title = d.state === "queued" ? "take this level out of the queue" : "stop the search on this level";
+        cancel.addEventListener("click", () => cancelLevel(l.id));
+        job.appendChild(cancel);
+        act.appendChild(job);
+      } else if (serverMode) {
         const solve = document.createElement("button"); solve.textContent = d.solved ? "solve again" : "solve";
-        solve.disabled = d.state === "queued" || d.state === "running";
         solve.title = "run the solver on this level at the chosen tier (a better solution replaces the old one)";
-        solve.addEventListener("click", () => enqueue([l.id]));
+        solve.addEventListener("click", () => { solve.disabled = true; enqueue([l.id]); });
         act.appendChild(solve);
       }
       dom.rows.appendChild(tr);
@@ -168,7 +185,40 @@ Vfs.boot("").then(async () => {
   }
 
   // ---- the server's queue
-  let lastSerial = -1, polling = null;
+  let lastSerial = -1, polling = null, lastStatus = null, ticker = null;
+
+  /** The running level's bar: how far into its budget the search is, its phase and its best so far. */
+  function updateBars() {
+    const st = lastStatus;
+    if (!st || !st.running) return;
+    const tr = Array.from(dom.rows.querySelectorAll("tr")).find((t) => t.dataset.id === st.running.id);
+    if (!tr) return;
+    const bar = tr.querySelector(".bar");
+    if (!bar) return;
+    const p = st.running.progress || {};
+    const elapsed = Date.now() - st.running.startedAt;
+    const budget = st.running.budgetMs || 1;
+    const done = p.phase === "done" || p.phase === "verifying";
+    const frac = done ? 1 : Math.min(0.97, elapsed / budget);
+    const fill = bar.querySelector(".fill");
+    fill.style.width = Math.round(frac * 100) + "%";
+    fill.classList.toggle("done", done);
+    let text = p.phase || "starting";
+    if (p.best) text += " · best " + p.best.saved + "/" + (p.needed || "?") + ", " + p.best.skillsUsed + " skills";
+    else if (p.expansions) text += " · " + p.expansions + " tries";
+    text += " · " + Math.round(elapsed / 1000) + "/" + Math.round(budget / 1000) + " s";
+    bar.querySelector(".txt").textContent = text;
+    bar.title = text;
+  }
+
+  async function cancelLevel(id) {
+    try {
+      const res = await fetch(ROOT + "solve/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ levels: [id] }) });
+      applyStatus(await res.json());
+    } catch (e) {}
+    jobState.delete(id);
+    render();
+  }
   async function enqueue(ids) {
     const body = { levels: ids, tier: parseInt(dom.tier.value, 10) };
     const budget = parseFloat(dom.budget.value);
@@ -195,12 +245,13 @@ Vfs.boot("").then(async () => {
   async function applyStatus(st) {
     const finishedNow = st.serial !== lastSerial;
     lastSerial = st.serial;
+    lastStatus = st;
     for (const j of st.pending) jobState.set(j.id, "queued");
     if (st.running) jobState.set(st.running.id, "running");
     for (const d of st.done) if (jobState.get(d.id) !== "running" || !st.running || st.running.id !== d.id) jobState.set(d.id, d.status);
     // whatever is neither pending nor running keeps its last verdict; a queued/running mark that vanished is done
     const live = new Set(st.pending.map((j) => j.id).concat(st.running ? [st.running.id] : []));
-    for (const [id, s] of jobState) if ((s === "queued" || s === "running") && !live.has(id)) jobState.set(id, (st.done.find((d) => d.id === id) || {}).status || "");
+    for (const [id, s] of jobState) if ((s === "queued" || s === "running") && !live.has(id)) jobState.set(id, (st.done.slice().reverse().find((d) => d.id === id) || {}).status || "");
     if (finishedNow) {
       const before = new Set(levels.filter((l) => Solutions.has(l.id)).map((l) => l.id));
       Solutions.ready = null;
@@ -226,11 +277,15 @@ Vfs.boot("").then(async () => {
       const changed = st.serial !== lastSerial;
       const busy = await applyStatus(st);
       if (changed) render();
-      if (!busy) { clearInterval(polling); polling = null; }
-    } catch (e) { clearInterval(polling); polling = null; }
+      updateBars();
+      if (!busy) { clearInterval(polling); polling = null; clearInterval(ticker); ticker = null; }
+    } catch (e) { clearInterval(polling); polling = null; clearInterval(ticker); ticker = null; }
   }
-  function startPolling() { if (!polling) polling = setInterval(poll, 2000); }
+  function startPolling() {
+    if (!polling) polling = setInterval(poll, 1500);
+    if (!ticker) ticker = setInterval(updateBars, 1000);
+  }
 
   render();
-  if (serverMode) { await poll(); render(); }
+  if (serverMode) { await poll(); render(); if (lastStatus && (lastStatus.running || lastStatus.pending.length)) startPolling(); }
 }).catch((e) => { document.getElementById("summary").textContent = "failed to load: " + e.message; console.error(e); });

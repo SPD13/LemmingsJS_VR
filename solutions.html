@@ -74,6 +74,13 @@
   td.dim { color: #5a6a7c; }
   td.actions { text-align: right; }
   td.actions button { padding: 2px 8px; font-size: 10px; margin-left: 4px; }
+  td.actions .job { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+  td.actions .queued { color: #8fa1bb; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .bar { position: relative; width: 220px; height: 18px; background: #0b0f16; border: 1px solid #33405a; border-radius: 4px; overflow: hidden; }
+  .bar .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #26485c; transition: width 0.9s linear; }
+  .bar .fill.done { background: #2f6b3d; }
+  .bar .txt { position: relative; font-size: 10px; line-height: 18px; padding: 0 6px; color: #cdd6e4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td.actions button.cancel { border-color: #6b3a2f; color: #e07a6a; }
   .badge {
     font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
     border-radius: 3px; padding: 1px 6px; border: 1px solid; color: #7fd6e8; border-color: #2f5f6b;

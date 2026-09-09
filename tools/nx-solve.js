@@ -122,7 +122,9 @@ async function solveLevel(entry, env, opts) {
     record.status = "events";
     return { record, nxrp: null };
   }
-  const result = Solver.solve(world, { tier: opts.tier, budgetMs: opts.budgetMs, log: opts.log, trace: opts.trace });
+  // milestones as "progress {json}" lines: the launcher's queue reads them for the solutions page
+  const progress = opts.progress ? (info) => opts.progress(Object.assign({ elapsedMs: Date.now() - t0, budgetMs: opts.budgetMs, needed: level.needCount, count: level.releaseCount }, info)) : null;
+  const result = Solver.solve(world, { tier: opts.tier, budgetMs: opts.budgetMs, log: opts.log, trace: opts.trace, onProgress: progress });
   const st = result.stats;
   Object.assign(record, { maxSavable: st.maxSavable, features: st.features, expansions: st.expansions, elapsedMs: Math.round(st.elapsedMs) });
   if (!result.best) { record.elapsedMs = Date.now() - t0; return { record, nxrp: null }; }
@@ -130,6 +132,7 @@ async function solveLevel(entry, env, opts) {
   world.reset(result.best.plan);
   Solver.rollout(world, { maxFrames: result.best.completionFrame + 1 });
   const nxrp = Lemmix.Replay.serialize(world.game, { author: "nx-solve", user: "nx-solve/" + SOLVER_VERSION });
+  if (progress) progress({ phase: "verifying", best: { saved: result.best.saved, skillsUsed: result.best.skillsUsed, completionFrame: result.best.completionFrame } });
   const fresh = await build();
   const check = Solver.verify(fresh, env.masks, nxrp, { saved: result.best.saved, skillsUsed: result.best.skillsUsed });
   if (!check.ok) {
@@ -208,7 +211,8 @@ async function main() {
     const budgetMs = (opts.budget || TIER_SECONDS[tier]) * 1000;
     const log = (s) => console.log(s);
     console.log(one.id + (opts.events ? "" : "  tier " + tier + ", budget " + budgetMs / 1000 + " s"));
-    const { record, nxrp } = await solveLevel(one, env, { tier, budgetMs, trace: opts.trace, log, eventsOnly: opts.events });
+    const progress = (info) => console.log("progress " + JSON.stringify(info));
+    const { record, nxrp } = await solveLevel(one, env, { tier, budgetMs, trace: opts.trace, log, eventsOnly: opts.events, progress });
     if (opts.events) return;
     console.log(one.id + "  " + describeRecord(record));
     if (record.status === "error") { process.exitCode = 1; return; }

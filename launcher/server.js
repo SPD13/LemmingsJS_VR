@@ -184,7 +184,7 @@ const solveQueue = { pending: [], running: null, done: [], serial: 0 };
 function solveStatus() {
   const r = solveQueue.running;
   return {
-    running: r ? { id: r.id, tier: r.tier, budget: r.budget, startedAt: r.startedAt, log: r.log.slice(-6) } : null,
+    running: r ? { id: r.id, tier: r.tier, budget: r.budget, budgetMs: (r.budget || SOLVE_TIERS[r.tier]) * 1000, startedAt: r.startedAt, progress: r.progress || null, log: r.log.slice(-6) } : null,
     pending: solveQueue.pending.map((j) => ({ id: j.id, tier: j.tier, budget: j.budget })),
     done: solveQueue.done.slice(-200),
     serial: solveQueue.serial,
@@ -218,8 +218,17 @@ function solveNext(absRoot) {
     return;
   }
   job.child = child;
+  let rest = "";
   const onLine = (chunk) => {
-    for (const line of String(chunk).split("\n")) if (line.trim()) job.log.push(line.length > 300 ? line.slice(0, 300) : line);
+    rest += String(chunk);
+    const lines = rest.split("\n");
+    rest = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      // a milestone of the search: the solutions page's progress bar
+      if (line.startsWith("progress ")) { try { job.progress = JSON.parse(line.slice(9)); } catch (e) {} continue; }
+      job.log.push(line.length > 300 ? line.slice(0, 300) : line);
+    }
     if (job.log.length > 60) job.log.splice(0, job.log.length - 60);
   };
   child.stdout.on("data", onLine);

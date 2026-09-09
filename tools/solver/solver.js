@@ -51,6 +51,9 @@
     constructor(world, analysis, params, opts) {
       this.world = world; this.analysis = analysis; this.params = params;
       this.log = opts.log || null; this.trace = !!opts.trace;
+      this.onProgress = opts.onProgress || null; // (info) => the page's progress bar: phase, expansions, best so far
+      this.phase = "";
+      this._lastReport = 0;
       this.nodes = 0; this.expansions = 0; this.dropped = { dead: 0, seen: 0, refused: 0, ended: 0 };
       this.transposition = new Map();
       this.cache = [];   // nodes holding a state, oldest first
@@ -149,6 +152,15 @@
       return child;
     }
 
+    /** A milestone for whoever watches: the phase, the work done, the best so far. */
+    report(extra) {
+      this._lastReport = now();
+      if (!this.onProgress) return;
+      const b = this.best;
+      this.onProgress(Object.assign({ phase: this.phase, expansions: this.expansions,
+        best: b ? { saved: b.saved, skillsUsed: b.skillsUsed, completionFrame: b.completionFrame } : null }, extra || {}));
+    }
+
     /** Nothing left to search for: every lemming saved with no skill - or, seeding the crowd (a lead pass), the target made with none. */
     _done(target, lemFilter) {
       const b = this.best;
@@ -187,6 +199,7 @@
       // new deeper heap that is visited next)
       const pops = new Map();
       while (total > 0 && now() < deadline) {
+        if (this.onProgress && now() - this._lastReport > 1000) this.report();
         let heap = null, bestKey = Infinity;
         for (const [d, h] of open) {
           if (!h.size) continue;
@@ -234,6 +247,8 @@
     const leadEnd = t0 + budget * (1 - optimiseShare) * params.leadShare;
     let lead = null;
     if (need > 0) {
+      search.phase = "lead pass";
+      search.report();
       lead = search.run([{ plan: [], frame: 0 }], 1, new Set([firstOut]), leadEnd);
       if (log) log("lead pass: " + (lead ? "a way in with " + lead.skillsUsed + " skills at frame " + lead.completionFrame : "none") + ", " + search.expansions + " expansions");
     }
@@ -248,6 +263,8 @@
       const tier = Math.min(3, (opts.tier || 1) + widen);
       search.params = Solver.tierParams(tier, level, Object.assign({}, opts.params || {}, { budgetMs: budget }));
       search.transposition.clear();
+      search.phase = widen ? "crowd pass, widened to tier " + tier : "crowd pass";
+      search.report();
       const before = search.expansions;
       best = search.run(seeds, need, null, searchEnd);
       if (log) log("crowd pass" + (widen ? " (widened to tier " + tier + "'s breadth)" : "") + ": " + (best ? "saved " + best.saved + " with " + best.skillsUsed + " skills at frame " + best.completionFrame : "nothing") + ", " + (search.expansions - before) + " expansions, dropped " + JSON.stringify(search.dropped));
@@ -256,7 +273,13 @@
       if (best) { seeds.push({ plan: best.plan, frame: 0 }); }
     }
     // the optimiser, in the slice reserved for it (and whatever the search left)
-    if (best) best = Solver.optimise(world, best, analysis, t0 + budget, log);
+    if (best) {
+      search.phase = "optimising";
+      search.best = best;
+      search.report();
+      best = Solver.optimise(world, best, analysis, t0 + budget, log);
+    }
+    search.phase = "done"; search.best = best; search.report();
     const stats = { expansions: search.expansions, nodes: search.nodes, frames: world.frames, elapsedMs: now() - t0, dropped: search.dropped, features: analysis.features, maxSavable: analysis.maxSavable, lead: lead ? lead.skillsUsed : null };
     return { best, stats, analysis };
   }
