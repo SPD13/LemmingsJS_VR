@@ -9,4 +9,7 @@ contextBridge.exposeInMainWorld("launcher", {
   setHttps: (enabled) => ipcRenderer.invoke("set-https", enabled),
   openUrl: (url) => ipcRenderer.invoke("open-url", url),
   onStatus: (cb) => ipcRenderer.on("status", (e, s) => cb(s)),
+  getLog: () => ipcRenderer.invoke("get-log"),
+  clearLog: () => ipcRenderer.invoke("clear-log"),
+  onLog: (cb) => ipcRenderer.on("log", (e, entry) => cb(entry)),
 });

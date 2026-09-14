@@ -429,7 +429,7 @@ async function main() {
     // ================= the launcher's routes, over the loopback
     console.log("launcher routes");
     fs.mkdirSync(path.join(tmp, "3d", "profiles"), { recursive: true });
-    const srv = await createStaticServer(tmp, 0);
+    const srv = await createStaticServer(tmp, 0, null, () => {}); // its request log stays out of the test output
     const base = "http://127.0.0.1:" + srv.port;
     try {
       const url = base + "/3d/profiles/nx-my_style.json";

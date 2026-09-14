@@ -8,8 +8,8 @@ for (const tab of document.querySelectorAll(".tab")) {
     for (const t of document.querySelectorAll(".tab")) {
       t.classList.toggle("active", t === tab);
     }
-    $("tab-server").hidden = tab.dataset.tab !== "server";
-    $("tab-setup").hidden = tab.dataset.tab !== "setup";
+    for (const name of ["server", "setup", "log"]) $("tab-" + name).hidden = tab.dataset.tab !== name;
+    if (tab.dataset.tab === "log") $("log").scrollTop = $("log").scrollHeight;
   });
 }
 
@@ -86,6 +86,31 @@ $("https-toggle").addEventListener("change", async () => {
   }
 });
 
+// ---- log tab ----
+// one line appended per event; the view follows the tail unless the user
+// has scrolled up to read something. Lines are numbered by the main process:
+// one already covered by the first full read is not appended again.
+let logSeen = 0;
+function appendLog({ seq, line }) {
+  if (seq <= logSeen) return;
+  logSeen = seq;
+  const el = $("log");
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+  el.textContent += (el.textContent ? "\n" : "") + line;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+$("clear-log").addEventListener("click", async () => {
+  await window.launcher.clearLog();
+  $("log").textContent = "";
+});
+
 // ---- boot ----
 window.launcher.onStatus(renderStatus);
+window.launcher.onLog(appendLog);
+window.launcher.getLog().then(({ seq, lines }) => {
+  logSeen = Math.max(logSeen, seq);
+  $("log").textContent = lines.join("\n");
+  $("log").scrollTop = $("log").scrollHeight;
+});
 window.launcher.getStatus().then(renderStatus);

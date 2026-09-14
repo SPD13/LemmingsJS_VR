@@ -54,6 +54,21 @@ const NX_DIR_RE = /^\/(neolemmix\/(?:gfx|data|music|sound|styles))\/?$/;
 const UPLOAD_RE = /^(levels\/[^\/.][^\/]*|neolemmix\/(?:gfx|data|music|sound|styles))\/[^\/].*[^\/]$/;
 const MAX_BATCH = 500e6;
 
+/**
+ * Where the server's log lines go: the launcher's Log tab, or the terminal
+ * when run with plain node. createStaticServer sets it; until then, and when
+ * no callback is given, lines go to stdout.
+ */
+let log = (line) => console.log(line);
+
+/** 1234 → "1.2 kB", for the request log. */
+function formatBytes(n) {
+  if (!(n >= 0)) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " kB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
 /** The release version in version.json, or null. */
 function readVersion(absRoot) {
   try { return JSON.parse(fs.readFileSync(path.join(absRoot, "version.json"), "utf8")).version || null; }
@@ -208,6 +223,7 @@ function solveNext(absRoot) {
   job.startedAt = Date.now();
   job.log = [];
   solveQueue.running = job;
+  log("[solver] " + job.id + " tier " + job.tier + (job.budget ? " budget " + job.budget + "s" : "") + " started" + (solveQueue.pending.length ? " (" + solveQueue.pending.length + " pending)" : ""));
   // a long search holds a lot of state: room for it (the default heap ran out at tier 3)
   const args = ["--max-old-space-size=4096", path.join(absRoot, "tools", "nx-solve.js"), job.id, "--tier", String(job.tier)];
   if (job.budget) args.push("--budget", String(job.budget));
@@ -252,6 +268,7 @@ function solveNext(absRoot) {
     j.finished = true;
     solveQueue.running = null;
     solveQueue.done.push({ id: j.id, status, line, tier: j.tier, finishedAt: Date.now(), elapsedMs: Date.now() - j.startedAt });
+    log("[solver] " + j.id + " tier " + j.tier + " " + status + " after " + ((Date.now() - j.startedAt) / 1000).toFixed(1) + "s" + (line && line !== status ? ": " + line : ""));
     // unsolved at this tier: the next tier at once, ahead of the rest, up to the widest (the tier's own budget)
     if (status === "unsolved" && j.escalate && j.tier < 3) solveQueue.pending.unshift({ id: j.id, tier: j.tier + 1, budget: 0, escalate: true });
     solveQueue.serial++;
@@ -292,10 +309,40 @@ function solveCancel(body) {
   return { dropped: before - solveQueue.pending.length, killed };
 }
 
-function createStaticServer(root, port, tls = null) {
+/**
+ * Serves `root` on `port` (0 for any free one), over TLS when `tls` holds
+ * {key, cert}. `logLine`, when given, receives one line per request once it
+ * is answered (method, path, status, size, time) and the solver's events;
+ * otherwise those lines go to stdout.
+ */
+function createStaticServer(root, port, tls = null, logLine = null) {
   const absRoot = path.resolve(root);
+  log = typeof logLine === "function" ? logLine : (line) => console.log(line);
   return new Promise((resolve, reject) => {
     const handler = (req, res) => {
+      // one line per request, written when the response is done (or the
+      // client went away first), so the status and size are the real ones
+      const t0 = Date.now();
+      // the size is the Content-Length the route gave writeHead (node does
+      // not hand those headers back once sent), so writeHead is watched
+      let size;
+      const writeHead = res.writeHead;
+      res.writeHead = function () {
+        const headers = arguments[arguments.length - 1];
+        if (headers && typeof headers === "object") {
+          for (const k of Object.keys(headers)) if (k.toLowerCase() === "content-length") size = +headers[k];
+        }
+        return writeHead.apply(this, arguments);
+      };
+      res.on("close", () => {
+        const aborted = !res.writableFinished;
+        let line = req.method + " " + req.url + " " + (aborted ? "aborted" : res.statusCode);
+        if (!aborted && size !== undefined) line += " " + formatBytes(+size);
+        line += " " + (Date.now() - t0) + "ms";
+        const from = req.socket && req.socket.remoteAddress ? req.socket.remoteAddress.replace(/^::ffff:/, "") : "";
+        if (from && from !== "127.0.0.1" && from !== "::1") line += " from " + from;
+        log(line);
+      });
       try {
         const urlPath = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
 
@@ -469,6 +516,7 @@ function createStaticServer(root, port, tls = null) {
         });
         fs.createReadStream(filePath).pipe(res);
       } catch (e) {
+        if (e.code !== "ENOENT") log("[server] " + req.method + " " + req.url + ": " + (e.message || e));
         res.writeHead(404);
         res.end("not found");
       }
@@ -477,9 +525,10 @@ function createStaticServer(root, port, tls = null) {
     srv.on("error", reject);
     srv.listen(port, "0.0.0.0", () => {
       srv.removeListener("error", reject);
+      log("[server] listening on " + (tls ? "https" : "http") + "://0.0.0.0:" + srv.address().port + "/  serving " + absRoot);
       resolve({
         port: srv.address().port, // the real one when 0 asked for any free port
-        close: () => new Promise((r) => srv.close(r)),
+        close: () => new Promise((r) => { log("[server] stopped"); srv.close(r); }),
       });
     });
   });
