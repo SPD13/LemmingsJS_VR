@@ -465,8 +465,12 @@ CindyLand's plan now reads the intended way from the hatch: hold, bash
 into the bedrock, a bomber up through the thin roof under the hill,
 two builders up to the ledge over the steel, the exit (cost 4.5). The
 search follows it as far as the staircase at tier 2 (81 s: the rollouts
-run 60-90 ms with forty lemmings) and needs tier 3 to finish; see the
-result below. `tools/nx-probe.js` holds the probes this took (the graph,
+run 60-90 ms with forty lemmings) and not further: tier 3 (810 s, 6051
+crowd expansions) ends unsolved too. What stands in the way is ordering,
+not budget - the athlete that led the way in stands where the crowd's
+gates are and draws the plan's boosts to its own pointless moves, and the
+staircase is a chain of repeats each of which the search must pick over
+those. The level stays open. `tools/nx-probe.js` holds the probes this took (the graph,
 the picture, the reach, a node's plan and candidates, a plan's rollout, the
 pixels) so the next level's diagnosis starts from there.
 
