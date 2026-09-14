@@ -111,8 +111,20 @@
       const tCand = now();
       if (this.log && (tRoll - tPlan > 1000 || tCand - tRoll > 1000)) this.log("  slow: plan " + Math.round(tRoll - tPlan) + " ms, rollout " + Math.round(tCand - tRoll) + " ms at frame " + node.frame);
       outcome.bound = boundAtNode;
-      outcome.planCost = planned ? planned.cost : null; // null: no way the graph knows of
-      node.planned = planned;
+      // the plan again at the rollout's end when the action changed the terrain or the blockers (a bash dug its
+      // tunnel, a blocker took its post) and nobody died on the way: what the action achieved shows at this node,
+      // not one node later; the candidates match the gates of both graphs (events before and after the change)
+      let after = null;
+      const changedAfter = !lemFilter && planned && !events.some((e) => e.type === "DEATH") && this._planVersion() !== this._graphVersion;
+      if (changedAfter) after = this._plan(target, lemFilter);
+      const best = after && (!planned || after.cost < planned.cost) ? after : planned;
+      outcome.planCost = best ? best.cost : null; // null: no way the graph knows of
+      node.planned = best;
+      if (after && planned && after !== planned) {
+        // the steps of both: the plan after the change first, the one before marked as such (the route macro
+        // follows the first alone; the boosts match the gates of either graph)
+        node.planned = Object.assign({}, best, { steps: (after.steps || []).concat((planned.steps || []).map((st) => Object.assign({}, st, { before: true }))), free: new Set([...(after.free || []), ...(planned.free || [])]), graph: after.graph });
+      }
       node.skillsUsed = outcome.skillsUsed; // the plan's own, pending entries fired
       outcome.leadDist = outcome.saved > 0 ? 0 : (outcome.minDist === Infinity ? this.analysis.spanDist : outcome.minDist);
       outcome.solved = outcome.saved >= target && (outcome.ended || outcome.outOfTime || outcome.stuck || outcome.leadDone);
@@ -125,7 +137,7 @@
       const tC = now();
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
         game, skillCounts, activeSkills: game.activeSkills, params: this.params, analysis: this.analysis,
-        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan, planned,
+        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan, planned: node.planned,
       });
       if (this.log && now() - tC > 1000) this.log("  slow: candidates " + Math.round(now() - tC) + " ms, " + node.candidates.length + " of them, " + events.length + " events");
       this._hold(node);
@@ -175,6 +187,7 @@
     }
     _expandInner(node, cand, target, lemFilter) {
       const world = this.world;
+      if (cand.kind === "plan") return this._planMacro(node, cand, target, lemFilter);
       if (!this._goto(node)) { this.dropped.ended++; return null; }
       if (cand.frame > world.frame) world.step(cand.frame - world.frame);
       if (world.frame !== cand.frame) { this.dropped.ended++; return null; }
@@ -212,6 +225,40 @@
         last = next;
       }
       return children;
+    }
+
+    /**
+     * The plan's route as one edge: from the node, the plan's next gate is
+     * worked by the best boosted moment for its skill, the child made, and
+     * from the child the same again with its own plan - up to four gates, a
+     * node per gate (each a state the search holds), the chain stopping at a
+     * dead or solved node or when no moment fits. The search takes the
+     * planned way through before it branches over every alternative.
+     */
+    _planMacro(node, cand, target, lemFilter) {
+      const world = this.world, keys = cand.keys || [];
+      const chain = [];
+      let cur = node;
+      for (let i = 0; i < keys.length && i < 4 && cur; i++) {
+        // the route's i-th gate: the candidate's own pick for the first, then the best moment boosted for that gate
+        // among the child's candidates (a new graph after a change has new gate objects: gates match by key)
+        let pick = null;
+        if (i === 0) pick = cand.first;
+        else for (const c of cur.candidates || []) if (c.kind === "assign" && c.gate && Solver.gateKey(c.gate) === keys[i] && (!pick || Solver.gateFit(c) > Solver.gateFit(pick))) pick = c;
+        if (!pick) break;
+        if (!this._goto(cur)) break;
+        if (pick.frame > world.frame) world.step(pick.frame - world.frame);
+        if (world.frame !== pick.frame) break;
+        const L = world.lemmingById(pick.lemId);
+        if (!L || !world.assign(L, pick.skill)) break;
+        world.step(1);
+        const child = this._child(cur, Object.assign({}, pick, { why: pick.why + " plan" }), target, lemFilter, true);
+        if (!child) break;
+        chain.push(child);
+        if (child.dead || child.solved) break;
+        cur = child;
+      }
+      return chain.length ? chain : null;
     }
 
     /**
@@ -279,6 +326,12 @@
      * changed since the last), and the plan from the lead's region and heading,
      * the crowd where most of it is, to an exit: { cost, lead, crowd } or null.
      */
+    /** The graph's version key for the world as it stands: the terrain and the blockers. */
+    _planVersion() {
+      const game = this.world.game, BLOCKING = Lemmix.BA.BLOCKING;
+      return this.world.terrainVersion + "|" + game.lemmings.filter((L) => !L.removed && L.action === BLOCKING).map((L) => L.x + "," + L.y).join(";");
+    }
+
     _plan(target, lemFilter) {
       const world = this.world, game = world.game, R = Solver.Regions;
       if (!R) return null;
@@ -419,7 +472,7 @@
   }
 
   const planEntry = (e) => e.type === "assignment" ? e.skill + "@" + e.frame + ">" + e.lemId : e.type === "nuke" ? "NUKE@" + e.frame : "SI" + e.interval + "@" + e.frame;
-  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "follow" ? c.perms.map((p) => p.skill).join("+") + ">" + c.lemId + " (follow)" : c.kind === "si" ? "SI=" + c.si : "NUKE";
+  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "follow" ? c.perms.map((p) => p.skill).join("+") + ">" + c.lemId + " (follow)" : c.kind === "plan" ? "PLAN (the route as one edge)" : c.kind === "si" ? "SI=" + c.si : "NUKE";
 
   /**
    * Solve the level `world` holds: { best, stats }. `opts` = { tier,

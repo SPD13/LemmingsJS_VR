@@ -797,7 +797,9 @@ shape of it:
   distance/2 − frames/500` (the lead pass: skills 20, distance whole,
   lost ignored).
   A lead pass (skills to the first lemming out, one save is a success)
-  seeds a crowd pass for the count; a pass that runs dry with time left
+  seeds a crowd pass for the count; the plan is scored again after an
+  action that changed the terrain, and the plan's route is one edge of
+  its own, taken gate after gate; a pass that runs dry with time left
   runs again at the next tier's breadth, and at the widest, with the
   priors jiggled (tier 3's three restarts, a seeded generator). Tiers:
   10 s, 2 min, 15 min.
