@@ -404,6 +404,72 @@ batch over the packs has not been run since the planner landed (the
 recorded solutions predate it); it is the next thing to run when the
 machine is free for half an hour.
 
+### Later (13-14 September): CindyLand, and what a Gentle level asked for
+
+*CindyLand* (Redux, Gentle: 40 lemmings, save 33, seven of each of eight
+skills) was unsolved at every tier. Working out why turned up gaps in the
+graph, the candidates and the search, each fixed in turn:
+
+- **An exit under the surface**: the left exit's trigger lies a few pixels
+  below the hill it sits on, so the graph never attached it to a region and
+  the planner knew only the far exit. The nearest floor cell up to four
+  cells above the trigger's bottom is now the exit's region.
+- **Walls built up and blown through**: a staircase of builders up a wall
+  (one per three cells of height, given the run-up and an open shaft above
+  the wall's foot - a builder under a roof meets it at once), a bomber
+  through a thin wall, a bomber up through a thin roof (fourteen pixels of
+  blast over the feet, the tunnel's own ten counted).
+- **Bridges along their line**: a builder's or platformer's bridge is
+  walked cell by cell, with headroom, to where it meets terrain (a floor
+  above the meeting point is the landing; a wall in the way blocks it - the
+  column beside a hill is not built over) or where a builder's last brick
+  lets the lemming walk off onto a floor within a safe fall. The old
+  bounding-box test invented bridges through columns.
+- **The basher's tunnel measured at its height**: a cell over the feet,
+  where the tunnel runs, so a hollow at a column's foot is a way out; the
+  tunnel's floor stays at the feet, so a hollow higher up is passed under.
+- **Tunnels as regions in waiting**: a tunnel a basher would dig into
+  bedrock up to steel is a floor of its own once dug, so it is a region
+  before the first stroke, reached by the bash and left by a bomber up
+  through a thin roof or by a miner's ramp from any floor above within
+  reach (two cells along for one down, through plain terrain); ramps are
+  walked both ways, so the crowd below gets up one mined from above.
+- **The crowd's heading from the hatch**: those still to come face the
+  hatch's way, so a route the other way costs a turn - and a blocker at the
+  landing gets the turn's boost.
+- **The hold**: when the crowd dies past the count's allowance, a blocker
+  short of the edge (or the wall) the first death came from, on the lemming
+  that died - so the crowd behind it stays put while the way is made - comes
+  first among the candidates; modest when no one dies past the allowance
+  (it would otherwise bury the mesh level's winning basher).
+- **Candidates the plan points at**: a lemming standing where a plan's gate
+  is worked gets every template there whatever its rank; the tier's cap on
+  skills per event falls after the plan's boost, so a boosted blocker is
+  never the fourth template cut; a boosted moment weighs at least 0.8 and
+  carries no rank discount; a moment reached from two events keeps the
+  better reason; the gate's second skill (the builder of a bash-and-build,
+  the bomber of a bash-and-bomb) is boosted at the far wall only; a
+  staircase's builder is placed at its run-up, not at the wall; a group's
+  permanent-skill boost goes to that group's lemmings only; matches are
+  allowed in terrain the node's graph did not know (the tunnel dug in the
+  rollout). A node's list is cut to 600, the plan's picks and macros first.
+- **The planner's greedy against its own best**: each lead's chain of gates
+  climbs against that lead's best, seeded with the crowd's own route (its
+  terrain gates in order), one gate per crossing in the ranked list.
+- **The crowd term kept as it was**: counting the lost at the level's span,
+  or capping the term, both lost *You need bashers* (the mesh is cut link
+  by link, and the crowd's mean distance is what shows it); a held crowd is
+  told from a dead one by the count bound instead.
+
+CindyLand's plan now reads the intended way from the hatch: hold, bash
+into the bedrock, a bomber up through the thin roof under the hill,
+two builders up to the ledge over the steel, the exit (cost 4.5). The
+search follows it as far as the staircase at tier 2 (81 s: the rollouts
+run 60-90 ms with forty lemmings) and needs tier 3 to finish; see the
+result below. `tools/nx-probe.js` holds the probes this took (the graph,
+the picture, the reach, a node's plan and candidates, a plan's rollout, the
+pixels) so the next level's diagnosis starts from there.
+
 ### What limits the solver now
 
 1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang

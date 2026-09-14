@@ -19,7 +19,7 @@
   const Solver = Lemmix.Solver || (Lemmix.Solver = {});
   const { BA } = Lemmix;
 
-  const RING = 24; // positions kept per lemming for the "k pixels before" anchors
+  const RING = 56; // positions kept per lemming for the "k pixels before" anchors (a staircase's run-up is 24 px a builder)
   const TICK_EVERY = 32; // a tick on a walk this often, its ring the last 24 frames: every stretch of floor gets an anchor
   const MAX_ROLLOUT = 17 * 60 * 12;
   const STUCK_AFTER = 170; // frames of nothing changing before a pacing crowd counts as stuck
@@ -267,7 +267,7 @@
     if (field && !predicted) for (const L of game.lemmings) { if (L.removed || L.cannotReceiveSkills) continue; crowdDist += field.at(L.x, L.y); crowdN++; }
     crowdDist = crowdN ? crowdDist / crowdN : 0;
     const outcome = {
-      crowdDist, saved: game.lemmingsIn + foretoldSaved, lost: game.lemmingsRemoved - game.lemmingsIn + foretoldLost, alive: predicted ? 0 : game.lemmingsOut,
+      crowdDist, crowdN, saved: game.lemmingsIn + foretoldSaved, lost: game.lemmingsRemoved - game.lemmingsIn + foretoldLost, alive: predicted ? 0 : game.lemmingsOut,
       toRelease: game.lemmingsToRelease, endFrame: world.ended ? game.currentIteration : predicted ? foretoldEnd : Infinity,
       stuck, ended: world.ended || predicted, outOfTime: game.isOutOfTime, capped: !world.ended && !predicted && !stuck && !game.isOutOfTime && !leadDone, leadDone, predicted,
       lastFrame: game.currentIteration, skillsUsed: world.skillsUsed(), need: level.needCount, minDist, foretold,

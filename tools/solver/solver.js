@@ -103,9 +103,13 @@
       node.skillsAtNode = node.skillsUsed;
       const boundAtNode = Solver.upperBound(game, this.analysis), outOfTimeAtNode = game.isOutOfTime, nukedAtNode = game.userSetNuking;
       // the regions and gates as the terrain now stands, and the plan through them for the lead and the crowd
+      const tPlan = now();
       const planned = this._plan(target, lemFilter);
+      const tRoll = now();
       const { events, outcome } = Solver.rollout(world, { field: this.analysis.field, leadId: lemFilter && lemFilter.size === 1 ? Array.from(lemFilter)[0] : null,
         tickEvery: this.params.tickEvery, predict: !lemFilter && this.params.predict !== false && !(typeof process !== "undefined" && process.env.NX_NO_PREDICT) });
+      const tCand = now();
+      if (this.log && (tRoll - tPlan > 1000 || tCand - tRoll > 1000)) this.log("  slow: plan " + Math.round(tRoll - tPlan) + " ms, rollout " + Math.round(tCand - tRoll) + " ms at frame " + node.frame);
       outcome.bound = boundAtNode;
       outcome.planCost = planned ? planned.cost : null; // null: no way the graph knows of
       node.planned = planned;
@@ -118,10 +122,12 @@
       const dead = outcome.solved ? null : Solver.deadReason(boundAtNode, outOfTimeAtNode, outcome, target, skillsLeft, nukedAtNode);
       node.dead = dead;
       if (dead) { this.dropped.dead++; node.state = null; node.events = null; return node; }
+      const tC = now();
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
         game, skillCounts, activeSkills: game.activeSkills, params: this.params, analysis: this.analysis,
         lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan, planned,
       });
+      if (this.log && now() - tC > 1000) this.log("  slow: candidates " + Math.round(now() - tC) + " ms, " + node.candidates.length + " of them, " + events.length + " events");
       this._hold(node);
       if (outcome.solved) {
         node.solved = true;
@@ -162,6 +168,12 @@
 
     /** The child of `node` by `cand`, or null when the action could not be taken. */
     _expand(node, cand, target, lemFilter) {
+      const t0 = now();
+      const made = this._expandInner(node, cand, target, lemFilter);
+      if (this.log && now() - t0 > 2000) this.log("  slow: expansion " + Math.round(now() - t0) + " ms for " + describe(cand));
+      return made;
+    }
+    _expandInner(node, cand, target, lemFilter) {
       const world = this.world;
       if (!this._goto(node)) { this.dropped.ended++; return null; }
       if (cand.frame > world.frame) world.step(cand.frame - world.frame);
@@ -293,10 +305,12 @@
         let g = groups.get(r);
         if (!g) { g = { region: r, n: 0, dx: 0, lacking: {}, lem: null, leadLacking: null, leadPerms: -1 }; for (const p of perms) g.lacking[p] = 0; groups.set(r, g); }
         g.n += n; g.dx += L ? L.dx * n : 0;
+        const real = L && L.identifier !== undefined;
         const mine = {}; let count = 0;
-        for (const p of perms) { const lacks = !L || !L[has[p]]; if (lacks) g.lacking[p] += n; mine[p] = lacks ? 1 : 0; if (!lacks) count++; }
+        for (const p of perms) { const lacks = !real || !L[has[p]]; if (lacks) g.lacking[p] += n; mine[p] = lacks ? 1 : 0; if (!lacks) count++; }
         // the group's lead: whichever of them has the most permanent skills already
-        if (count > g.leadPerms) { g.leadPerms = count; g.lem = L; g.leadLacking = mine; }
+        if (real && count > g.leadPerms) { g.leadPerms = count; g.lem = L; g.leadLacking = mine; }
+        else if (!real && g.leadPerms < 0) g.leadLacking = mine;
       };
       let one = null;
       if (lemFilter) { const id = Array.from(lemFilter)[0]; one = alive.find((L) => L.identifier.toUpperCase() === id.toUpperCase()) || null; if (!one) return null; }
@@ -305,7 +319,12 @@
         if (r < 0 && L.action === BLOCKING) r = Math.max(R.regionOfLemming(graph, L.x - R.CELL, L.y), R.regionOfLemming(graph, L.x + R.CELL, L.y));
         if (r >= 0) add(r, L, 1);
       }
-      if (!one && game.lemmingsToRelease > 0) { const hr = graph.regions.find((r) => r.hatch); if (hr) add(hr.id, null, game.lemmingsToRelease); }
+      // those still to come land facing the hatch's way: the group heads that way until something turns it
+      if (!one && game.lemmingsToRelease > 0) {
+        const hr = graph.regions.find((r) => r.hatch);
+        const hatch = world.level.gadgets.find((gd) => gd.effect === "WINDOW");
+        if (hr) add(hr.id, hatch ? { dx: hatch.flipLemming ? -1 : 1 } : null, game.lemmingsToRelease);
+      }
       if (!groups.size) return null;
       // a group heads one way when all of it does, else either way (one of them heads into any gate)
       const list = Array.from(groups.values()).map((g) => ({ region: g.region, dir: Math.abs(g.dx) === g.n ? Math.sign(g.dx) : 0, n: g.n, lacking: g.lacking, leadLacking: g.leadLacking, lem: g.lem }));
