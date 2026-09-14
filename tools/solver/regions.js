@@ -346,7 +346,7 @@
               let id = -1; for (const dx of [0, -1, 1]) id = Math.max(id, regionAt(cc + dx, Math.floor(y / CELL)), regionAt(cc + dx, Math.floor(y / CELL) - 1));
               if (id >= 0 && id !== r.id && (roof < 0 || rf < roof)) { roof = rf; above = id; bombAt = cc; }
             }
-            if (above >= 0 && roof >= 1) gate(r.id, above, "bashbomb", "BASHER", 2.5, ex, ey, dir, { thickness, also: "BOMBER", alsoCost: 1, wallX: bombAt * CELL + 2 });
+            if (above >= 0 && roof >= 1 && false) gate(r.id, above, "bashbomb", "BASHER", 2.5, ex, ey, dir, { thickness, also: "BOMBER", alsoCost: 1, wallX: bombAt * CELL + 2 }); // (a hole over the head is no way up)
             deadEnds.push({ from: r.id, nx, far, ey, dir, ex });
             const c = far - dir;
             if (roof === 0) {
@@ -411,7 +411,7 @@
       // the roof blown through, from anywhere in the region: a thin ceiling (three cells or fewer) with a floor
       // of another region above it - a bomber under it opens the way up (the bomber is lost)
       const ups = new Set();
-      for (let n = 0; n < r.cells.length; n++) {
+      for (let n = 0; n < 0; n++) { // (no bomb-up: a bomber under a roof opens a hole over its head, not a ramp a walker climbs)
         let up = null;
         const j = r.cells[n], jx = j % cw, jy = (j / cw) | 0, px = jx * CELL + 2;
         // at the pixels (a tunnel's roof is thinner than a cell): the air over the feet, then the roof, then air again
@@ -460,7 +460,7 @@
         while (y >= 0 && solid(px, y) && roof <= 4) { roof++; y--; }
         if (y < 0 || roof === 0 || roof > 4 || solid(px, y)) continue;
         let above = -1; for (const dx of [0, -1, 1]) above = Math.max(above, regionAt(jx + dx, Math.floor(y / CELL)), regionAt(jx + dx, Math.floor(y / CELL) - 1));
-        if (above >= 0 && above !== t.from && !ups.has(above)) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); }
+        if (above >= 0 && above !== t.from && !ups.has(above) && false) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); } // (no bomb-up, as above)
       }
       // a miner's ramp from a floor above: two cells along for one down, through plain terrain, into the tunnel
       const seen = new Set();

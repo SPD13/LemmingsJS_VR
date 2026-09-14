@@ -479,11 +479,40 @@ member made an athlete only makes itself the plan's new lead, cheaper on
 paper and nothing gained), and the plan's pick worked by a dozen lemmings
 one after the other is kept for three of them at three moments each.
 Keep your hair improved to the by-hand 7 skills at tier 1 on the way.
-CindyLand itself still ends unsolved at tier 2 (983 crowd expansions):
-the search reaches the hold and the bash and then spreads over second
-bashers and builders behind them before the bomber at the thin roof gets
-its turn. The level stays open; the shape of the search (a heap per
-depth over hundreds of moments a node) is the limit here. `tools/nx-probe.js` holds the probes this took (the graph,
+Then two more for the search's shape: **the plan scored after the
+action** - when the action changed the terrain or the blockers and
+nobody died, the plan is computed again at the rollout's end and the
+better of the two is the node's (the bash node reads its tunnel at once,
+not one node later; the candidates match the gates of both graphs, the
+pre-action steps marked so the route below ignores them) - and **the
+plan's route as one edge**: a `plan` candidate carries the crowd's route
+(its terrain gates in order, by a gate key that survives the graph's
+renumbering) and its own first pick; expanded, it works gate after gate,
+each by the boosted moment nearest that gate's spot among the child's
+candidates, a node per gate, up to four. A bomber's moment must be within
+six pixels of its gate's row (the athlete landing on the hill over the
+tunnel matched the roof gate from sixteen above).
+
+And one model taken back: **bomb-up**. A bomber under a thin roof does
+blow the roof open (the pixels show the crater joining the bowl above),
+but the hole is over the walker's head - a ten-pixel step no walker
+climbs - so it is no way up and its gates are gone, the bash-and-bomb
+with them. What the plan reads for CindyLand now is the intended
+solution outright: the lead climbs the column, builds across to the
+block, drops down to the hill, mines a ramp down into the tunnel the
+crowd bashed, and builds twice up to the ledge; the crowd bashes into
+the bedrock, walks up the ramp and the staircase, and exits (cost 6,
+plus the hold).
+
+CindyLand still ends unsolved at tier 2 (754 crowd expansions). The
+macro runs the crowd's route (the bash) and stops where the next gate
+is the lead's - the ramp is mined from the hill above by the athlete,
+and the plan scored at the rollout's end no longer holds that athlete
+(it has left by then), so its step is planned before the action only
+and the search does not take it. The next thing to try is the plan at
+the rollout's end computed with the lemmings as they stood when the
+change happened, or a macro that follows the lead's route as well as the
+crowd's. The level stays open. `tools/nx-probe.js` holds the probes this took (the graph,
 the picture, the reach, a node's plan and candidates, a plan's rollout, the
 pixels) so the next level's diagnosis starts from there.
 

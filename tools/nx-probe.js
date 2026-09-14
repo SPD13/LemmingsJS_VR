@@ -80,7 +80,9 @@ async function main() {
     const node = search._makeNode(null, Solver.copyPlan(plan), level.needCount, null, false, true);
     const o = node.outcome;
     console.log("outcome saved " + o.saved + " lost " + o.lost + " skills " + node.skillsUsed + " stuck " + !!o.stuck + " last " + o.lastFrame + " plan " + (node.planned ? node.planned.cost : "none") + " candidates " + (node.candidates || []).length);
-    for (const c of (node.candidates || []).filter((c) => re.test(c.kind + " " + c.skill + ">" + c.lemId + " (" + c.why + ")")).slice(0, 40)) console.log("  " + c.kind + " " + c.skill + ">" + c.lemId + "@" + c.frame + " " + c.why + " " + c.prior.toFixed(2));
+    if (node.planned) console.log("  plan steps: " + node.planned.steps.map((st) => (st.who || "?")[0] + ":" + (st.gate.skill ? Solver.gateKey(st.gate) : st.gate.kind)).join(" "));
+    const cs = (c) => c.kind === "plan" ? "plan [" + (c.keys || []).join(" ") + "] first " + (c.first ? cs(c.first) : "-") : c.kind + " " + c.skill + ">" + c.lemId + "@" + c.frame + (c.x !== undefined ? " x" + c.x : "") + " " + c.why + " " + c.prior.toFixed(2) + (c.gate ? " gate " + Solver.gateKey(c.gate) : "");
+    for (const c of (node.candidates || []).filter((c) => re.test(c.kind + " " + c.skill + ">" + c.lemId + " (" + c.why + ")")).slice(0, 40)) console.log("  " + cs(c));
   } else if (cmd === "chain") {
     const plan = toPlan(rest[0] || "[]"), who = rest[1];
     world.reset(plan);
