@@ -332,7 +332,18 @@
       if (!all) return null;
       if (walkers && blocking.length && !one) all.cost += Math.min(blocking.length, needed); // the walkers that free them
       const lg = all.leadGroup;
-      return Object.assign(all, { graph, leadId: lg && lg.lem ? lg.lem.identifier : null, leadRegion: lg ? lg.region : -1 });
+      // whoever can already get out alone - a climber-floater with a clear way in - is no worker for the crowd:
+      // its moments get none of the plan's boosts (it stands where the gates are worked and would draw them all)
+      const free = new Set();
+      for (const L of alive) {
+        if (!perms.some((p) => L[has[p]])) continue;
+        const r = R.regionOfLemming(graph, L.x, L.y);
+        if (r < 0) continue;
+        const mine = {}; for (const p of perms) mine[p] = L[has[p]] ? 0 : 1;
+        const own = R.plan(graph, { region: r, dir: L.dx }, skills, { n: 1, lacking: mine });
+        if (own && own.cost === 0) free.add(L.identifier);
+      }
+      return Object.assign(all, { graph, free, leadId: lg && lg.lem ? lg.lem.identifier : null, leadRegion: lg ? lg.region : -1 });
     }
 
     /** A milestone for whoever watches: the phase, the work done, the best so far. */

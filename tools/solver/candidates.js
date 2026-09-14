@@ -64,17 +64,28 @@
     const graph = ctx.planned && ctx.planned.graph;
     const turnsIn = new Map(); // region -> the skill that turns the lemming there (a blocker, a stacker, a jump into an overhang)
     for (const st of steps) if (st.turn) turnsIn.set(st.gate.from, st.how || "BLOCKER");
+    // lemmings with a free way out of their own: the planner's word, and whoever gets out in this very rollout
+    // with nothing more done (the athlete that led the way in) - best left alone, no boosts
+    const free = new Set(ctx.planned && ctx.planned.free ? ctx.planned.free : []);
+    if (!ctx.lemFilter) for (const e of events) if (e.type === "EXIT" && e.lemId) free.add(e.lemId);
+    // the plan's next step (the first with a skill, the lead's or a group's) outranks the ones after it
+    const nextGate = new Set();
+    { let lead = false, group = false; for (const st of steps) { if (!st.gate.skill || st.gate.twin) continue; if (st.who === "lead" && !lead) { lead = true; nextGate.add(st.gate); } else if (st.who !== "lead" && !group) { group = true; nextGate.add(st.gate); } } }
     const planned = (c, e) => {
       if (!steps.length || !e) return 1;
+      // a lemming with a free way out is left alone - except for a turn the plan wants (the blocker on the far
+      // side is best one of them) and the plan's very next gate
+      const isFree = free.size && e.lemId && free.has(e.lemId);
       // the plan wants a turn in a region: whatever does it there
       if (turnsIn.size && (c.skill === "BLOCKER" || c.skill === "STACKER" || c.skill === "JUMPER") && graph && e.type !== "FALL" && e.type !== "DEATH"
         && turnsIn.get(Solver.Regions.regionOfLemming(graph, e.x, e.y)) === c.skill) return 2;
       for (const st of steps) {
         const gt = st.gate;
         if (c.skill !== gt.skill && c.skill !== gt.also) continue;
-        if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step, on the group's own lemmings when theirs
-          if (st.who === "lead" && (!ctx.planned.leadId || e.lemId !== ctx.planned.leadId)) continue;
-          if (st.who === "group" && graph && st.group && Solver.Regions.regionOfLemming(graph, e.x, e.y) !== st.group.region && Solver.Regions.regionOfLemming(graph, e.x, e.y) !== gt.from) continue;
+        if (isFree && !nextGate.has(gt)) continue;
+        if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step - a group pays these per lemming,
+          // and a crowd member made an athlete only makes itself the plan's new lead, cheaper on paper and nothing gained
+          if (st.who !== "lead" || !ctx.planned.leadId || e.lemId !== ctx.planned.leadId) continue;
           if (PERM_BITS[gt.skill]) return 2.5; // a permanent skill: given anywhere before the gate
         }
         if (gt.kind === "unblock" && e.type !== "BLOCK") continue; // the bomber goes on the blocker itself
@@ -86,7 +97,7 @@
         if (gt.also && c.skill === gt.also && !atWall) continue; // the second skill of a two-skill gate works at the far wall only
         const near = atWall || (Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= 16 && inRegion);
         const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing ? -e.dx : e.dx) === gt.dir;
-        if (near && way) return 2.5;
+        if (near && way) return nextGate.has(gt) ? 3 : 2.5;
       }
       return 1;
     };
@@ -176,7 +187,7 @@
     for (const rec of lems) {
       const full = ranked.indexOf(rec) >= 0;
       const isLead = rec === lems[0], isTail = rec === lems[lems.length - 1] && lems.length > 1;
-      const lemWeight = isLead ? 1.0 : isTail ? 0.8 : full ? 0.7 : 0.5;
+      const lemWeight = free.has(rec.id) ? 0.3 : isLead ? 1.0 : isTail ? 0.8 : full ? 0.7 : 0.5;
       const firstFrame = rec.first;
       for (const e of rec.events) {
         const early = e.type === "SPAWN" || e.type === "PRESENT";
@@ -269,6 +280,18 @@
     }
     // a crowded level yields thousands of moments a node; the frontier keeps a few thousand edges in all, so
     // the node's own list is cut to the best by prior (the macros and the plan's picks ride on top)
+    // the plan's pick worked by a dozen lemmings one after the other is one pick: per skill and spot, the
+    // earliest few moments stay (the search takes the gate once), the rest of the crowd's copies go
+    const boostedBySkill = new Map();
+    for (const c of out) { if (!/!/.test(c.why) || c.kind !== "assign") continue; const k = c.skill + ":" + c.why.replace(/[0-9]/g, ""); if (!boostedBySkill.has(k)) boostedBySkill.set(k, []); boostedBySkill.get(k).push(c); }
+    const drop = new Set();
+    for (const list of boostedBySkill.values()) {
+      if (list.length <= 6) continue;
+      list.sort((a, b) => a.frame - b.frame);
+      const seenLem = new Map();
+      for (const c of list) { const n = seenLem.get(c.lemId) || 0; if (n >= 3 || seenLem.size >= 3 && !seenLem.has(c.lemId)) drop.add(c); else seenLem.set(c.lemId, n + 1); }
+    }
+    if (drop.size) { const kept = out.filter((c) => !drop.has(c)); out.length = 0; for (const c of kept) out.push(c); }
     if (out.length > 600) {
       // the plan's picks and the macros stay whatever their prior; the rest by prior
       let keep = out.filter((c) => /!/.test(c.why) || c.kind !== "assign"); const rest = out.filter((c) => !/!/.test(c.why) && c.kind === "assign");

@@ -467,10 +467,23 @@ two builders up to the ledge over the steel, the exit (cost 4.5). The
 search follows it as far as the staircase at tier 2 (81 s: the rollouts
 run 60-90 ms with forty lemmings) and not further: tier 3 (810 s, 6051
 crowd expansions) ends unsolved too. What stands in the way is ordering,
-not budget - the athlete that led the way in stands where the crowd's
-gates are and draws the plan's boosts to its own pointless moves, and the
-staircase is a chain of repeats each of which the search must pick over
-those. The level stays open. `tools/nx-probe.js` holds the probes this took (the graph,
+not budget. Two rules followed from it: **a lemming with a free way out
+of its own** - the planner's word, or one that gets out in the node's own
+rollout with nothing more done (the athlete that led the way in) - is left
+alone: none of the plan's boosts but the turn it wants and its very next
+gate, and its ordinary moments weigh little (it stood where the crowd's
+gates are worked and drew every boost to its own pointless moves); and
+**the plan's next step outranks the ones after it** (3 against 2.5).
+With them the plan's per-lemming gates boost the lead only (a crowd
+member made an athlete only makes itself the plan's new lead, cheaper on
+paper and nothing gained), and the plan's pick worked by a dozen lemmings
+one after the other is kept for three of them at three moments each.
+Keep your hair improved to the by-hand 7 skills at tier 1 on the way.
+CindyLand itself still ends unsolved at tier 2 (983 crowd expansions):
+the search reaches the hold and the bash and then spreads over second
+bashers and builders behind them before the bomber at the thin roof gets
+its turn. The level stays open; the shape of the search (a heap per
+depth over hundreds of moments a node) is the limit here. `tools/nx-probe.js` holds the probes this took (the graph,
 the picture, the reach, a node's plan and candidates, a plan's rollout, the
 pixels) so the next level's diagnosis starts from there.
 

@@ -343,7 +343,7 @@
               while (y >= 0 && !solid(px, y) && air < 14) { air++; y--; } // the tunnel's own height
               while (y >= 0 && solid(px, y) && rf <= 16) { rf++; y--; }
               if (y < 0 || Math.max(air, 10) + rf > 14 || solid(px, y)) continue; // the blast reaches fourteen pixels over the feet, the tunnel itself ten high
-              const id = Math.max(regionAt(cc, Math.floor(y / CELL)), regionAt(cc, Math.floor(y / CELL) - 1));
+              let id = -1; for (const dx of [0, -1, 1]) id = Math.max(id, regionAt(cc + dx, Math.floor(y / CELL)), regionAt(cc + dx, Math.floor(y / CELL) - 1));
               if (id >= 0 && id !== r.id && (roof < 0 || rf < roof)) { roof = rf; above = id; bombAt = cc; }
             }
             if (above >= 0 && roof >= 1) gate(r.id, above, "bashbomb", "BASHER", 2.5, ex, ey, dir, { thickness, also: "BOMBER", alsoCost: 1, wallX: bombAt * CELL + 2 });
@@ -411,7 +411,7 @@
       // the roof blown through, from anywhere in the region: a thin ceiling (three cells or fewer) with a floor
       // of another region above it - a bomber under it opens the way up (the bomber is lost)
       const ups = new Set();
-      for (let n = 0; n < r.cells.length; n += 2) {
+      for (let n = 0; n < r.cells.length; n++) {
         let up = null;
         const j = r.cells[n], jx = j % cw, jy = (j / cw) | 0, px = jx * CELL + 2;
         // at the pixels (a tunnel's roof is thinner than a cell): the air over the feet, then the roof, then air again
@@ -421,7 +421,8 @@
         if (y < 0 || !solid(px, y)) continue;
         while (y >= 0 && solid(px, y) && roof <= 16) { roof++; y--; }
         if (y < 0 || air + roof > 14 || solid(px, y)) continue; // the blast reaches fourteen pixels over the feet
-        const id = Math.max(regionAt(jx, Math.floor(y / CELL)), regionAt(jx, Math.floor(y / CELL) - 1));
+        // the floor above: in this column or the next either way (a bowl's floor cell sits a column over)
+        let id = -1; for (const dx of [0, -1, 1]) id = Math.max(id, regionAt(jx + dx, Math.floor(y / CELL)), regionAt(jx + dx, Math.floor(y / CELL) - 1));
         if (id >= 0 && id !== r.id && !ups.has(id)) { ups.add(id); up = { to: id, cx: jx, cy: jy }; }
         if (up) gate(r.id, up.to, "bombup", "BOMBER", 1.5, up.cx, up.cy, 0);
       }
@@ -458,7 +459,7 @@
         let y = t.ey * CELL + CELL - 1 - 10, roof = 0;
         while (y >= 0 && solid(px, y) && roof <= 4) { roof++; y--; }
         if (y < 0 || roof === 0 || roof > 4 || solid(px, y)) continue;
-        const above = Math.max(regionAt(jx, Math.floor(y / CELL)), regionAt(jx, Math.floor(y / CELL) - 1));
+        let above = -1; for (const dx of [0, -1, 1]) above = Math.max(above, regionAt(jx + dx, Math.floor(y / CELL)), regionAt(jx + dx, Math.floor(y / CELL) - 1));
         if (above >= 0 && above !== t.from && !ups.has(above)) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); }
       }
       // a miner's ramp from a floor above: two cells along for one down, through plain terrain, into the tunnel
