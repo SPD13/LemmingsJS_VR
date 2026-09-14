@@ -21,6 +21,19 @@ npm start
 - **Setup tab** — configure the port (1024–65535, default 8123) and toggle
   HTTPS (on by default), persisted in the app's user-data folder. Changes
   apply immediately; a running server restarts.
+- **Log tab** — the server's log: one line per request (method, path,
+  status, size, time, and the client's address when it is not this
+  machine), the solver's jobs starting and finishing, and the launcher's
+  own lines (`[launcher] …`: starts, stops, a reclaimed port, a failure).
+  The last 1000 lines are kept; Clear empties them.
+
+The app icon is `img/lemmix_vr_logo.png` (the Dock on macOS, the window on
+Windows/Linux, and the header of the window itself).
+
+Two environment variables help when working on the launcher itself:
+`LAUNCHER_AUTOSTART=1` starts the server with the app, and
+`LAUNCHER_SCREENSHOT=/path/file.png` writes a capture of the window a few
+seconds after launch (`LAUNCHER_SCREENSHOT_TAB=setup|log` picks the tab).
 
 HTTPS uses a self-signed certificate generated on first start with
 `localhost` and this machine's LAN IP as subject alt names (cached in the
@@ -33,7 +46,7 @@ The server itself is `server.js`: a static file server for the repo root
 Electron main process — no `http-server` child process to manage. It listens
 on all interfaces so headsets and other machines on the LAN can reach it.
 `node launcher/server.js [port]` runs it from a terminal without Electron,
-over plain HTTP (default port 8123).
+over plain HTTP (default port 8123); the same log lines go to the terminal.
 
 Besides the files it serves three things of its own:
 

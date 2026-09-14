@@ -24,7 +24,9 @@ const { reclaimPort } = require("./port");
 const selfsigned = require("selfsigned");
 
 const WEB_ROOT = path.join(__dirname, "..");
+const ICON = path.join(WEB_ROOT, "img", "lemmix_vr_logo.png");
 const DEFAULT_PORT = 8123;
+const LOG_LINES = 1000;   // the Log tab keeps this many, the oldest dropped first
 const PORT_MIN = 1024;
 const PORT_MAX = 65535;
 
@@ -33,6 +35,21 @@ let server = null;
 let config = { port: DEFAULT_PORT, https: true };
 let lastError = null;
 let notice = null;   // something worth saying that is not a failure
+let log = [];        // the Log tab: the server's lines and the launcher's own, timestamped
+let logSeq = 0;      // numbers every line, so the window applies each one once (its first
+                     // full read and the live pushes overlap in time)
+
+/** One log line (or several, newline-separated): kept, and sent to the window. */
+function pushLog(line) {
+  for (const l of String(line).split(/\r?\n/)) {
+    if (!l.trim()) continue;
+    const entry = new Date().toLocaleTimeString() + "  " + l;
+    log.push(entry);
+    if (log.length > LOG_LINES) log.shift();
+    logSeq++;
+    if (win && !win.isDestroyed()) win.webContents.send("log", { seq: logSeq, line: entry });
+  }
+}
 
 function configPath() {
   return path.join(app.getPath("userData"), "launcher-config.json");
@@ -137,11 +154,13 @@ async function startServer() {
   try {
     tls = config.https ? await ensureCert() : null;
     const { createStaticServer } = loadServer();
-    server = await createStaticServer(WEB_ROOT, config.port, tls);
+    pushLog("[launcher] starting server on port " + config.port + " (" + (config.https ? "https" : "http") + ")");
+    server = await createStaticServer(WEB_ROOT, config.port, tls, pushLog);
   } catch (e) {
     server = null;
     if (e.code !== "EADDRINUSE") {
       lastError = e.message;
+      pushLog("[launcher] could not start: " + e.message);
       broadcast();
       return;
     }
@@ -151,8 +170,9 @@ async function startServer() {
     // port is left strictly alone and named in the error.
     const taken = await reclaimPort(config.port, __dirname);
     if (taken.killed.length > 0 && taken.free) {
+      pushLog("[launcher] stopped previous launcher pid " + taken.killed.join(", ") + " holding port " + config.port);
       try {
-        server = await loadServer().createStaticServer(WEB_ROOT, config.port, tls);
+        server = await loadServer().createStaticServer(WEB_ROOT, config.port, tls, pushLog);
         notice = "port " + config.port + " was still held by a previous " +
           "launcher (pid " + taken.killed.join(", ") + ") — stopped it and " +
           "started fresh";
@@ -167,6 +187,7 @@ async function startServer() {
     } else {
       lastError = "port " + config.port + " is already in use";
     }
+    if (lastError) pushLog("[launcher] could not start: " + lastError);
   }
   broadcast();
 }
@@ -176,18 +197,19 @@ async function stopServer() {
   notice = null;
   const s = server;
   server = null;
+  pushLog("[launcher] stopping server");
   await s.close();
   broadcast();
 }
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 460,
-    height: 420,
+    width: 520,
+    height: 560,
     resizable: false,
     title: "Lemmings VR Launcher",
     backgroundColor: "#10141c",
-    icon: path.join(__dirname, "..", "img", "lemmix_vr_logo.png"),  // the window's icon (Windows, Linux)
+    icon: ICON,   // the window's icon (Windows, Linux); the Dock icon on macOS is set below
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -196,6 +218,20 @@ function createWindow() {
   });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
+  // dev aid: LAUNCHER_SCREENSHOT=/path/file.png writes a capture of the window
+  // a few seconds after launch (LAUNCHER_SCREENSHOT_TAB=setup|log picks the tab)
+  if (process.env.LAUNCHER_SCREENSHOT) {
+    setTimeout(async () => {
+      try {
+        const tab = process.env.LAUNCHER_SCREENSHOT_TAB;
+        if (tab) {
+          await win.webContents.executeJavaScript('document.querySelector(".tab[data-tab=\'' + tab + '\']").click()');
+          await new Promise((r) => setTimeout(r, 500));   // a repaint before the capture
+        }
+        fs.writeFileSync(process.env.LAUNCHER_SCREENSHOT, (await win.webContents.capturePage()).toPNG());
+      } catch (e) { console.error("screenshot failed:", e.message); }
+    }, 6000);
+  }
 }
 
 app.whenReady().then(() => {
@@ -204,6 +240,8 @@ app.whenReady().then(() => {
   ipcMain.handle("get-status", () => status());
   ipcMain.handle("start", async () => { await startServer(); return status(); });
   ipcMain.handle("stop", async () => { await stopServer(); return status(); });
+  ipcMain.handle("get-log", () => ({ seq: logSeq, lines: log }));
+  ipcMain.handle("clear-log", () => { log = []; });
   ipcMain.handle("set-port", async (e, portRaw) => {
     const port = parseInt(portRaw, 10);
     if (!(port >= PORT_MIN && port <= PORT_MAX)) {
@@ -232,10 +270,14 @@ app.whenReady().then(() => {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
   });
 
+  // the app icon: `electron .` runs under Electron's own bundle, so the Dock
+  // (macOS) gets the logo at runtime; the window icon covers Windows/Linux
+  if (process.platform === "darwin" && app.dock) app.dock.setIcon(ICON);
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+  if (process.env.LAUNCHER_AUTOSTART === "1") startServer();   // dev aid: the server up at launch
 });
 
 app.on("window-all-closed", async () => {
