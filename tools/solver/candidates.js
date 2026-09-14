@@ -72,12 +72,19 @@
       for (const st of steps) {
         const gt = st.gate;
         if (c.skill !== gt.skill && c.skill !== gt.also) continue;
-        if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step, on any of the group when theirs
+        if (gt.perLemming) { // a climber, a floater: on the lead when the lead's step, on the group's own lemmings when theirs
           if (st.who === "lead" && (!ctx.planned.leadId || e.lemId !== ctx.planned.leadId)) continue;
+          if (st.who === "group" && graph && st.group && Solver.Regions.regionOfLemming(graph, e.x, e.y) !== st.group.region && Solver.Regions.regionOfLemming(graph, e.x, e.y) !== gt.from) continue;
           if (PERM_BITS[gt.skill]) return 2.5; // a permanent skill: given anywhere before the gate
         }
         if (gt.kind === "unblock" && e.type !== "BLOCK") continue; // the bomber goes on the blocker itself
-        const near = Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= 16;
+        // at the gate (a staircase up a wall: at the wall, the run-up is the candidate's own offset), in its region
+        // in the gate's region - or in no region the node's graph knows, the terrain having changed in the rollout
+        const er = graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : -1;
+        const inRegion = !graph || er === gt.from || er < 0;
+        const atWall = gt.wallX !== undefined && Math.abs(e.x - gt.wallX) <= 20 && (gt.kind === "bashup" || gt.kind === "bashbomb" || Math.abs(e.y - gt.y) <= 16) && inRegion;
+        if (gt.also && c.skill === gt.also && !atWall) continue; // the second skill of a two-skill gate works at the far wall only
+        const near = atWall || (Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= 16 && inRegion);
         const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing ? -e.dx : e.dx) === gt.dir;
         if (near && way) return 2.5;
       }
@@ -94,14 +101,24 @@
       if (A === BA.DIGGING) return game.hasIndestructibleAt(e.x, e.y + 1, e.dx, A) && game.hasIndestructibleAt(e.x, e.y + 2, e.dx, A);
       return false;
     };
+    // the deadline: the death past the count's allowance - a crowd dying that way wants holding first
+    let deadline = -1;
+    if (!ctx.lemFilter && analysis && ctx.level) {
+      const deaths = events.filter((e) => e.type === "DEATH").map((e) => e.frame).sort((a, b) => a - b);
+      const lostBefore = Math.max(0, (outcome.lost || 0) - deaths.length);
+      const allowed = analysis.maxSavable - ctx.level.needCount - lostBefore;
+      if (allowed >= 0 && deaths.length > allowed) deadline = deaths[allowed];
+    }
     const out = [];
-    const seen = new Set();
+    const seen = new Map();
     const has = (skill) => (skillCounts[skill] || 0) > 0;
     const push = (c) => {
       if (c.frame < nodeFrame || c.frame < 0) return;
+
       const key = c.kind + (c.gap ? "~" : "") + "|" + (c.lemId || "") + "|" + (c.skill || c.si || "") + "|" + c.frame;
-      if (seen.has(key)) return;
-      seen.add(key);
+      const had = seen.get(key);
+      if (had) { if (c.prior > had.prior) { had.prior = c.prior; had.why = c.why; } return; } // the same moment from two events: the better reason
+      seen.set(key, c);
       out.push(c);
     };
     // which lemmings: by their first event's order (the lead first), the tail last
@@ -115,11 +132,16 @@
     }
     const lems = Array.from(byLem.values());
     // rank: the lead (the first out) and the tail (the last out), then the nearest to an exit
+    // the lead and the tail among those still able to act (a blocker at its post is no lead), then the nearest the exit
+    const able = lems.filter((r) => !r.last || r.last.action !== BA.BLOCKING);
+    const pool = able.length ? able : lems;
     const ranked = [];
-    if (lems.length) ranked.push(lems[0]);
-    if (lems.length > 1) ranked.push(lems[lems.length - 1]);
-    const rest = lems.slice(1, -1).map((r) => ({ r, d: analysis.field.at(r.last.x, r.last.y) })).sort((a, b) => a.d - b.d);
+    if (pool.length) ranked.push(pool[0]);
+    if (pool.length > 1) ranked.push(pool[pool.length - 1]);
+    const rest = pool.slice(1, -1).map((r) => ({ r, d: analysis.field.at(r.last.x, r.last.y) })).sort((a, b) => a.d - b.d);
     for (const { r } of rest) { if (ranked.length >= params.lemmings) break; ranked.push(r); }
+    // and whoever stands where the plan wants a skill worked: a lemming with an event the plan boosts gets every template there
+    if (steps.length) for (const rec of lems) if (ranked.indexOf(rec) < 0 && rec.events.some((e) => e.type !== "DEATH" && steps.some((st) => st.gate.skill && planned({ skill: st.gate.skill }, e) > 1))) ranked.push(rec);
     // every other lemming that dies gets its own rescue (a permanent skill, timing-insensitive), the earliest deaths first
     const rescued = lems.filter((r) => ranked.indexOf(r) < 0 && r.events.some((e) => e.type === "DEATH"))
       .sort((a, b) => a.events.find((e) => e.type === "DEATH").frame - b.events.find((e) => e.type === "DEATH").frame)
@@ -128,8 +150,18 @@
       for (const e of rec.events) {
         if (e.type !== "DEATH") continue;
         for (const [skill, where, weight] of DEATH_TEMPLATES[e.cause] || []) {
-          if (!has(skill) || TERRAIN.has(skill) || skill === "BLOCKER") continue;
+          if (!has(skill) || TERRAIN.has(skill)) continue;
           if (PERM_BITS[skill] && (e.perms & PERM_BITS[skill])) continue;
+          if (skill === "BLOCKER") {
+            // the hold: a blocker short of the edge (or the wall) the death came from, so the crowd behind it
+            // stays put while the way is made - the first of the crowd to die shows where
+            const a = e.anchor;
+            if (!a || !a.ring || e.cause === "trap") continue;
+            const dir = a.type === "TURN" && !a.climbing ? -a.dx : a.dx, edge = a.edgeX !== undefined ? a.edgeX : a.wallX;
+            // pressing when the crowd dies past the count's allowance, an afterthought otherwise
+            for (const k of [4, 12, 24]) { const f = frameShortOf(a.ring, edge, dir, k); if (f >= 0) push({ kind: "assign", lemId: rec.id, skill, frame: f, why: "hold:" + e.cause, prior: weight * (deadline >= 0 ? 3 : 0.4) / (1 + k / 16) }); }
+            continue;
+          }
           const frame = where === "early" ? rec.first : where === "anchorat" && e.anchor ? e.anchor.frame : e.frame;
           push({ kind: "assign", lemId: rec.id, skill, frame, why: "rescue:" + e.cause, prior: weight * 0.6 });
         }
@@ -149,8 +181,10 @@
       for (const e of rec.events) {
         const early = e.type === "SPAWN" || e.type === "PRESENT";
         let templates = e.type === "DEATH" ? DEATH_TEMPLATES[e.cause] : TEMPLATES[e.type];
-        // an unranked lemming: its deaths, its early permanent skills, and permanent skills at its other events
-        if (!full && e.type !== "DEATH" && !early) templates = (templates || []).filter(([skill]) => PERM_BITS[skill]);
+        // an unranked lemming: its deaths, its early permanent skills, permanent skills at its other events - and
+        // the turn the plan wants in the region it stands in (a blocker on any lemming of the crowd does it)
+        const turnHere = turnsIn.size && graph && e.type !== "FALL" && e.type !== "DEATH" ? turnsIn.get(Solver.Regions.regionOfLemming(graph, e.x, e.y)) : null;
+        if (!full && e.type !== "DEATH" && !early) templates = (templates || []).filter(([skill]) => PERM_BITS[skill] || skill === turnHere);
         if (early) {
           // an early permanent skill, timing-insensitive
           templates = PERM.map((s) => [s, "at", s === "CLIMBER" || s === "FLOATER" ? 0.35 : 0.25]).concat([["CLONER", "at", 0.15]]);
@@ -161,14 +195,20 @@
         pathSeen.add(pathKey);
         const orderWeight = e.type === "DEATH" ? 1 / (1 + 0.15 * deathOrder++) : 1;
         let n = 0;
-        for (const [skill, where, weight] of templates) {
+        // the tier's cap on skills per event falls on the templates as the plan ranks them: a boosted one first
+        const boosted = templates.map(([skill, where, weight]) => ({ skill, where, weight, boost: planned({ skill }, e) }));
+        boosted.sort((a, b) => b.weight * b.boost - a.weight * a.boost);
+        for (const { skill, where, weight, boost } of boosted) {
           if (!has(skill)) continue;
           if (PERM_BITS[skill] && (e.perms & PERM_BITS[skill])) continue;
           if (repeat && TERRAIN.has(skill) && e.type !== "DEATH") continue;
           if (forbidden(e, skill)) continue; // steel, or a one-way wall from the wrong side: the skill would stop at once
           if (n >= params.skillsPerEvent && !repeat) break;
           const fatal = e.type === "DEATH" ? 1.3 : (e.type === "FALL" && e.fatal) ? 1.2 : 1;
-          const prior = weight * lemWeight * fatal * orderWeight * (skillCounts[skill] > 1 ? 1 : 0.85);
+          // the crowd dying past the count's allowance: the blocker short of that death's edge (the hold) comes first
+          const hold = skill === "BLOCKER" && e.type === "DEATH" && deadline >= 0 ? 3 : 1;
+          // the plan's pick is the plan's pick whoever the lemming: no rank discount on a boosted moment
+          const prior = (boost > 1 ? Math.max(weight, 0.8) : weight) * (boost > 1 ? 1 : lemWeight) * fatal * orderWeight * hold * (skillCounts[skill] > 1 ? 1 : 0.85);
           const frames = [];
           const anchor = e.anchor;
           switch (where) {
@@ -180,12 +220,25 @@
             case "k0": frames.push([frameShortOf(e.ring || [], e.edgeX !== undefined ? e.edgeX : e.wallX, e.type === "TURN" && !e.climbing ? -e.dx : e.dx, 0), 1]); break;
             case "k": {
               const dir = e.type === "TURN" && !e.climbing ? -e.dx : e.dx, edge = e.edgeX !== undefined ? e.edgeX : e.wallX;
-              for (const k of params.offsets) frames.push([frameShortOf(e.ring || [], edge, dir, k), 1 / (1 + k / 8)]);
+              // a staircase up this wall: the builder starts its run-up before it (24 px a builder), a plan's gate says how far;
+              // a builder right at the wall is then the wrong moment (its bricks meet the wall at once)
+              const stair = skill === "BUILDER" && e.type === "TURN" ? steps.find((st) => (st.gate.kind === "buildup" || st.gate.kind === "bashup") && st.gate.wallX !== undefined && Math.abs(e.x - st.gate.wallX) <= 20 && st.gate.dir === dir) : null;
+              for (const k of params.offsets) frames.push([frameShortOf(e.ring || [], edge, dir, k), (stair ? 0.4 : 1) / (1 + k / 8)]);
+              if (stair) {
+                const gt = stair.gate;
+                // the run-up, or as much of it as the walk to the wall was straight (a bump on the way turns a builder)
+                const ring = e.ring || [];
+                let stretch = 0;
+                for (let i = ring.length - 1; i > 0; i--) { if ((ring[i][1] - ring[i - 1][1]) * dir < 0 || Math.abs(ring[i][2] - ring[i - 1][2]) > 6) break; stretch = Math.abs(edge - ring[i - 1][1]); }
+                const run = Math.min(gt.runUp, Math.floor(stretch / 24) * 24);
+                if (run >= 24) frames.push([frameShortOf(ring, edge, dir, run), 1.2]);
+                if (run < gt.runUp && stretch >= 24) frames.push([frameShortOf(ring, edge, dir, stretch - 2), 1]);
+              }
               break;
             }
             case "ring": {
               const ring = e.ring || [];
-              for (let i = ring.length - 1; i >= 0; i -= 8) frames.push([ring[i][0], 0.8]);
+              for (let i = ring.length - 1, n = 0; i >= 0 && n < 3; i -= 8, n++) frames.push([ring[i][0], 0.8]); // the last 24 px of the walk
               break;
             }
             case "anchor": case "anchor0": case "anchorat": {
@@ -199,7 +252,6 @@
             case "back": for (const k of [8, 24]) frames.push([Math.max(nodeFrame, e.frame - k), 0.8]); break;
           }
           let any = false;
-          const boost = planned({ skill }, e);
           for (const [frame, w] of frames) {
             if (frame < 0) continue;
             const why = e.type + (e.cause ? ":" + e.cause : "") + (boost > 1 ? "!" : "");
@@ -214,6 +266,15 @@
           if (any) n++;
         }
       }
+    }
+    // a crowded level yields thousands of moments a node; the frontier keeps a few thousand edges in all, so
+    // the node's own list is cut to the best by prior (the macros and the plan's picks ride on top)
+    if (out.length > 600) {
+      // the plan's picks and the macros stay whatever their prior; the rest by prior
+      let keep = out.filter((c) => /!/.test(c.why) || c.kind !== "assign"); const rest = out.filter((c) => !/!/.test(c.why) && c.kind === "assign");
+      keep.sort((a, b) => b.prior - a.prior); if (keep.length > 400) keep = keep.slice(0, 400);
+      rest.sort((a, b) => b.prior - a.prior);
+      out.length = 0; for (const c of keep) out.push(c); for (const c of rest.slice(0, Math.max(0, 600 - keep.length))) out.push(c);
     }
     // "follow the lead": the permanent skills the plan gave one lemming, given to the next one out
     // the same way (the frames shifted by their spawn gap), one edge - the second athlete over the wall

@@ -10,7 +10,8 @@
  * its top; steel and a one-way wall's forbidden side forbid what they
  * forbid), a gap (built across, as many builders as its width and rise
  * need; a platformer flat; a jump over nine cells and up to five up), the floor
- * (dug through, unless steel), a deadly drop cut short by a stoner's stone,
+ * (dug through, unless steel), a wall built up by a staircase of builders or
+ * blown open by a bomber when thin, a deadly drop cut short by a stoner's stone,
  * a low wall jumped or stacked up, a ceiling
  * within reach shimmied along to where it ends. Water, fire and a trap
  * are ends too - deadly on foot, crossed above like a gap, water swum by a
@@ -198,8 +199,10 @@
     const exits = level.gadgets.filter((gd) => gd.effectBase === "EXIT" || gd.effectBase === "LOCKEXIT");
     const exitAt = [];
     for (const e of exits) {
+      // the trigger may lie a few pixels under the floor it is walked on (a hill's exit): the nearest floor
+      // cell from the trigger's bottom up to four cells above it
       const r = e.triggerRect, cx = Math.floor((r.x0 + r.x1) / 2 / CELL);
-      for (let cy = Math.floor(r.y0 / CELL); cy <= Math.floor(r.y1 / CELL) + 1 && cy < ch; cy++) { const id = regionAt(cx, cy); if (id >= 0) { regions[id].exit = true; exitAt.push({ region: id, x: (r.x0 + r.x1) >> 1 }); break; } }
+      for (let cy = Math.min(ch - 1, Math.floor(r.y1 / CELL) + 1); cy >= Math.max(0, Math.floor(r.y0 / CELL) - 4); cy--) { const id = regionAt(cx, cy); if (id >= 0) { regions[id].exit = true; exitAt.push({ region: id, x: (r.x0 + r.x1) >> 1 }); break; } }
     }
     for (const hd of level.gadgets.filter((gd) => gd.effectBase === "WINDOW")) {
       const l = landing(Math.floor(hd.triggerRect.x0 / CELL), Math.floor(hd.triggerRect.y0 / CELL));
@@ -207,6 +210,7 @@
     }
     // the ends of every region, and the gates out of it
     const gates = [];
+    const deadEnds = []; // tunnels a basher would dig into bedrock up to steel: regions in waiting (below)
     const gate = (from, to, kind, skill, cost, cx, cy, dir, extra) => {
       const gt = Object.assign({ from, to, kind, skill, cost, x: cx * CELL + 2, y: cy * CELL + 2, dir }, extra || {});
       gt.id = gates.length; gates.push(gt); regions[from].gates.push(gt);
@@ -222,20 +226,31 @@
         const hz = hazardAt(nx, ey) || (at(nx, ey) === 0 ? hazardAt(nx, ey + 1) : 0);
         /** What a builder, a platformer or a jumper reaches across from this end: the nearest region within reach. */
         const crossings = () => {
-          for (const t of regions) {
-            if (t.id === r.id) continue;
-            for (let k = 1; k <= MAX_BUILDERS; k++) {
-              const reachX = ex + dir * BUILD_ACROSS * k, minY = ey - BUILD_UP * k;
-              const hit = t.cells.some((j) => { const jx = j % cw, jy = (j / cw) | 0; return (dir > 0 ? jx > ex && jx <= reachX : jx < ex && jx >= reachX) && jy >= minY && jy <= ey; });
-              if (hit) { gate(r.id, t.id, "build", "BUILDER", k, ex, ey, dir, { builders: k, twoWay: true }); break; }
+          // a bridge, cell by cell along its line (a builder's rises one row in two cells, a platformer's is flat),
+          // with headroom, until it meets terrain: a floor cell above the meeting point (or a floor cell on the
+          // line) is where it lands, and another region there is a gate of as many builders as the length took;
+          // terrain with no floor above it blocks the bridge - so does a wall in the way (the column beside a
+          // hill is not built over)
+          const bridge = (kind, skill, rise) => {
+            const seen = new Set();
+            for (let t = 1; t <= BUILD_ACROSS * MAX_BUILDERS; t++) {
+              const col = ex + dir * t, row = ey - Math.floor((t * rise) / BUILD_ACROSS);
+              if (col < 0 || col >= cw || row < 1) break;
+              const k = Math.ceil(t / BUILD_ACROSS);
+              if (at(col, row) !== 0 || at(col, row - 1) !== 0) {
+                // terrain met: the floor cell over it (the bridge's end climbs onto it) or nothing
+                const id = at(col, row) !== 0 ? regionAt(col, row - 1) : -1;
+                if (id >= 0 && id !== r.id && !seen.has(id)) { seen.add(id); gate(r.id, id, kind, skill, k, ex, ey, dir, { builders: k, twoWay: true }); }
+                break;
+              }
+              const id = regionAt(col, row);
+              if (id >= 0 && id !== r.id && !seen.has(id)) { seen.add(id); gate(r.id, id, kind, skill, k, ex, ey, dir, { builders: k, twoWay: true }); break; }
+              // at a builder's last brick the lemming walks off the end: a floor below within a safe fall is a landing too
+              if (t % BUILD_ACROSS === 0) { const l = landing(col, row + 1); if (l && l.region >= 0 && l.region !== r.id && l.cells <= SPLAT_CELLS && !seen.has(l.region)) { seen.add(l.region); gate(r.id, l.region, kind, skill, k, ex, ey, dir, { builders: k, twoWay: false }); } }
             }
-            // a platformer: flat, as far as a builder
-            for (let k = 1; k <= MAX_BUILDERS; k++) {
-              const reachX = ex + dir * PLATFORM_ACROSS * k;
-              const hit = t.cells.some((j) => { const jx = j % cw, jy = (j / cw) | 0; return (dir > 0 ? jx > ex && jx <= reachX : jx < ex && jx >= reachX) && jy >= ey - 1 && jy <= ey + 1; });
-              if (hit) { gate(r.id, t.id, "platform", "PLATFORMER", k, ex, ey, dir, { platformers: k, twoWay: true }); break; }
-            }
-          }
+          };
+          bridge("build", "BUILDER", BUILD_UP);
+          bridge("platform", "PLATFORMER", 0);
           // a jump: an arc two cells up over seven across, through the air, onto a ledge on the way or wherever the fall after it lands
           let to = -1;
           for (let k = 1; k <= JUMP_ACROSS; k++) {
@@ -291,10 +306,23 @@
           crossings();
         } else if (beyond !== 0 || (beyond === 0 && at(nx, ey - 1) !== 0)) {
           // a wall: its height, and what stands on the other side at this row
+          // the tunnel a basher cuts is the lemming's height over its feet: the wall is measured a cell up, where
+          // the tunnel's middle runs, and the far side is where that row meets air - the tunnel's floor stays at
+          // the feet, so the way out must be a floor at that level or a cell above it (a hollow higher up is
+          // passed under: the tunnel runs on)
+          let steel = false, ow = 0, far = nx, tr = ey, thickness = Infinity, l = null;
+          for (const row of [ey >= 1 ? ey - 1 : ey]) {
+            steel = false; ow = 0; far = nx; tr = row;
+            // the tunnel runs until air or steel (a basher stops at steel, the tunnel dug so far stays)
+            while (far >= 0 && far < cw && at(far, tr) !== 0 && at(far, tr) !== 2 && at(far, ey) !== 2) { ow |= g.oneway[far + tr * cw] | g.oneway[far + ey * cw]; far += dir; }
+            steel = far >= 0 && far < cw && (at(far, tr) === 2 || at(far, ey) === 2);
+            thickness = Math.abs(far - nx);
+            // out of the tunnel: onto the floor at the tunnel's level, a step down, or the fall from there
+            const out = far < 0 || far >= cw ? null : regionAt(far, tr) >= 0 ? { cy: tr, region: regionAt(far, tr), cells: 0 } : at(far, ey) !== 0 ? { cy: tr, region: -1, cells: 0 } : at(far, ey + 1) !== 0 ? { cy: ey, region: regionAt(far, ey), cells: 0 } : landing(far, ey);
+            l = out && out.region < 0 && out.cells === 0 ? landing(far, tr) : out;
+            if (l && l.region >= 0 && l.region !== r.id) break;
+          }
           let top = ey; while (top > 0 && at(nx, top - 1) !== 0) top--;
-          let steel = false, ow = 0, far = nx;
-          while (far >= 0 && far < cw && at(far, ey) !== 0) { if (at(far, ey) === 2) steel = true; ow |= g.oneway[far + ey * cw]; far += dir; }
-          const thickness = Math.abs(far - nx);
           const height = ey - top + 1;
           r.ends[side] = { kind: "wall", height, thickness, steel, oneway: ow };
           // a slope the cells take for a wall: walked up on foot, both ways
@@ -302,23 +330,59 @@
           if (up >= 0) { r.ends[side].kind = "slope"; gate(r.id, up, "walk", null, 0, ex, ey, dir, { twoWay: true }); }
           // one-way: a wall of arrows left is cut only by a lemming moving left (dir -1); arrows down or up stop a basher, arrows up a miner
           const sideForbids = ((ow & 1) && dir > 0) || ((ow & 2) && dir < 0);
-          if (!steel && !sideForbids && far >= 0 && far < cw) {
-            const l = at(far, ey + 1) !== 0 ? { cy: ey, region: regionAt(far, ey), cells: 0 } : landing(far, ey);
-            if (!(ow & 12) && l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bash", "BASHER", 1, ex, ey, dir, { thickness, fall: l.cells, twoWay: l.cells === 0 });
-            // a miner: down and along, to the floor it breaks into
-            if (!(ow & 8)) for (let k = 1, mx = nx, my = ey + 1; k < 40 && mx >= 0 && mx < cw && my < ch; k++, mx += dir, my++) {
-              if (at(mx, my) === 2 || (g.oneway[mx + my * cw] & 8)) break;
-              if (at(mx, my) === 0) { const l2 = landing(mx, my); if (l2 && l2.region >= 0 && l2.region !== r.id) gate(r.id, l2.region, "mine", "MINER", 1, ex, ey, dir); break; }
+          if (steel && thickness >= 2 && !sideForbids && !(ow & 12) && far >= 0 && far < cw) {
+            // a tunnel that ends at steel is a floor of its own. Up from its end: through a thin roof (three cells
+            // or fewer) a bomber blows a way to the floor above; under an open shaft a staircase of builders goes
+            // up the steel to whatever stands above - one gate for the two skills either way
+            // the roof over the tunnel's last stretch (eight cells back from the steel): its thinnest spot
+            let above = -1, roof = -1, bombAt = far - dir;
+            for (let k = 1; k <= 8 && k < thickness; k++) {
+              const cc = far - dir * k, px = cc * CELL + 2;
+              let y = ey * CELL + CELL - 1, rf = 0, ground = 0, air = 0;
+              while (y >= 0 && solid(px, y) && ground < CELL) { ground++; y--; }
+              while (y >= 0 && !solid(px, y) && air < 14) { air++; y--; } // the tunnel's own height
+              while (y >= 0 && solid(px, y) && rf <= 16) { rf++; y--; }
+              if (y < 0 || Math.max(air, 10) + rf > 14 || solid(px, y)) continue; // the blast reaches fourteen pixels over the feet, the tunnel itself ten high
+              const id = Math.max(regionAt(cc, Math.floor(y / CELL)), regionAt(cc, Math.floor(y / CELL) - 1));
+              if (id >= 0 && id !== r.id && (roof < 0 || rf < roof)) { roof = rf; above = id; bombAt = cc; }
+            }
+            if (above >= 0 && roof >= 1) gate(r.id, above, "bashbomb", "BASHER", 2.5, ex, ey, dir, { thickness, also: "BOMBER", alsoCost: 1, wallX: bombAt * CELL + 2 });
+            deadEnds.push({ from: r.id, nx, far, ey, dir, ex });
+            const c = far - dir;
+            if (roof === 0) {
+              let stop = tr; while (stop > 0 && at(far, stop - 1) !== 0) stop--;
+              let open = true; for (let rr = tr - 1; rr >= stop - 1 && rr >= 0; rr--) if (at(c, rr) !== 0) { open = false; break; }
+              if (open && stop >= 1 && at(far, stop - 1) === 0) {
+                const top = regionAt(far, stop - 1), h = ey - stop + 1, k = Math.ceil(h / BUILD_UP);
+                if (top >= 0 && top !== r.id && k <= MAX_BUILDERS && thickness >= BUILD_ACROSS * k) gate(r.id, top, "bashup", "BASHER", 1 + k, ex, ey, dir, { thickness, also: "BUILDER", alsoCost: k, builders: k, wallX: far * CELL - (dir > 0 ? 1 : -CELL), runUp: BUILD_ACROSS * CELL * k });
+              }
             }
           }
-          // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one
+          if (!steel && !sideForbids && far >= 0 && far < cw) {
+            if (!(ow & 12) && l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bash", "BASHER", 1, ex, ey, dir, { thickness, fall: l.cells, twoWay: l.cells === 0 });
+          // a miner: down and along, to the floor it breaks into
+            if (!(ow & 8)) for (let k = 1, mx = nx, my = ey + 1; k < 40 && mx >= 0 && mx < cw && my < ch; k++, mx += dir, my++) {
+              if (at(mx, my) === 2 || (g.oneway[mx + my * cw] & 8)) break;
+              if (at(mx, my) === 0) { const l2 = landing(mx, my); if (l2 && l2.region >= 0 && l2.region !== r.id) gate(r.id, l2.region, "mine", "MINER", 1, ex, ey, dir, { twoWay: true }); break; }
+            }
+          }
+          // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one; a staircase
+          // of builders up it, one per three cells of height, given the run-up (six cells of floor a builder)
           if (top >= 1 && at(nx, top - 1) === 0) {
             const topRegion = regionAt(nx, top - 1);
             if (topRegion >= 0 && topRegion !== r.id) {
               gate(r.id, topRegion, "climb", "CLIMBER", 1, ex, ey, dir, { perLemming: true, height });
               if (height <= JUMP_LEDGE) gate(r.id, topRegion, "jump", "JUMPER", 1, ex, ey, dir, { perLemming: true, height });
               if (height <= STACK_UP) gate(r.id, topRegion, "stack", "STACKER", 1, ex, ey, dir, { height });
+              const k = Math.ceil(height / BUILD_UP);
+              let shaft = true; for (let rr = ey - 1; rr >= top - 1 && rr >= 0; rr--) if (at(ex, rr) !== 0) { shaft = false; break; }
+              if (shaft && k <= MAX_BUILDERS && r.x1 - r.x0 + 1 >= BUILD_ACROSS * k) gate(r.id, topRegion, "buildup", "BUILDER", k, ex - dir * BUILD_ACROSS * k, ey, dir, { builders: k, height, wallX: ex * CELL + 2, runUp: BUILD_ACROSS * CELL * k });
             }
+          }
+          // through a thin one: a bomber at its foot blows it open for everyone after (the bomber is lost)
+          if (!steel && thickness <= 3 && far >= 0 && far < cw) {
+            const l = regionAt(far, tr) >= 0 ? { cy: tr, region: regionAt(far, tr), cells: 0 } : at(far, ey + 1) !== 0 ? { cy: ey, region: regionAt(far, ey), cells: 0 } : landing(far, ey);
+            if (l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bomb", "BOMBER", 1.5, ex, ey, dir, { thickness, twoWay: l.cells === 0 });
           }
           // a ceiling over the climber's own column before the wall's top: its head meets it and it falls - or,
           // a shimmier, hangs on and gets along the ceiling its way
@@ -344,6 +408,23 @@
           if (to >= 0 && to !== r.id) { gate(r.id, to, "shimmy", "SHIMMIER", 1, jx, jy, dir, { perLemming: true }); found = true; }
         }
       }
+      // the roof blown through, from anywhere in the region: a thin ceiling (three cells or fewer) with a floor
+      // of another region above it - a bomber under it opens the way up (the bomber is lost)
+      const ups = new Set();
+      for (let n = 0; n < r.cells.length; n += 2) {
+        let up = null;
+        const j = r.cells[n], jx = j % cw, jy = (j / cw) | 0, px = jx * CELL + 2;
+        // at the pixels (a tunnel's roof is thinner than a cell): the air over the feet, then the roof, then air again
+        let y = jy * CELL + CELL - 1, air = 0, roof = 0, ground = 0;
+        while (y >= 0 && solid(px, y) && ground < CELL) { ground++; y--; } // the ground's own pixels inside the floor cell
+        while (y >= 0 && !solid(px, y) && air < 14) { air++; y--; }
+        if (y < 0 || !solid(px, y)) continue;
+        while (y >= 0 && solid(px, y) && roof <= 16) { roof++; y--; }
+        if (y < 0 || air + roof > 14 || solid(px, y)) continue; // the blast reaches fourteen pixels over the feet
+        const id = Math.max(regionAt(jx, Math.floor(y / CELL)), regionAt(jx, Math.floor(y / CELL) - 1));
+        if (id >= 0 && id !== r.id && !ups.has(id)) { ups.add(id); up = { to: id, cx: jx, cy: jy }; }
+        if (up) gate(r.id, up.to, "bombup", "BOMBER", 1.5, up.cx, up.cy, 0);
+      }
       // the floor dug through, from anywhere in the region: the region below
       let dug = null;
       for (const j of r.cells) {
@@ -355,6 +436,50 @@
         if (l && l.region >= 0 && l.region !== r.id) { dug = { to: l.region, cx: jx, cy: jy }; break; }
       }
       if (dug) gate(r.id, dug.to, "dig", "DIGGER", 1, dug.cx, dug.cy, 0);
+    }
+    // a tunnel a basher digs into the bedrock up to steel is a floor of its own once dug, and what can be
+    // done from it or into it is worth planning before the first stroke: it becomes a region in waiting,
+    // reached by the bash (walked back out the same way), with a bomber up through a thin roof, and with a
+    // miner's ramp down into it from any floor above within reach - a ramp is walked both ways, so the crowd
+    // in the tunnel gets up it once someone above has mined it
+    for (const t of deadEnds) {
+      const cells = [];
+      for (let x = t.nx; (t.dir > 0 ? x < t.far : x > t.far); x += t.dir) cells.push(x + t.ey * cw);
+      if (cells.length < 3) continue;
+      const id = regions.length;
+      const xs = cells.map((j) => j % cw);
+      const v = { id, cells, x0: Math.min(...xs), x1: Math.max(...xs), ymin: t.ey, ymax: t.ey, exit: false, hatch: false, overhang: false, virtual: true, ends: { left: { kind: "wall" }, right: { kind: "wall" } }, gates: [] };
+      regions.push(v);
+      gate(t.from, id, "bash", "BASHER", 1, t.ex, t.ey, t.dir, { thickness: cells.length, twoWay: true, tunnel: true });
+      // up through the roof, where it is thin enough for the blast (the tunnel itself ten pixels high)
+      const ups = new Set();
+      for (const j of cells) {
+        const jx = j % cw, px = jx * CELL + 2;
+        let y = t.ey * CELL + CELL - 1 - 10, roof = 0;
+        while (y >= 0 && solid(px, y) && roof <= 4) { roof++; y--; }
+        if (y < 0 || roof === 0 || roof > 4 || solid(px, y)) continue;
+        const above = Math.max(regionAt(jx, Math.floor(y / CELL)), regionAt(jx, Math.floor(y / CELL) - 1));
+        if (above >= 0 && above !== t.from && !ups.has(above)) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); }
+      }
+      // a miner's ramp from a floor above: two cells along for one down, through plain terrain, into the tunnel
+      const seen = new Set();
+      for (const u of regions) {
+        if (u.id === id || u.virtual || seen.has(u.id)) continue;
+        let found = null;
+        for (const j of u.cells) {
+          const ux = j % cw, uy = (j / cw) | 0, d = t.ey - uy;
+          if (d < 2 || d > 8) continue;
+          for (const dir of [-1, 1]) {
+            const vx = ux + dir * 2 * d;
+            if (!cells.includes(vx + t.ey * cw)) continue;
+            let ok = true;
+            for (let k = 1; k < d && ok; k++) { const c = at(ux + dir * 2 * k, uy + k); if (c !== 1) ok = false; }
+            if (ok) { found = { ux, uy, dir }; break; }
+          }
+          if (found) break;
+        }
+        if (found) { seen.add(u.id); gate(u.id, id, "mine", "MINER", 1, found.ux, found.uy, found.dir, { twoWay: true, ramp: true }); }
+      }
     }
     return { cw, ch, kind, floor, hazard, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
   }
@@ -459,7 +584,7 @@
     return key === null ? null : { cost, key };
   }
 
-  const TERRAIN = new Set(["bash", "mine", "dig", "build", "platform", "stack", "stone", "unblock", "disarm", "sacrifice"]);
+  const TERRAIN = new Set(["bash", "bashup", "bashbomb", "bombup", "mine", "dig", "build", "buildup", "bomb", "platform", "stack", "stone", "unblock", "disarm", "sacrifice"]);
 
   /**
    * The cheapest plan for every group of lemmings together: `groups` =
@@ -535,17 +660,23 @@
         if (!rest) return null;
         return { cost: cost + rest.cost, steps: steps.concat(rest.steps), opened };
       };
+      // each lead's greedy climbs against its own best: another lead's plan as the mark would stop a chain of
+      // gates whose first steps alone are dearer than that plan
+      let lb = null;
+      const dbg = typeof process !== "undefined" && process.env.NX_PLAN_DEBUG;
       const evaluate = (order) => {
         const lw = leadWay(order);
+        if (dbg) console.log("    evaluate [" + order.map((T) => T.kind + "@" + T.x).join(",") + "] lead " + (lw ? lw.cost : "no way"));
         if (!lw) return null;
-        if (best && lw.cost >= best.cost) return null;
+        if (lb && lw.cost >= lb.cost) return null;
         const key = keyOf(lw.opened);
         let total = lw.cost; const parts = [];
         for (const g of others) {
           const gc = groupCost(g, lw.opened, key);
+          if (dbg) console.log("      group " + g.region + " n" + g.n + " " + (gc ? gc.cost : "no way"));
           if (!gc) return null;
           total += gc.cost;
-          if (best && total >= best.cost) return null;
+          if (lb && total >= lb.cost) return null;
           parts.push(Object.assign({}, g, gc));
         }
         // every step, marked whose it is: the lead's per-lemming gates are the lead's alone
@@ -559,25 +690,36 @@
           if (gt.twin || (lw.opened.has(gt) && st.who === "group")) continue;
           const per = gt.perLemming ? (st.who === "lead" ? (lead.lacking[gt.skill] !== undefined ? lead.lacking[gt.skill] : 1) : (st.group.lacking && st.group.lacking[gt.skill] !== undefined ? st.group.lacking[gt.skill] : st.group.n)) : 1;
           spend(gt.skill, gt.cost * per);
-          if (gt.also) spend(gt.also, per);
+          if (gt.also) spend(gt.also, gt.alsoCost || per);
           if (st.turn && st.how === "BLOCKER") { spend("BLOCKER", 1); spend("BOMBER", 1); } else if (st.turn && st.how) spend(st.how, 1);
         }
-        for (const k of Object.keys(used)) if (used[k] > (skills[k] || 0)) return null;
+        for (const k of Object.keys(used)) if (used[k] > (skills[k] || 0)) { if (dbg) console.log("      over budget " + k + " " + used[k] + "/" + (skills[k] || 0)); return null; }
         return { cost: total, steps: all, lead: lw.steps, leadGroup, groups: parts, order };
       };
-      const consider = (r) => { if (r && (!best || r.cost < best.cost)) best = r; return r; };
+      const consider = (r) => { if (r && (!lb || r.cost < lb.cost)) lb = r; return r; };
       consider(evaluate([]));
-      // one gate opened, the nearest first; then, while it helps, one more on top of the best
+      // the crowd's own way in, its terrain gates opened by the lead in that order: the natural plan
+      for (const g of others) {
+        const own = groupCost(g, new Set(), "");
+        if (!own) continue;
+        const order = []; for (const st of own.steps) if (TERRAIN.has(st.gate.kind) && !order.includes(st.gate)) order.push(st.gate);
+        if (order.length) consider(evaluate(order));
+      }
+      // one gate opened, the nearest first (one gate per crossing, the cheapest); then, while it helps, one more on top of the best
       const sw0 = sweep(graph, start, skills, lead, null);
-      const near = (T, opened) => { let d = Infinity; for (const dd of [1, -1]) { const k = sw0.key(T.from, dd); if (sw0.dist.has(k)) d = Math.min(d, sw0.dist.get(k)); } return d; };
-      const ranked = terrain.map((T) => ({ T, d: near(T) })).filter((x) => isFinite(x.d)).sort((a, b) => a.d - b.d).slice(0, 48);
+      const near = (T) => { let d = Infinity; for (const dd of [1, -1]) { const k = sw0.key(T.from, dd); if (sw0.dist.has(k)) d = Math.min(d, sw0.dist.get(k)); } return d; };
+      const cheapest = new Map();
+      for (const T of terrain) { const ck = T.from + ">" + T.to; if (!cheapest.has(ck) || cheapest.get(ck).cost > T.cost) cheapest.set(ck, T); }
+      const ranked = Array.from(cheapest.values()).map((T) => ({ T, d: near(T) })).filter((x) => isFinite(x.d)).sort((a, b) => a.d - b.d || a.T.cost - b.T.cost).slice(0, 24);
       let chosen = null;
-      for (const { T, d } of ranked) { if (best && d + T.cost >= best.cost) break; const r = consider(evaluate([T])); if (r === best && r) chosen = r; }
+      for (const { T, d } of ranked) { if (lb && d + T.cost >= lb.cost) break; const r = consider(evaluate([T])); if (r === lb && r) chosen = r; }
       for (let round = 0; chosen && round < 2; round++) {
         let next = null;
-        for (const { T } of ranked.slice(0, 24)) { if (chosen.order.includes(T)) continue; const r = consider(evaluate(chosen.order.concat([T]))); if (r === best && r) next = r; }
+        for (const { T } of ranked) { if (chosen.order.includes(T)) continue; const r = consider(evaluate(chosen.order.concat([T]))); if (r === lb && r) next = r; }
         chosen = next;
       }
+      if (typeof process !== "undefined" && process.env.NX_PLAN_DEBUG) console.log("  lead from region " + leadGroup.region + " n" + leadGroup.n + " dir " + leadGroup.dir + ": " + (lb ? "cost " + lb.cost + " order " + lb.order.map((T) => T.kind + "@" + T.x).join(",") : "none") + " ranked " + ranked.slice(0, 8).map((x) => x.T.kind + "@" + x.T.x + "=" + x.d).join(" "));
+      if (lb && (!best || lb.cost < best.cost)) best = lb;
     }
     return best;
   }

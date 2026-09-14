@@ -55,7 +55,7 @@ levels/               level packs, one folder each (classic games committed, the
 lemmix/js/            the Lemmix engine: NeoLemmix levels, styles, physics, panel (§2.9)
 tools/                levels-index (the catalog tree), nx-check / nx-render / nx-run /
                       nx-physics-test (the Lemmix engine's checks), lemmix-node (node loader),
-                      nx-solve + solver/ (the level solver, §2.10), nx-solve-test, nx-fixtures
+                      nx-solve + solver/ (the level solver, §2.10), nx-probe, nx-solve-test, nx-fixtures
 solutions/            the solver's replays, one .nxrp per solved level, and index.json
 neolemmix/            the NeoLemmix zip and styles package unpacked (styles/ gfx/ sound/ music/),
                       ignored by git except its README
@@ -705,6 +705,8 @@ headlessly and its physics counts are kept as `tools/fixtures/nx-physics.txt`;
 splat height, brick counts, tunnel shapes, steel and one-way rules, spawn
 cadence, the jumper's arc, the shimmier, the slider and the laserer. A
 run written as `.nxrp` and played back gives the same outcome.
+`nx-probe` looks inside the solver on one level (the graph, the picture,
+the reach, a node's plan and candidates, a plan's rollout, the pixels);
 `nx-solve-test` holds the solver's fixtures (§2.10) on synthetic levels
 built by `nx-fixtures` (a floor, a hatch, an exit, water, a trap).
 
@@ -750,7 +752,12 @@ shape of it:
   up, a ceiling within reach shimmied along to where it ends, a deadly
   drop cut short by a stoner's stone, the floor dug through, a slope the
   cells take for a wall walked at the pixels, and a blocker standing there
-  (a bomber on it opens the way); water, fire and traps are ends too -
+  (a bomber on it opens the way), a wall built up by a staircase of
+  builders under an open shaft or blown through when thin, a roof blown
+  through when thin, a tunnel a basher would dig into bedrock as a region
+  in waiting (left by a bomber up or a miner's ramp from above, walked
+  both ways); bridges are walked along their line to where they meet
+  terrain; water, fire and traps are ends too -
   deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
   gone for all after, a once-only trap taking one lemming; a force field
   turns whoever walks against it. A plan is a Dijkstra over (region,
