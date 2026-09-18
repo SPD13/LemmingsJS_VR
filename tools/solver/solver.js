@@ -114,16 +114,34 @@
       // the plan again at the rollout's end when the action changed the terrain or the blockers (a bash dug its
       // tunnel, a blocker took its post) and nobody died on the way: what the action achieved shows at this node,
       // not one node later; the candidates match the gates of both graphs (events before and after the change)
+      // ... with the lemmings as they stand at the node - where the candidates' moments start - and the terrain as
+      // the action leaves it: the worker who will take the next gate (the athlete crossing the hill) is still there,
+      // where at the rollout's end it may long have left
+      // ... taken at the moment the node's own action finished its work (the basher's tunnel done, the blocker at
+      // its post), with the lemmings as they stand then - not at the rollout's end, where the worker who takes the
+      // next gate may long have left, and not with the terrain the plan's later entries will make
       let after = null;
       const changedAfter = !lemFilter && planned && !events.some((e) => e.type === "DEATH") && this._planVersion() !== this._graphVersion;
-      if (changedAfter) after = this._plan(target, lemFilter);
+      if (changedAfter) {
+        const last = plan.length ? plan[plan.length - 1] : null;
+        const done = last && last.type === "assignment" ? events.find((e) => e.lemId === last.lemId && e.frame > node.frame && (e.type === "WORK_END" || e.type === "SHRUG" || e.type === "BLOCK" || e.type === "EXIT")) : null;
+        const at = done ? done.frame + 1 : outcome.changeFrame > node.frame ? outcome.changeFrame + 1 : -1;
+        if (at > node.frame && at < world.frame) {
+          const endState = world.save();
+          world.restore(node.state, plan); world.step(at - node.frame);
+          after = this._plan(target, lemFilter);
+          world.restore(endState, plan);
+        }
+      }
       const best = after && (!planned || after.cost < planned.cost) ? after : planned;
+      if (typeof process !== "undefined" && process.env.NX_PLAN_DEBUG && after) console.log("  plans at frame " + node.frame + " (world " + world.frame + "): before " + planned.cost + "/" + planned.leadId + ", after " + after.cost + "/" + after.leadId + " -> " + (best === after ? "after" : "before"));
       outcome.planCost = best ? best.cost : null; // null: no way the graph knows of
       node.planned = best;
       if (after && planned && after !== planned) {
-        // the steps of both: the plan after the change first, the one before marked as such (the route macro
-        // follows the first alone; the boosts match the gates of either graph)
-        node.planned = Object.assign({}, best, { steps: (after.steps || []).concat((planned.steps || []).map((st) => Object.assign({}, st, { before: true }))), free: new Set([...(after.free || []), ...(planned.free || [])]), graph: after.graph });
+        // the steps of both: the chosen plan's first, the other's marked as such (the route macro follows the
+        // chosen alone; the boosts match the gates of either graph)
+        const other = best === after ? planned : after;
+        node.planned = Object.assign({}, best, { steps: (best.steps || []).concat((other.steps || []).map((st) => Object.assign({}, st, { before: true }))), free: new Set([...(after.free || []), ...(planned.free || [])]) });
       }
       node.skillsUsed = outcome.skillsUsed; // the plan's own, pending entries fired
       outcome.leadDist = outcome.saved > 0 ? 0 : (outcome.minDist === Infinity ? this.analysis.spanDist : outcome.minDist);
@@ -236,15 +254,21 @@
      * planned way through before it branches over every alternative.
      */
     _planMacro(node, cand, target, lemFilter) {
-      const world = this.world, keys = cand.keys || [];
+      const world = this.world;
       const chain = [];
       let cur = node;
-      for (let i = 0; i < keys.length && i < 4 && cur; i++) {
-        // the route's i-th gate: the candidate's own pick for the first, then the best moment boosted for that gate
-        // among the child's candidates (a new graph after a change has new gate objects: gates match by key)
+      for (let i = 0; i < 6 && cur; i++) {
+        // the route's next gate, from the node's own plan each time (the plan moves on with every gate taken):
+        // the candidate's own pick for the first, then the best moment boosted for that gate among the child's
+        // candidates (a new graph after a change has new gate objects: gates match by key)
         let pick = null;
         if (i === 0) pick = cand.first;
-        else for (const c of cur.candidates || []) if (c.kind === "assign" && c.gate && Solver.gateKey(c.gate) === keys[i] && (!pick || Solver.gateFit(c) > Solver.gateFit(pick))) pick = c;
+        else {
+          const route = Solver.planRoute(cur.planned, cur.plan);
+          if (!route.length) break;
+          const key = Solver.gateKey(route[0].gate), want = Solver.wantedSkill(route[0].gate, cur.plan);
+          for (const c of cur.candidates || []) if (c.kind === "assign" && c.gate && Solver.gateKey(c.gate) === key && c.skill === want && (!pick || Solver.gateFit(c) > Solver.gateFit(pick))) pick = c;
+        }
         if (!pick) break;
         if (!this._goto(cur)) break;
         if (pick.frame > world.frame) world.step(pick.frame - world.frame);
@@ -332,15 +356,15 @@
       return this.world.terrainVersion + "|" + game.lemmings.filter((L) => !L.removed && L.action === BLOCKING).map((L) => L.x + "," + L.y).join(";");
     }
 
-    _plan(target, lemFilter) {
+    _plan(target, lemFilter, over) {
       const world = this.world, game = world.game, R = Solver.Regions;
       if (!R) return null;
-      // the graph as the terrain and the blockers now stand
+      // the graph as the terrain and the blockers now stand (or as `over` says they will)
       const BLOCKING = Lemmix.BA.BLOCKING;
-      const blockers = game.lemmings.filter((L) => !L.removed && L.action === BLOCKING).map((L) => ({ x: L.x, y: L.y }));
-      const version = world.terrainVersion + "|" + blockers.map((b) => b.x + "," + b.y).join(";");
+      const blockers = over ? over.blockers : game.lemmings.filter((L) => !L.removed && L.action === BLOCKING).map((L) => ({ x: L.x, y: L.y }));
+      const version = over ? over.version : world.terrainVersion + "|" + blockers.map((b) => b.x + "," + b.y).join(";");
       if (!this._graph || this._graphVersion !== version) {
-        try { this._graph = R.build(world.level, game.physics, blockers); } catch (e) { this._graph = null; }
+        try { this._graph = R.build(world.level, over ? over.physics : game.physics, blockers); } catch (e) { this._graph = null; }
         this._graphVersion = version;
       }
       const graph = this._graph;
@@ -352,6 +376,10 @@
       const alive = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills && (walkers || L.action !== BLOCKING));
       const needed = Math.max(1, Math.min(target, alive.length + game.lemmingsToRelease) - game.lemmingsIn);
       const perms = R.PERMS, has = { CLIMBER: "isClimber", FLOATER: "isFloater", GLIDER: "isGlider", SWIMMER: "isSwimmer", DISARMER: "isDisarmer", SLIDER: "isSlider" };
+      // a permanent skill the plan still has to give counts as given: the athlete-to-be is planned as an athlete
+      const pending = new Map();
+      for (const e of game.recorded || []) if (e.type === "assignment" && e.frame >= world.frame && perms.includes(e.skill)) { if (!pending.has(e.lemId)) pending.set(e.lemId, new Set()); pending.get(e.lemId).add(e.skill); }
+      const owns = (L, p) => !!(L[has[p]] || (pending.get(L.identifier) && pending.get(L.identifier).has(p)));
       // the lemmings by region: how many, which way most of them walk, how many lack each permanent skill
       const groups = new Map();
       const add = (r, L, n) => {
@@ -360,15 +388,18 @@
         g.n += n; g.dx += L ? L.dx * n : 0;
         const real = L && L.identifier !== undefined;
         const mine = {}; let count = 0;
-        for (const p of perms) { const lacks = !real || !L[has[p]]; if (lacks) g.lacking[p] += n; mine[p] = lacks ? 1 : 0; if (!lacks) count++; }
+        for (const p of perms) { const lacks = !real || !owns(L, p); if (lacks) g.lacking[p] += n; mine[p] = lacks ? 1 : 0; if (!lacks) count++; }
         // the group's lead: whichever of them has the most permanent skills already
         if (real && count > g.leadPerms) { g.leadPerms = count; g.lem = L; g.leadLacking = mine; }
         else if (!real && g.leadPerms < 0) g.leadLacking = mine;
       };
       let one = null;
       if (lemFilter) { const id = Array.from(lemFilter)[0]; one = alive.find((L) => L.identifier.toUpperCase() === id.toUpperCase()) || null; if (!one) return null; }
+      const CLIMBING = Lemmix.BA.CLIMBING, HOISTING = Lemmix.BA.HOISTING;
       for (const L of one ? [one] : alive) {
-        let r = R.regionOfLemming(graph, L.x, L.y);
+        let r = -1;
+        if (L.action === CLIMBING || L.action === HOISTING) r = R.regionOfClimber(graph, L.x, L.y, L.dx); // on its way to the wall's top
+        if (r < 0) r = R.regionOfLemming(graph, L.x, L.y);
         if (r < 0 && L.action === BLOCKING) r = Math.max(R.regionOfLemming(graph, L.x - R.CELL, L.y), R.regionOfLemming(graph, L.x + R.CELL, L.y));
         if (r >= 0) add(r, L, 1);
       }
@@ -389,10 +420,10 @@
       // its moments get none of the plan's boosts (it stands where the gates are worked and would draw them all)
       const free = new Set();
       for (const L of alive) {
-        if (!perms.some((p) => L[has[p]])) continue;
+        if (!perms.some((p) => owns(L, p))) continue;
         const r = R.regionOfLemming(graph, L.x, L.y);
         if (r < 0) continue;
-        const mine = {}; for (const p of perms) mine[p] = L[has[p]] ? 0 : 1;
+        const mine = {}; for (const p of perms) mine[p] = owns(L, p) ? 0 : 1;
         const own = R.plan(graph, { region: r, dir: L.dx }, skills, { n: 1, lacking: mine });
         if (own && own.cost === 0) free.add(L.identifier);
       }

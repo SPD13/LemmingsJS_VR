@@ -755,9 +755,12 @@ shape of it:
   (a bomber on it opens the way), a wall built up by a staircase of
   builders under an open shaft or blown through when thin, a roof blown
   through when thin, a tunnel a basher would dig into bedrock as a region
-  in waiting (left by a bomber up or a miner's ramp from above, walked
-  both ways); bridges are walked along their line to where they meet
-  terrain; water, fire and traps are ends too -
+  in waiting (left by a miner's ramp from above over steel, walked both
+  ways; a ramp into a real region enters at floor level), a bash from a
+  builder's staircase at the wall (six pixels higher a builder, coming
+  out where the tunnel's span meets an opening); bridges are walked
+  along their line to where they meet terrain; water, fire and traps are
+  ends too -
   deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
   gone for all after, a once-only trap taking one lemming; a force field
   turns whoever walks against it. A plan is a Dijkstra over (region,
@@ -797,9 +800,12 @@ shape of it:
   distance/2 − frames/500` (the lead pass: skills 20, distance whole,
   lost ignored).
   A lead pass (skills to the first lemming out, one save is a success)
-  seeds a crowd pass for the count; the plan is scored again after an
-  action that changed the terrain, and the plan's route is one edge of
-  its own, taken gate after gate; a pass that runs dry with time left
+  seeds a crowd pass for the count; the plan is scored again at the
+  moment an action's work is done, and the plan's route - the crowd's
+  gates and, before any that rides on a gate the lead opens, the lead's
+  own, a gate of several skills (a staircase then a bash) taken skill by
+  skill - is one edge of its own, followed gate after gate; a pass that
+  runs dry with time left
   runs again at the next tier's breadth, and at the widest, with the
   priors jiggled (tier 3's three restarts, a seeded generator). Tiers:
   10 s, 2 min, 15 min.

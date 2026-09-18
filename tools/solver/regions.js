@@ -366,6 +366,41 @@
               if (at(mx, my) === 0) { const l2 = landing(mx, my); if (l2 && l2.region >= 0 && l2.region !== r.id) gate(r.id, l2.region, "mine", "MINER", 1, ex, ey, dir, { twoWay: true }); break; }
             }
           }
+          // a bash from higher up: a staircase of k builders at the wall raises the feet six pixels a builder, and the
+          // tunnel from the staircase top, through what stands there, comes out where its span meets an opening -
+          // a floor within a step of the tunnel's, or a slope above it reached by one more builder from the tunnel's
+          // floor. One gate, a sequence of skills at their spots.
+          for (let k = 1; k <= 2; k++) {
+            if (r.x1 - r.x0 + 1 < BUILD_ACROSS * k) break;
+            const feetY = ey * CELL + CELL - 1 - 6 * k, px0 = nx * CELL + (dir > 0 ? 0 : CELL - 1);
+            let x = px0, hit = false, out = -1;
+            for (let n = 0; n < 240; n++, x += dir) {
+              if (x < 0 || x >= w) break;
+              let air = 0, steel = false;
+              for (let yy = feetY - 9; yy <= feetY - 1; yy++) { const b = phys[x + yy * w]; if (b & PM.STEEL) steel = true; if (!(b & PM.SOLID)) air++; }
+              if (steel) { hit = true; break; }
+              if (air >= 4) { out = x; break; }
+            }
+            if (hit || out < 0 || Math.abs(out - px0) < 8) continue;
+            const wallX = ex * CELL + (dir > 0 ? CELL - 1 : 0);
+            const seq = [{ skill: "BUILDER", x: wallX - dir * BUILD_ACROSS * CELL * k, y: ey * CELL + 2 }, { skill: "BASHER", x: wallX, y: feetY }];
+            // the floor met at the opening: level with the tunnel's floor (a step at most) - or the slope above it
+            // the surface at the opening: the ground under the tunnel's floor (level: a step at most), else the first
+            // surface up the opening's column (a slope or a ledge above, one more builder from the tunnel's floor)
+            const surface = (x, from) => { let y = from; while (y < h - 1 && !solid(x, y + 1)) y++; return y; }; // the last air pixel over ground
+            let id = -1, cost = 1 + k;
+            const fy = surface(out, feetY);
+            if (fy - feetY <= 6) for (const dx of [0, dir, 2 * dir]) for (const row of [Math.floor(fy / CELL), Math.floor(fy / CELL) - 1]) { if (id < 0) { const cand = regionAt(Math.floor(out / CELL) + dx, row); if (cand >= 0 && cand !== r.id) id = cand; } }
+            if (id < 0) {
+              const ox = out + dir * 12;
+              let y = feetY - 1; while (y > feetY - 40 && solid(ox, y)) y--; // up through the body to air
+              while (y > feetY - 40 && !solid(ox, y - 1)) y--; // up through the air to the surface's underside... no: to the last air over ground
+              const sy = surface(ox, y);
+              const above = sy > feetY - 40 && sy < feetY ? regionAt(Math.floor(ox / CELL), Math.floor(sy / CELL)) : -1;
+              if (above >= 0 && above !== r.id) { id = above; cost++; seq.push({ skill: "BUILDER", x: out + dir * 4, y: feetY }); }
+            }
+            if (id >= 0 && id !== r.id) { gate(r.id, id, "raisedbash", "BASHER", cost, ex, ey, dir, { sequence: seq, builders: k, wallX, runUp: BUILD_ACROSS * CELL * k, feetY }); break; }
+          }
           // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one; a staircase
           // of builders up it, one per three cells of height, given the run-up (six cells of floor a builder)
           if (top >= 1 && at(nx, top - 1) === 0) {
@@ -452,6 +487,8 @@
       const v = { id, cells, x0: Math.min(...xs), x1: Math.max(...xs), ymin: t.ey, ymax: t.ey, exit: false, hatch: false, overhang: false, virtual: true, ends: { left: { kind: "wall" }, right: { kind: "wall" } }, gates: [] };
       regions.push(v);
       gate(t.from, id, "bash", "BASHER", 1, t.ex, t.ey, t.dir, { thickness: cells.length, twoWay: true, tunnel: true });
+      // its far end is the steel that stopped the bash: a climber goes up it to whatever floor is at its top
+      { let top = t.ey; while (top > 0 && at(t.far, top - 1) !== 0) top--; const topRegion = top >= 1 && at(t.far, top - 1) === 0 ? regionAt(t.far, top - 1) : -1; if (topRegion >= 0 && topRegion !== id) gate(id, topRegion, "climb", "CLIMBER", 1, t.far - t.dir, t.ey, t.dir, { perLemming: true, height: t.ey - top + 1 }); }
       // up through the roof, where it is thin enough for the blast (the tunnel itself ten pixels high)
       const ups = new Set();
       for (const j of cells) {
@@ -462,27 +499,49 @@
         let above = -1; for (const dx of [0, -1, 1]) above = Math.max(above, regionAt(jx + dx, Math.floor(y / CELL)), regionAt(jx + dx, Math.floor(y / CELL) - 1));
         if (above >= 0 && above !== t.from && !ups.has(above) && false) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); } // (no bomb-up, as above)
       }
-      // a miner's ramp from a floor above: two cells along for one down, through plain terrain, into the tunnel
-      const seen = new Set();
-      for (const u of regions) {
-        if (u.id === id || u.virtual || seen.has(u.id)) continue;
-        let found = null;
-        for (const j of u.cells) {
-          const ux = j % cw, uy = (j / cw) | 0, d = t.ey - uy;
-          if (d < 2 || d > 8) continue;
-          for (const dir of [-1, 1]) {
-            const vx = ux + dir * 2 * d;
-            if (!cells.includes(vx + t.ey * cw)) continue;
-            let ok = true;
-            for (let k = 1; k < d && ok; k++) { const c = at(ux + dir * 2 * k, uy + k); if (c !== 1) ok = false; }
-            if (ok) { found = { ux, uy, dir }; break; }
+    }
+    // a miner's ramp from any floor to a floor below within twelve cells: two cells along for one down, through
+    // plain terrain (no steel, no air), landing on a cell of the region below - into a tunnel in waiting as into a
+    // real region; one gate per pair and way. Walked both ways once mined.
+    const rowsOf = regions.map((v) => { const m = new Map(); for (const j of v.cells) { const jy = (j / cw) | 0; if (!m.has(jy)) m.set(jy, new Set()); m.get(jy).add(j % cw); } return m; });
+    for (const u of regions) {
+      if (u.virtual) continue;
+      for (const v of regions) {
+        if (v === u || v.ymin <= u.ymin) continue;
+        if (v.ymin - u.ymax > 12) continue;
+        for (const dir of [-1, 1]) {
+          let found = null;
+          for (const j of u.cells) {
+            const ux = j % cw, uy = (j / cw) | 0;
+            // down the diagonal through plain terrain: to a cell of v, or into air (the miner falls) landing in v
+            for (let k = 1; k <= 12 && !found; k++) {
+              const x = ux + dir * 2 * k, y = uy + k, c = at(x, y);
+              if (c === 2) break;
+              // into air: only at the floor's level (a cell over its ground at most) - through a tunnel's roof the
+              // ramp ends ten pixels over the floor, a drop no walker comes back up
+              if (c === 0) { const rowA = rowsOf[v.id].get(y), rowB = rowsOf[v.id].get(y + 1); if ((rowA && rowA.has(x)) || (rowB && rowB.has(x))) found = { ux, uy, dir }; break; }
+              // onto a floor cell of v: for a tunnel in waiting (still solid) only over steel - the miner is stopped by
+              // nothing else and digs on through the floor
+              const row = rowsOf[v.id].get(y + 1);
+              if (k >= 2 && row && row.has(x)) { if (!v.virtual || at(x, y + 2) === 2) found = { ux, uy, dir }; break; }
+            }
+            if (found) break;
           }
-          if (found) break;
+          if (found) gate(u.id, v.id, "mine", "MINER", 1, found.ux, found.uy, found.dir, { twoWay: true, ramp: true });
         }
-        if (found) { seen.add(u.id); gate(u.id, id, "mine", "MINER", 1, found.ux, found.uy, found.dir, { twoWay: true, ramp: true }); }
       }
     }
     return { cw, ch, kind, floor, hazard, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
+  }
+
+  /** The region a climber on the wall beside (x, y), heading dx, gets to: the floor at the wall's top, or -1. */
+  function regionOfClimber(graph, x, y, dx) {
+    const cx = Math.floor((x + dx) / CELL), cw = graph.cw;
+    if (cx < 0 || cx >= cw) return -1;
+    let row = Math.floor((y - 1) / CELL);
+    if (row < 0 || graph.kind[cx + row * cw] === 0) row = Math.floor((y + 4) / CELL);
+    while (row >= 0 && graph.kind[cx + row * cw] !== 0) row--;
+    return row >= 0 ? graph.region[cx + row * cw] : -1;
   }
 
   /** The region a lemming stands in (or would land in), or -1. */
@@ -528,10 +587,12 @@
    * first); else a turn of its own - a blocker and a bomber (2), a stacker
    * in its way (1), or a jump into an overhang the region has (1).
    */
-  function turnCost(reg, d, gt, skills) {
+  function turnCost(reg, d, gt, skills, climber) {
     if (gt.dir === 0 || gt.dir === d) return { extra: 0, turn: false };
+    // a wall ahead turns the lemming for nothing - not a climber, which goes over a wall it can climb
     const ahead = reg.ends[d > 0 ? "right" : "left"];
-    if (ahead && !reg.exit && (ahead.kind === "wall" || ahead.kind === "blocker" || (ahead.kind === "force" && ahead.dir !== d))) return { extra: 0, turn: false };
+    const climbs = climber && ahead && ahead.kind === "wall" && reg.gates.some((g) => g.kind === "climb" && g.dir === d);
+    if (ahead && !reg.exit && !climbs && (ahead.kind === "wall" || ahead.kind === "blocker" || (ahead.kind === "force" && ahead.dir !== d))) return { extra: 0, turn: false };
     let extra = Infinity, how = null;
     if (skills.BLOCKER > 0 && skills.BOMBER > 0) { extra = TURN_COST; how = "BLOCKER"; }
     if (skills.STACKER > 0 && 1 < extra) { extra = 1; how = "STACKER"; }
@@ -540,6 +601,7 @@
   }
 
   function sweep(graph, from, skills, crowd, opened) {
+    const climber = !!(crowd && crowd.lacking && crowd.lacking.CLIMBER === 0); // the mover has the skill already
     const key = (r, d) => r * 2 + (d > 0 ? 1 : 0);
     const dist = new Map(), prev = new Map(), open = [];
     const push = (r, d, c, p) => { const k = key(r, d); if (dist.has(k) && dist.get(k) <= c) return; dist.set(k, c); prev.set(k, p); open.push({ r, d, c }); };
@@ -553,6 +615,7 @@
       settled.add(k);
       const reg = graph.regions[r];
       if (!reg) continue;
+      if (reg.exit) continue; // the exit takes whoever walks in: nothing leads out of its region
       // an opened two-way gate (a tunnel, a bridge) is walked from either side: its twin back
       const twins = [];
       if (opened) for (const og of opened) if (og.twoWay && og.to === r) twins.push({ from: r, to: og.from, kind: og.kind, skill: null, cost: 0, x: og.x, y: og.y, dir: -og.dir, twin: og });
@@ -562,7 +625,7 @@
         // closed: the skill is out, or too few of it for everyone in the group who lacks it
         if (!free && gt.skill && (!(skills[gt.skill] > 0) || per > skills[gt.skill])) continue;
         if (!free && gt.also && !(skills[gt.also] > 0)) continue;
-        const { extra, turn, how } = turnCost(reg, d, gt, skills);
+        const { extra, turn, how } = turnCost(reg, d, gt, skills, climber);
         if (extra === Infinity) continue;
         const cost = c + extra + (free ? 0 : gt.cost * per);
         push(gt.to, gt.dir === 0 ? d : gt.dir, cost, { from: k, step: { gate: gt, dir: gt.dir === 0 ? d : gt.dir, turn, how } });
@@ -585,7 +648,7 @@
     return key === null ? null : { cost, key };
   }
 
-  const TERRAIN = new Set(["bash", "bashup", "bashbomb", "bombup", "mine", "dig", "build", "buildup", "bomb", "platform", "stack", "stone", "unblock", "disarm", "sacrifice"]);
+  const TERRAIN = new Set(["bash", "bashup", "bashbomb", "bombup", "raisedbash", "mine", "dig", "build", "buildup", "bomb", "platform", "stack", "stone", "unblock", "disarm", "sacrifice"]);
 
   /**
    * The cheapest plan for every group of lemmings together: `groups` =
@@ -646,7 +709,7 @@
           for (const d of [1, -1]) {
             const k = sw.key(T.from, d);
             if (!sw.dist.has(k)) continue;
-            const { extra, turn, how } = turnCost(reg, d, T, skills);
+            const { extra, turn, how } = turnCost(reg, d, T, skills, lead.lacking && lead.lacking.CLIMBER === 0);
             if (extra === Infinity) continue;
             const c = sw.dist.get(k) + extra + T.cost;
             if (!via || c < via.c) via = { c, k, turn, how };
@@ -667,22 +730,29 @@
       const dbg = typeof process !== "undefined" && process.env.NX_PLAN_DEBUG;
       const evaluate = (order) => {
         const lw = leadWay(order);
-        if (dbg) console.log("    evaluate [" + order.map((T) => T.kind + "@" + T.x).join(",") + "] lead " + (lw ? lw.cost : "no way"));
+        if (dbg) console.log("    evaluate [" + order.map((T) => T.kind + "@" + T.x + (T.dir < 0 ? "<" : T.dir > 0 ? ">" : "")).join(",") + "] lead " + (lw ? lw.cost + " via " + lw.steps.map((st) => (st.turn ? "TURN+" : "") + st.gate.kind + (st.gate.skill ? ":" + st.gate.skill : "") + "@" + st.gate.x + (st.gate.dir < 0 ? "<" : st.gate.dir > 0 ? ">" : "") + "->" + st.gate.to).join(" ") : "no way"));
         if (!lw) return null;
         if (lb && lw.cost >= lb.cost) return null;
         const key = keyOf(lw.opened);
+        // a terrain gate one group pays is open for the groups after it (the staircase built once)
         let total = lw.cost; const parts = [];
+        let opened2 = lw.opened, key2 = key;
         for (const g of others) {
-          const gc = groupCost(g, lw.opened, key);
+          const gc = groupCost(g, opened2, key2);
           if (dbg) console.log("      group " + g.region + " n" + g.n + " " + (gc ? gc.cost : "no way"));
           if (!gc) return null;
           total += gc.cost;
           if (lb && total >= lb.cost) return null;
           parts.push(Object.assign({}, g, gc));
+          const more = gc.steps.filter((st) => TERRAIN.has(st.gate.kind) && !st.gate.twin && !opened2.has(st.gate)).map((st) => st.gate);
+          if (more.length) { opened2 = new Set([...opened2, ...more]); key2 = keyOf(opened2); }
         }
         // every step, marked whose it is: the lead's per-lemming gates are the lead's alone
         const all = lw.steps.map((st) => Object.assign({}, st, { who: "lead" }));
-        for (const g of parts) for (const st of g.steps) all.push(Object.assign({}, st, { who: "group", group: g }));
+        // a group's step through a gate the lead opens (or its twin, walked back through) is free thanks to the
+        // lead: it says which lead gate it rides on, so the search takes the lead's gate first
+        for (const g of parts) for (const st of g.steps) { const via = lw.opened.has(st.gate) ? st.gate : st.gate.twin && lw.opened.has(st.gate.twin) ? st.gate.twin : null; all.push(Object.assign({}, st, { who: "group", group: g, via })); }
+        // (a gate an earlier group paid shows in the later group's steps as that gate again: the route takes it once)
         // the whole route's skills must fit the stock: four climbs for one lemming with three climbers is no way
         const used = {};
         const spend = (skill, n) => { if (!skill) return; used[skill] = (used[skill] || 0) + n; };
@@ -690,8 +760,8 @@
           const gt = st.gate;
           if (gt.twin || (lw.opened.has(gt) && st.who === "group")) continue;
           const per = gt.perLemming ? (st.who === "lead" ? (lead.lacking[gt.skill] !== undefined ? lead.lacking[gt.skill] : 1) : (st.group.lacking && st.group.lacking[gt.skill] !== undefined ? st.group.lacking[gt.skill] : st.group.n)) : 1;
-          spend(gt.skill, gt.cost * per);
-          if (gt.also) spend(gt.also, gt.alsoCost || per);
+          if (gt.sequence) for (const it of gt.sequence) spend(it.skill, 1);
+          else { spend(gt.skill, gt.cost * per); if (gt.also) spend(gt.also, gt.alsoCost || per); }
           if (st.turn && st.how === "BLOCKER") { spend("BLOCKER", 1); spend("BOMBER", 1); } else if (st.turn && st.how) spend(st.how, 1);
         }
         for (const k of Object.keys(used)) if (used[k] > (skills[k] || 0)) { if (dbg) console.log("      over budget " + k + " " + used[k] + "/" + (skills[k] || 0)); return null; }
@@ -710,8 +780,8 @@
       const sw0 = sweep(graph, start, skills, lead, null);
       const near = (T) => { let d = Infinity; for (const dd of [1, -1]) { const k = sw0.key(T.from, dd); if (sw0.dist.has(k)) d = Math.min(d, sw0.dist.get(k)); } return d; };
       const cheapest = new Map();
-      for (const T of terrain) { const ck = T.from + ">" + T.to; if (!cheapest.has(ck) || cheapest.get(ck).cost > T.cost) cheapest.set(ck, T); }
-      const ranked = Array.from(cheapest.values()).map((T) => ({ T, d: near(T) })).filter((x) => isFinite(x.d)).sort((a, b) => a.d - b.d || a.T.cost - b.T.cost).slice(0, 24);
+      for (const T of terrain) { const ck = T.from + ">" + T.to + ":" + (T.dir || 0); if (!cheapest.has(ck) || cheapest.get(ck).cost > T.cost) cheapest.set(ck, T); }
+      const ranked = Array.from(cheapest.values()).map((T) => ({ T, d: near(T) })).filter((x) => isFinite(x.d)).sort((a, b) => a.d - b.d || a.T.cost - b.T.cost).slice(0, 48);
       let chosen = null;
       for (const { T, d } of ranked) { if (lb && d + T.cost >= lb.cost) break; const r = consider(evaluate([T])); if (r === lb && r) chosen = r; }
       for (let round = 0; chosen && round < 2; round++) {
@@ -728,6 +798,6 @@
   /** `lacking` with every count capped at n. */
   function scaled(lacking, n) { const o = {}; if (lacking) for (const k of Object.keys(lacking)) o[k] = Math.min(lacking[k], n); return o; }
 
-  Solver.Regions = { build, plan, planAll, sweep, regionOfLemming, CELL, TERRAIN, PERMS: ["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"] };
+  Solver.Regions = { build, plan, planAll, sweep, regionOfLemming, regionOfClimber, CELL, TERRAIN, PERMS: ["CLIMBER", "FLOATER", "GLIDER", "SWIMMER", "DISARMER", "SLIDER"] };
   if (typeof module !== "undefined" && module.exports) module.exports = Solver.Regions;
 })(typeof window !== "undefined" ? window : globalThis);

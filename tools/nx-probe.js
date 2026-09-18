@@ -5,7 +5,7 @@
  * holds, what a lemming's plan is, what a node's candidates are, what a
  * plan's rollout does. For working out why a level does not solve.
  *
- *   node tools/nx-probe.js graph <level> [frame]            the regions and their gates (ends, exit, hatch)
+ *   node tools/nx-probe.js graph <level> [frame] [plan]     the regions and their gates (ends, exit, hatch)
  *   node tools/nx-probe.js pic <level> [frame]              the level as cells: # solid, S steel, ~ water, ! hazard, letters regions
  *   node tools/nx-probe.js reach <level> [frame]            the regions one lemming can reach with the level's skills, by cost
  *   node tools/nx-probe.js plan <level> [frame] [plan]      the crowd's plan (the search's own _plan) after a plan of actions
@@ -24,6 +24,16 @@ const gateStr = (gt) => gt.kind + (gt.skill ? ":" + gt.skill : "") + (gt.also ? 
 const stepStr = (st) => (st.turn ? "TURN(" + st.how + ")+" : "") + gateStr(st.gate) + (st.who ? " [" + st.who + "]" : "");
 const endStr = (e) => !e ? "?" : e.kind + (e.height ? e.height : e.cells !== undefined ? "v" + e.cells : "");
 const toPlan = (json) => JSON.parse(json).map(([frame, lemId, skill]) => ({ type: "assignment", frame, skill, lemIndex: +String(lemId).slice(1), lemId, x: 0, y: 0, dx: 1 }));
+/** The entries' positions as the game would record them: the lemming's spot at the entry's frame, the plan applied. */
+function placed(world, plan) {
+  world.reset(Solver.copyPlan(plan));
+  for (const e of plan.slice().sort((a, b) => a.frame - b.frame)) {
+    if (e.frame > world.frame) world.step(e.frame - world.frame);
+    const L = world.lemmingById(e.lemId);
+    if (L) { e.x = L.x; e.y = L.y; e.dx = L.dx; }
+  }
+  return plan;
+}
 
 async function load(part) {
   const root = findRepoRoot(), io = nodeIO(root);
@@ -43,7 +53,7 @@ async function main() {
   const { level, world, masks } = await load(part);
   const R = Solver.Regions;
   if (cmd === "graph" || cmd === "pic" || cmd === "reach") {
-    world.reset([]); world.step(+(rest[0] || 120));
+    world.reset(rest[1] ? toPlan(rest[1]) : []); world.step(+(rest[0] || 120));
     const g = R.build(level, world.game.physics, blockersOf(world.game));
     if (cmd === "graph") {
       console.log(level.width + "x" + level.height + " gadgets " + level.gadgets.map((gd) => gd.effect + "@" + gd.triggerRect.x0 + "," + gd.triggerRect.y0).join(" "));
@@ -72,17 +82,33 @@ async function main() {
     console.log("frame " + world.frame + " skills " + JSON.stringify(world.skillCounts()) + " in " + world.game.lemmingsIn + " toRelease " + world.game.lemmingsToRelease);
     const p = search._plan(level.needCount, null);
     console.log(p ? "cost " + p.cost + " lead " + p.leadId + "\n  " + p.steps.map(stepStr).join("\n  ") : "no plan");
+    if (rest[2] === "after") {
+      // the plan at the moment the plan's last action finished its work (as the search takes it)
+      const st = world.save();
+      const { events, outcome } = Solver.rollout(world, {});
+      const last = plan.length ? plan[plan.length - 1] : null;
+      const done = last ? events.find((e) => e.lemId === last.lemId && e.frame > frame && (e.type === "WORK_END" || e.type === "SHRUG" || e.type === "BLOCK" || e.type === "EXIT")) : null;
+      const at = done ? done.frame + 1 : outcome.changeFrame + 1;
+      world.restore(st, plan); world.step(at - frame);
+      const q = search._plan(level.needCount, null);
+      console.log("at the action's end (frame " + at + "): " + (q ? "cost " + q.cost + " lead " + q.leadId + "\n  " + q.steps.map(stepStr).join("\n  ") : "no plan"));
+    }
   } else if (cmd === "cands") {
-    const plan = toPlan(rest[0] || "[]"), re = new RegExp(rest[1] || ".");
+    const plan = placed(world, toPlan(rest[0] || "[]")), re = new RegExp(rest[1] || ".");
     const analysis = Solver.analyse(level);
     const search = new Solver.Search(world, analysis, Solver.tierParams(1, level), {});
+    // the node as the search makes it: the frame after the plan's last action
     world.reset(Solver.copyPlan(plan));
+    const at = plan.length ? plan[plan.length - 1].frame + 1 : 0; // the last entry is the node's action (the search appends)
+    if (at > 0) world.step(at);
     const node = search._makeNode(null, Solver.copyPlan(plan), level.needCount, null, false, true);
     const o = node.outcome;
     console.log("outcome saved " + o.saved + " lost " + o.lost + " skills " + node.skillsUsed + " stuck " + !!o.stuck + " last " + o.lastFrame + " plan " + (node.planned ? node.planned.cost : "none") + " candidates " + (node.candidates || []).length);
     if (node.planned) console.log("  plan steps: " + node.planned.steps.map((st) => (st.who || "?")[0] + ":" + (st.gate.skill ? Solver.gateKey(st.gate) : st.gate.kind)).join(" "));
     const cs = (c) => c.kind === "plan" ? "plan [" + (c.keys || []).join(" ") + "] first " + (c.first ? cs(c.first) : "-") : c.kind + " " + c.skill + ">" + c.lemId + "@" + c.frame + (c.x !== undefined ? " x" + c.x : "") + " " + c.why + " " + c.prior.toFixed(2) + (c.gate ? " gate " + Solver.gateKey(c.gate) : "");
     for (const c of (node.candidates || []).filter((c) => re.test(c.kind + " " + c.skill + ">" + c.lemId + " (" + c.why + ")")).slice(0, 40)) console.log("  " + cs(c));
+    const macro = (node.candidates || []).filter((c) => c.kind === "plan" || c.kind === "follow");
+    console.log("  macros: " + (macro.length ? macro.map(cs).join("\n          ") : "none"));
   } else if (cmd === "chain") {
     const plan = toPlan(rest[0] || "[]"), who = rest[1];
     world.reset(plan);
