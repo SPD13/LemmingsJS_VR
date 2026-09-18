@@ -555,7 +555,18 @@ the notch, the staircase to the ledge, the climber-builder athlete's own
 way in. The chain the trace shows is the macro's: hold, BUILDER at the
 run-up, BASHER from the staircase top, BASHER from the notch, then the
 ledge. The regressions hold (Keep your hair 7, Snuggle 4, bashers 3, Up
-For A Walk 2). `tools/nx-probe.js` holds the probes this took (the graph,
+For A Walk 2).
+
+**The batch (18 September)**: tier 1 over every installed level with the
+planner (`--force`, since every level already carried a tier-1 record;
+seven workers ran the machine out of memory at 836 levels - each worker
+may take 4 GB - and the rest went on three, 13 min for 264; `--only
+<file>` resumes a batch from a list of ids). **75 of 1076 solved** (71
+before): four newly solved (Candy Crossing, Classic Techniques, Code
+PURPLE, Plethora of Presents), eleven improved (more saved or fewer
+skills - The Graveyard 39 with 4 skills instead of 7, Watch Your
+Lemmings 71 with 3), no error, 75 verified. Tier 2 over the thousand
+unsolved would take a night on three workers. `tools/nx-probe.js` holds the probes this took (the graph,
 the picture, the reach, a node's plan and candidates, a plan's rollout, the
 pixels) so the next level's diagnosis starts from there.
 

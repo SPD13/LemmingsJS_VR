@@ -9,7 +9,7 @@
  *
  *   node tools/nx-solve.js <level>  [--tier 1|2|3] [--budget <s>] [--trace] [--events]
  *                                   [--nxrp <file>] [--no-index] [--stdout]
- *   node tools/nx-solve.js [prefix] [--tier 1|2|3|all] [--budget <s>] [--jobs N] [--force]
+ *   node tools/nx-solve.js [prefix] [--tier 1|2|3|all] [--budget <s>] [--jobs N] [--force] [--only <file>]
  *                                   [--out <dir>] [--verbose]
  *   node tools/nx-solve.js --verify [prefix]      every solution replayed through a fresh game
  *   node tools/nx-solve.js --list [prefix]        what the index says
@@ -45,6 +45,7 @@ function parseArgs(argv) {
       case "--jobs": opts.jobs = Math.max(1, parseInt(next(), 10)); break;
       case "--force": opts.force = true; break;
       case "--out": opts.out = next(); break;
+      case "--only": opts.only = next(); break;
       case "--trace": opts.trace = true; break;
       case "--events": opts.events = true; break;
       case "--nxrp": opts.nxrp = next(); break;
@@ -247,7 +248,9 @@ async function main() {
   let errors = 0;
   for (const tier of tiers) {
     const budgetMs = (opts.budget || TIER_SECONDS[tier]) * 1000;
-    const todo = levels.filter((l) => !skipRecord(index.levels[l.id], tier, opts.force));
+    // --only <file>: the level ids to run, one a line (a batch resumed after a crash: the levels it never reached)
+    const only = opts.only ? new Set(fs.readFileSync(opts.only, "utf8").split("\n").map((l) => l.trim()).filter(Boolean)) : null;
+    const todo = levels.filter((l) => (!only || only.has(l.id)) && !skipRecord(index.levels[l.id], tier, opts.force));
     console.log("[nx-solve] tier " + tier + ": " + todo.length + " of " + levels.length + " levels, " + budgetMs / 1000 + " s each, " + opts.jobs + " jobs");
     if (!todo.length) continue;
     const t0 = Date.now();
