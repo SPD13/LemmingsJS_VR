@@ -112,6 +112,7 @@
     const keyLo = (L) => (((L.x + 1) & 2047) << 20) | (((L.y + 16) & 4095) << 8) | (L.dx > 0 ? 128 : 0) | ((L.physicsFrame & 31) << 2) | (L.isStartingAction ? 2 : 0) | (L.initialFall ? 1 : 0);
     const keyHi = (L) => (L.action << 16) | (Math.min(L.fallen, 127) << 9) | ((L.ascended & 7) << 6) | permsOf(L) | (((L.inFlipper + 1) & 31) << 23);
     let blockers = 0, predicted = false, foretoldSaved = 0, foretoldLost = 0, foretoldEnd = 0, foretold = null;
+    let changeFrame = -1; // the last frame the terrain changed or a blocker took its post
     // a trail walked before the plan's last action is no trail: the action changed the walker's future
     let lastAction = -1; for (const e of game.recorded) if (e.frame > lastAction) lastAction = e.frame;
     let exitLength = -1; // frames from the exit's first frame to the lemming's removal, once seen
@@ -149,7 +150,7 @@
         if (!L.cannotReceiveSkills && !L.removed) emit("SPAWN", w, L, frame);
       }
       const terrainChanged = world.terrainVersion !== lastTerrain;
-      if (terrainChanged) lastTerrain = world.terrainVersion;
+      if (terrainChanged) { lastTerrain = world.terrainVersion; changeFrame = frame; }
       for (let i = 0; i < watches.length; i++) {
         const w = watches[i], L = game.lemmings[i];
         if (w.removed) continue;
@@ -177,7 +178,7 @@
             // off the wall or the ceiling: an anchor too (a shimmier, a floater), its ring the climb
             w.lastAnchor = emit("FALL", w, L, frame, { edgeX: w.x, edgeY: w.y, ring: w.ring.slice(), offWall: true });
           } else if (a === BA.SHRUGGING) emit("SHRUG", w, L, frame);
-          else if (a === BA.BLOCKING) emit("BLOCK", w, L, frame); // a blocker at its post: freed later with a bomber
+          else if (a === BA.BLOCKING) { emit("BLOCK", w, L, frame); changeFrame = frame; } // a blocker at its post: freed later with a bomber
           else if (JOBS.has(was) && !JOBS.has(a) && a !== BA.SHRUGGING) emit("WORK_END", w, L, frame, { job: was });
           else if (a === BA.CLIMBING && was === BA.WALKING) w.lastAnchor = emit("TURN", w, L, frame, { wallX: L.x, ring: w.ring.slice(), climbing: true });
         } else if (a === BA.WALKING && L.dx !== w.dx) {
@@ -270,7 +271,7 @@
       crowdDist, crowdN, saved: game.lemmingsIn + foretoldSaved, lost: game.lemmingsRemoved - game.lemmingsIn + foretoldLost, alive: predicted ? 0 : game.lemmingsOut,
       toRelease: game.lemmingsToRelease, endFrame: world.ended ? game.currentIteration : predicted ? foretoldEnd : Infinity,
       stuck, ended: world.ended || predicted, outOfTime: game.isOutOfTime, capped: !world.ended && !predicted && !stuck && !game.isOutOfTime && !leadDone, leadDone, predicted,
-      lastFrame: game.currentIteration, skillsUsed: world.skillsUsed(), need: level.needCount, minDist, foretold,
+      lastFrame: game.currentIteration, skillsUsed: world.skillsUsed(), need: level.needCount, minDist, foretold, changeFrame,
     };
     if (outcome.outOfTime && !outcome.ended) outcome.endFrame = game.currentIteration;
     outcome.solved = outcome.saved >= level.needCount && level.needCount > 0 && (outcome.ended || outcome.outOfTime || stuck || leadDone);

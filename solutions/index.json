@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-09T17:23:45.624Z",
+ "generated": "2026-09-18T22:14:41.043Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12417,18 +12417,22 @@
    "elapsedMs": 9082
   },
   "Lemmings_Redux/Gentle/CindyLand.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/CindyLand.nxrp",
    "needed": 33,
    "count": 40,
-   "tier": 3,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "steel"
    ],
-   "expansions": 22690,
-   "elapsedMs": 810030
+   "expansions": 2455,
+   "elapsedMs": 82319,
+   "saved": 39,
+   "skillsUsed": 8,
+   "completionFrame": 1815,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Darkness_of_the_royal_family.nxlv": {
    "status": "unsolved",

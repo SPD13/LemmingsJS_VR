@@ -504,15 +504,58 @@ crowd bashed, and builds twice up to the ledge; the crowd bashes into
 the bedrock, walks up the ramp and the staircase, and exits (cost 6,
 plus the hold).
 
-CindyLand still ends unsolved at tier 2 (754 crowd expansions). The
-macro runs the crowd's route (the bash) and stops where the next gate
-is the lead's - the ramp is mined from the hill above by the athlete,
-and the plan scored at the rollout's end no longer holds that athlete
-(it has left by then), so its step is planned before the action only
-and the search does not take it. The next thing to try is the plan at
-the rollout's end computed with the lemmings as they stood when the
-change happened, or a macro that follows the lead's route as well as the
-crowd's. The level stays open. `tools/nx-probe.js` holds the probes this took (the graph,
+### Later (18 September): CindyLand solved - the two lanes, and what the pixels said
+
+The three mechanisms the level asked for, as planned: **the post-action
+plan at the moment the node's own action finished its work** (the
+basher's WORK_END, the blocker's BLOCK), with the lemmings as they stood
+then, and the cheaper of the two plans the node's - the other's steps
+kept, marked, for the boosts; **the route as two lanes**
+(`Solver.planRoute`): the crowd's paid gates in order, and before any
+crowd step that rides on a gate the lead opens (`via`, set by the
+planner), the lead's gates up to that one; a lead gate into a tunnel in
+waiting before the crowd's bash that makes it; gates already worked by
+the plan's own entries left out (matched by place - an entry's `dx` at a
+turn is the way the lemming came); **the plan macro** follows that
+route gate after gate from each node's own plan, six at most, and the
+boosts go to the route's first gate and the first of the other lane
+only (the bash under way drew second bashers before). Pending permanent
+skills count in the plan (the athlete-to-be is planned as an athlete);
+a climbing lemming belongs to its wall's top; an exit region absorbs
+(nothing leads out of it); a climber is not turned by a wall it can
+climb; ramps are found both ways, into real regions too, from any floor
+to a floor within twelve cells below; the planner's greedy keys its
+gates by way as well as by pair; a group's boosted moments are kept by
+fit to the gate (the earliest three moments were never the nearest).
+
+Then the pixels overruled two of the planner's ideas. A ramp mined into
+an existing tunnel breaks in through the roof and ends ten pixels over
+the floor - no walker comes back up (so ramps into real regions must
+enter at floor level). A ramp mined before the bash runs down to the
+tunnel's floor only over steel: CindyLand's floor under the tunnel is
+plain terrain, and the miner keeps going through it and out of the level
+- everyone who walked the tunnel fell out at x 973 (so ramps into a
+tunnel in waiting need steel under the landing). Neither order of ramp
+and bash works here. What works is the classic move the graph had no
+gate for: **a raised bash** - one builder's staircase at the pit's wall
+lifts the basher six pixels, and the tunnel from the staircase top comes
+out level (a step at most) into the notch in the column; from the notch
+a plain bash runs level into the bowl; two builders up to the ledge; the
+exit. The gate is a **sequence of skills at their spots**
+(`gate.sequence`: the builder at its run-up, the basher at the wall, and
+where the opening's floor is higher, one more builder from the tunnel's
+floor), taken in order by the boosts, the "worked" test and the macro
+(`Solver.wantedSkill`); the boost matches an event at the item's spot or
+at the gate's wall (the run-up's moment is taken at the wall the lemming
+turns at), and the fit is measured to the item's spot.
+
+**CindyLand: 39/40 with 8 skills at tier 2** (82 s, 983 crowd
+expansions): the hold, the staircase and the raised bash, the bash from
+the notch, the staircase to the ledge, the climber-builder athlete's own
+way in. The chain the trace shows is the macro's: hold, BUILDER at the
+run-up, BASHER from the staircase top, BASHER from the notch, then the
+ledge. The regressions hold (Keep your hair 7, Snuggle 4, bashers 3, Up
+For A Walk 2). `tools/nx-probe.js` holds the probes this took (the graph,
 the picture, the reach, a node's plan and candidates, a plan's rollout, the
 pixels) so the next level's diagnosis starts from there.
 
