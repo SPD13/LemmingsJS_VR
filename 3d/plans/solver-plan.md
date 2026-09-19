@@ -658,6 +658,25 @@ the next thing the level asks for. **Tier 3 with all this: 20/30 with 14
 skills** (814 s, within the budget; 13606 lead and 12348 crowd
 expansions), against 21 skills and 1087 s before - recorded and verified.
 
+### Later (20 September): A Beast of a level
+
+*A Beast of a level* (Redux, Gentle: 50 lemmings, save 40, ten of
+everything) - a maze of walls along a corridor: the plan reads it at
+cost 10 (six bashes, a raised bash, two climbs for the lead; two builders
+up the wall for the crowd). The first thing the probes found: **a turn at
+a wall got no plan boost** - the wall's foot here is a step whose cell
+belongs to the region above, so "in the gate's region" failed for the
+very moment a wall gate wants (the basher at the turn, prior 1.0, while a
+moment ten pixels short of the wall was boosted). A turn at a wall is at
+the wall whatever cell the foot belongs to. With that the crowd pass
+chains the route inside the macro (bashes, builders with a guarded hold,
+the release) but tier 2 affords 710 crowd expansions with fifty lemmings
+a rollout, and the branch seeded with the lead's way in lacks the hold at
+the left ledge where the first lemmings fall. **Tier 3: 49/50 with 10
+skills** (813 s; 11828 lead and 4520 crowd expansions) - the plan's
+cost to the skill - recorded and verified. No mechanism missing here
+beyond the turn's boost: a crowd of fifty is a budget question.
+
 ### What limits the solver now
 
 1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang

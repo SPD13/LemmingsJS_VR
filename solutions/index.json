@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-19T09:21:37.243Z",
+ "generated": "2026-09-19T09:48:03.449Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12332,16 +12332,20 @@
    "elapsedMs": 9129
   },
   "Lemmings_Redux/Gentle/A_Beast_of_a_level.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/A_Beast_of_a_level.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 2,
+   "tier": 3,
    "solverVersion": "0.1.0",
+   "saved": 49,
+   "skillsUsed": 10,
+   "completionFrame": 2654,
    "maxSavable": 50,
-   "features": [],
-   "expansions": 2215,
-   "elapsedMs": 108135
+   "optimal": false,
+   "elapsedMs": 813400,
+   "expansions": 16348,
+   "features": []
   },
   "Lemmings_Redux/Gentle/A_Block_from_Home.nxlv": {
    "status": "solved",
