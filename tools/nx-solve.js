@@ -9,7 +9,7 @@
  *
  *   node tools/nx-solve.js <level>  [--tier 1|2|3] [--budget <s>] [--trace] [--events]
  *                                   [--nxrp <file>] [--no-index] [--stdout]
- *   node tools/nx-solve.js [prefix] [--tier 1|2|3|all] [--budget <s>] [--jobs N] [--force] [--only <file>]
+ *   node tools/nx-solve.js [prefix] [--tier 1|2|3|all] [--budget <s>] [--jobs N] [--heap <MB>] [--force] [--only <file>]
  *                                   [--out <dir>] [--verbose]
  *   node tools/nx-solve.js --verify [prefix]      every solution replayed through a fresh game
  *   node tools/nx-solve.js --list [prefix]        what the index says
@@ -46,6 +46,7 @@ function parseArgs(argv) {
       case "--force": opts.force = true; break;
       case "--out": opts.out = next(); break;
       case "--only": opts.only = next(); break;
+      case "--heap": opts.heap = parseInt(next(), 10); break;
       case "--trace": opts.trace = true; break;
       case "--events": opts.events = true; break;
       case "--nxrp": opts.nxrp = next(); break;
@@ -255,7 +256,7 @@ async function main() {
     if (!todo.length) continue;
     const t0 = Date.now();
     let done = 0;
-    await runPool(todo, Math.min(opts.jobs, todo.length), { tier, budgetMs, repoRoot }, (entry, msg) => {
+    await runPool(todo, Math.min(opts.jobs, todo.length), { tier, budgetMs, repoRoot, heap: opts.heap }, (entry, msg) => {
       done++;
       const rec = msg.record;
       const old = index.levels[entry.id];
@@ -288,7 +289,9 @@ function runPool(entries, jobs, job, onDone) {
       if (next >= entries.length) { if (running === 0) resolve(); return; }
       const entry = entries[next++];
       running++;
-      const worker = new Worker(path.join(__dirname, "solver", "worker.js"), { workerData: { repoRoot: job.repoRoot }, resourceLimits: { maxOldGenerationSizeMb: 4096 } });
+      // a worker's heap: 4 GB by default (tier 3 needs it); --heap <MB> for more workers on less memory (three at 4 GB
+      // ran a 16 GB machine dry)
+      const worker = new Worker(path.join(__dirname, "solver", "worker.js"), { workerData: { repoRoot: job.repoRoot }, resourceLimits: { maxOldGenerationSizeMb: job.heap || 4096 } });
       let finished = false;
       // the budget is wall-clock inside the worker; a loaded machine stretches it, so the leash is long
       const leash = job.budgetMs * 2 + 60000;
