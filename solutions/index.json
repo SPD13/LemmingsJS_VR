@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-19T07:39:36.898Z",
+ "generated": "2026-09-19T07:50:05.441Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12871,14 +12871,14 @@
    "file": "Lemmings_Redux/Lunatic/Be_more_than_just_a_number.nxrp",
    "needed": 29,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel"
    ],
-   "expansions": 325,
-   "elapsedMs": 9120
+   "expansions": 5817,
+   "elapsedMs": 108044
   },
   "Lemmings_Redux/Lunatic/Creature_Discomforts.nxlv": {
    "status": "unsolved",
@@ -12899,7 +12899,7 @@
    "file": "Lemmings_Redux/Lunatic/Down,_along,_up,_in_that_order.nxrp",
    "needed": 20,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -12907,15 +12907,15 @@
     "steel",
     "water"
    ],
-   "expansions": 316,
-   "elapsedMs": 9182
+   "expansions": 6480,
+   "elapsedMs": 108064
   },
   "Lemmings_Redux/Lunatic/Evacuating_a_coal_mine.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Lunatic/Evacuating_a_coal_mine.nxrp",
    "needed": 50,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -12923,8 +12923,8 @@
     "steel",
     "trap"
    ],
-   "expansions": 167,
-   "elapsedMs": 9105
+   "expansions": 4479,
+   "elapsedMs": 108066
   },
   "Lemmings_Redux/Lunatic/Everyone's_a_hard_nut..nxlv": {
    "status": "unsolved",
@@ -12996,14 +12996,14 @@
    "file": "Lemmings_Redux/Lunatic/Fix_the_road,_quick!.nxrp",
    "needed": 24,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel"
    ],
-   "expansions": 189,
-   "elapsedMs": 9159
+   "expansions": 6056,
+   "elapsedMs": 108064
   },
   "Lemmings_Redux/Lunatic/Hello_John!_Got_a_New_Lemming_.nxlv": {
    "status": "unsolved",
@@ -13062,15 +13062,15 @@
    "file": "Lemmings_Redux/Lunatic/Lemming_about_town.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 376,
-   "elapsedMs": 9222
+   "expansions": 7836,
+   "elapsedMs": 108077
   },
   "Lemmings_Redux/Lunatic/Lemmings'_Ark.nxlv": {
    "status": "unsolved",
@@ -13123,7 +13123,7 @@
    "file": "Lemmings_Redux/Lunatic/Move_on_in_two_separate_groups..nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -13132,8 +13132,8 @@
     "trap",
     "water"
    ],
-   "expansions": 293,
-   "elapsedMs": 9121
+   "expansions": 14222,
+   "elapsedMs": 108047
   },
   "Lemmings_Redux/Lunatic/No_added_colours_or_Lemmings.nxlv": {
    "status": "unsolved",
@@ -13278,26 +13278,26 @@
    "file": "Lemmings_Redux/Lunatic/There's_madness_in_the_method.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [],
-   "expansions": 552,
-   "elapsedMs": 9141
+   "expansions": 18296,
+   "elapsedMs": 108033
   },
   "Lemmings_Redux/Lunatic/This_Corrosion.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Lunatic/This_Corrosion.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel"
    ],
-   "expansions": 284,
-   "elapsedMs": 9087
+   "expansions": 7311,
+   "elapsedMs": 108046
   },
   "Lemmings_Redux/Lunatic/Watch_right_or_left_(Part_Two).nxlv": {
    "status": "unsolved",
@@ -13319,22 +13319,22 @@
    "file": "Lemmings_Redux/Lunatic/Water_processing_plant.nxrp",
    "needed": 29,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire",
     "water"
    ],
-   "expansions": 473,
-   "elapsedMs": 9182
+   "expansions": 10236,
+   "elapsedMs": 108060
   },
   "Lemmings_Redux/Lunatic/Which_one_are_you_trying_to_get_.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Lunatic/Which_one_are_you_trying_to_get_.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -13342,8 +13342,8 @@
     "steel",
     "water"
    ],
-   "expansions": 128,
-   "elapsedMs": 9750
+   "expansions": 4233,
+   "elapsedMs": 108064
   },
   "Lemmings_Redux/Manic/AAAAAARRRRRRGGGGGGHHHHHH!!!!!!.nxlv": {
    "status": "unsolved",
