@@ -57,6 +57,7 @@
       this.trimmed = false; // whether a frontier ever lost edges to its cap (else a restart would only repeat the search)
       this._lastReport = 0;
       this.nodes = 0; this.expansions = 0; this.dropped = { dead: 0, seen: 0, refused: 0, ended: 0 };
+      this.planMin = Infinity; this.planMinAt = 0;
       this.transposition = new Map();
       this.cache = [];   // nodes holding a state, oldest first
       this.solutions = [];
@@ -137,6 +138,9 @@
       if (typeof process !== "undefined" && process.env.NX_PLAN_DEBUG && after) console.log("  plans at frame " + node.frame + " (world " + world.frame + "): before " + planned.cost + "/" + planned.leadId + ", after " + after.cost + "/" + after.leadId + " -> " + (best === after ? "after" : "before"));
       outcome.planCost = best ? best.cost : null; // null: no way the graph knows of
       node.planned = best;
+      // how the pass gets on: the cheapest plan seen so far, and when (a long route's lead pass is let run on
+      // while it still gets nearer)
+      if (best && best.cost < this.planMin) { this.planMin = best.cost; this.planMinAt = now(); }
       if (after && planned && after !== planned) {
         // the steps of both: the chosen plan's first, the other's marked as such (the route macro follows the
         // chosen alone; the boosts match the gates of either graph)
@@ -415,7 +419,7 @@
       const blockers = over ? over.blockers : game.lemmings.filter((L) => !L.removed && L.action === BLOCKING).map((L) => ({ x: L.x, y: L.y }));
       const version = over ? over.version : world.terrainVersion + "|" + blockers.map((b) => b.x + "," + b.y).join(";");
       if (!this._graph || this._graphVersion !== version) {
-        try { this._graph = R.build(world.level, over ? over.physics : game.physics, blockers); } catch (e) { this._graph = null; }
+        try { this._graph = R.build(world.level, over ? over.physics : game.physics, blockers, world.masks); } catch (e) { this._graph = null; }
         this._graphVersion = version;
       }
       const graph = this._graph;
@@ -457,9 +461,28 @@
         return p ? { cost: p.cost, steps: p.steps, lead: p.steps, graph, free: new Set(), leadId: null, leadRegion: hr.id } : null;
       }
       const CLIMBING = Lemmix.BA.CLIMBING, HOISTING = Lemmix.BA.HOISTING;
+      // a lemming on a bridge of several builders under way - on the bricks, in no region the graph knows - is
+      // planned from the bridge's gate, the builders laid so far off the gate's price (put back after the plan)
+      const onBridge = new Map(), discounted = [];
+      if (Solver.bridgeProgress) for (const L of one ? [one] : alive) {
+        // the gate whose spot the bridge's first builder was given nearest (several gates share a line: the ledges
+        // a bridge of one, two or three builders reaches)
+        let bestGate = null, bestPg = null;
+        for (const gt of graph.gates) {
+          if ((gt.builders || 1) < 2 || (gt.skill !== "BUILDER" && gt.skill !== "PLATFORMER") || gt.dir !== L.dx) continue;
+          const pg = Solver.bridgeProgress(gt, game.recorded);
+          if (pg.n < 1 || pg.n >= gt.builders || Math.abs(L.x - pg.x) > 30 || Math.abs(L.y - pg.y) > 20) continue;
+          if (!bestGate || pg.d0 < bestPg.d0) { bestGate = gt; bestPg = pg; }
+        }
+        if (!bestGate) continue;
+        onBridge.set(L, bestGate);
+        if (typeof process !== "undefined" && process.env.NX_PLAN_DEBUG) console.log("  on a bridge: " + L.identifier + " at " + L.x + "," + L.y + " gate " + bestGate.kind + "@" + bestGate.x + "," + bestGate.y + " " + bestPg.n + "/" + bestGate.builders);
+        if (!discounted.includes(bestGate)) { discounted.push(bestGate); bestGate.fullCost = bestGate.cost; bestGate.cost = Math.max(0, bestGate.cost - bestPg.n); }
+      }
       for (const L of one ? [one] : alive) {
         let r = -1;
-        if (L.action === CLIMBING || L.action === HOISTING) r = R.regionOfClimber(graph, L.x, L.y, L.dx); // on its way to the wall's top
+        if (onBridge.has(L)) r = onBridge.get(L).from;
+        else if (L.action === CLIMBING || L.action === HOISTING) r = R.regionOfClimber(graph, L.x, L.y, L.dx); // on its way to the wall's top
         if (r < 0) r = R.regionOfLemming(graph, L.x, L.y);
         if (r < 0 && L.action === BLOCKING) r = Math.max(R.regionOfLemming(graph, L.x - R.CELL, L.y), R.regionOfLemming(graph, L.x + R.CELL, L.y));
         if (r >= 0) add(r, L, 1);
@@ -473,8 +496,19 @@
       if (!groups.size) return null;
       // a group heads one way when all of it does, else either way (one of them heads into any gate)
       const list = Array.from(groups.values()).map((g) => ({ region: g.region, dir: Math.abs(g.dx) === g.n ? Math.sign(g.dx) : 0, n: g.n, lacking: g.lacking, leadLacking: g.leadLacking, lem: g.lem }));
-      const all = R.planAll(graph, list, skills, one ? 1 : needed);
+      // the plan of the same situation on the same graph is the same plan (the lead pass asks it again and again
+      // from the same region): remembered, a few hundred of them
+      const memoKey = this._graphVersion + "|" + (one ? 1 : needed) + "|" + JSON.stringify(skills) + "|" + list.map((g) => g.region + ":" + g.dir + ":" + g.n + ":" + Object.values(g.lacking).join(",") + ":" + (g.leadLacking ? Object.values(g.leadLacking).join(",") : "")).join(";") + "|" + discounted.map((gt) => gt.id + "=" + gt.cost).join(",");
+      if (!this._planMemo) this._planMemo = new Map();
+      let all = this._planMemo.get(memoKey);
+      if (all === undefined) {
+        try { all = R.planAll(graph, list, skills, one ? 1 : needed); }
+        finally { for (const gt of discounted) { gt.cost = gt.fullCost; delete gt.fullCost; } }
+        if (this._planMemo.size >= 400) this._planMemo.delete(this._planMemo.keys().next().value);
+        this._planMemo.set(memoKey, all);
+      } else for (const gt of discounted) { gt.cost = gt.fullCost; delete gt.fullCost; }
       if (!all) return null;
+      all = Object.assign({}, all); // the callers' own copy (the cost adjusted below)
       if (walkers && blocking.length && !one) all.cost += Math.min(blocking.length, needed); // the walkers that free them
       const lg = all.leadGroup;
       // whoever can already get out alone - a climber-floater with a clear way in - is no worker for the crowd:
@@ -540,7 +574,7 @@
       // shallow ones (a plain rotation goes straight down, every expansion opening a
       // new deeper heap that is visited next)
       const pops = new Map();
-      while (total > 0 && now() < deadline) {
+      while (total > 0 && now() < (typeof deadline === "function" ? deadline() : deadline)) {
         if (this.onProgress && now() - this._lastReport > 1000) this.report();
         let heap = null, bestKey = Infinity;
         for (const [d, h] of open) {
@@ -587,11 +621,16 @@
     world.reset([]);
     const firstOut = world.level.preplaced.length ? "P" + world.level.preplaced[0].x + "." + world.level.preplaced[0].y : "N0";
     const leadEnd = t0 + budget * (1 - optimiseShare) * params.leadShare;
+    // a long route (a dozen builders across a level) takes the lead pass past its share: it runs on, up to half
+    // the search's time, while its cheapest plan still fell within the last third of the share
+    const leadHardEnd = t0 + budget * (1 - optimiseShare) * Math.max(params.leadShare, 0.5), leadWindow = budget * (1 - optimiseShare) * params.leadShare / 3;
+    // (not at tier 1: ten seconds are the crowd pass's)
+    const leadDeadline = () => (now() < leadEnd || search.best || params.leadShare > 0.2 ? leadEnd : Math.min(leadHardEnd, search.planMinAt + leadWindow));
     let lead = null;
     if (need > 0) {
       search.phase = "lead pass";
       search.report();
-      lead = search.run([{ plan: [], frame: 0 }], 1, new Set([firstOut]), leadEnd);
+      lead = search.run([{ plan: [], frame: 0 }], 1, new Set([firstOut]), leadDeadline);
       if (log) log("lead pass: " + (lead ? "a way in with " + lead.skillsUsed + " skills at frame " + lead.completionFrame : "none") + ", " + search.expansions + " expansions");
     }
     // the crowd pass: the count, from the root and every lead solution. When the

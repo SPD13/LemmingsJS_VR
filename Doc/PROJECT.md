@@ -763,7 +763,17 @@ shape of it:
   from wall ends alike; a slit narrower than a cell (a pixel or three,
   bounded by ground at the floor's level) ends a region in a drop as deep
   as the column, bridged by a builder; a dig shaft deeper than the splat
-  height costs a group a floater each; water, fire and traps are
+  height costs a group a floater each. Where the cells and the engine
+  disagree the engine's own rules decide: a builder's bridge is laid brick
+  by brick by the builder's tests (the foot, the head, the brick ahead; a
+  builder turned back leaves a follower-only bridge) and walked off to real
+  ground, from a region's end, away from a wall, or from a step inside the
+  region toward its end (a staircase whose bricks clear a wall's top); a
+  miner's ramp is dug with the miner's mask and its tests for steel and
+  for lost ground; a dig shaft goes on while any pixel within three of its
+  centre is solid; a climber's own column must be clear to the wall's top;
+  a bash whose tunnel takes away the wall's top the far region walked over
+  comes out in that region's far part alone. Water, fire and traps are
   ends too -
   deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
   gone for all after, a once-only trap taking one lemming; a force field
@@ -803,8 +813,13 @@ shape of it:
   `1000·saved + 300·bound − 40·skills − 40·lost − 80·plan cost −
   distance/2 − frames/500` (the lead pass: skills 20, distance whole,
   lost ignored).
-  A lead pass (skills to the first lemming out, one save is a success)
-  seeds a crowd pass for the count; the plan is scored again at the
+  A lead pass (skills to the first lemming out, one save is a success;
+  its share of the time stretched, up to half, while its cheapest plan
+  keeps falling - an eighteen-builder route)
+  seeds a crowd pass for the count; a bridge of several builders is
+  followed builder by builder (the plan's worked test counts them on the
+  bridge's line, the lemming on the bricks planned from the bridge's gate
+  at what is left of its price); the plan is scored again at the
   moment an action's work is done, and the plan's route - the crowd's
   gates and, before any that rides on a gate the lead opens, the lead's
   own, a gate of several skills (a staircase then a bash) taken skill by

@@ -168,6 +168,32 @@ async function main() {
     over.fill(100, 20, 152, 24, PM.SOLID); // a ceiling 8 px over its top, up to the wall
     const ko2 = kinds(over, 50);
     check("a climb under a ceiling: a climb-and-shimmy gate", ko2.kinds.includes("climbshimmy:CLIMBER"), ko2.kinds);
+    // the pixels decide: a bridge is laid by the builder's own rules - a brick over the far side meets its head
+    const brick = crossing(300, 1, 1, { BUILDER: 3 });
+    brick.fill(120, 60, 138, 100, 0); // the one-builder gap of the fixture above
+    brick.fill(128, 38, 170, 44, PM.SOLID); // a brick fourteen pixels over the far floor: the builder's head meets it
+    const gbr = R.build(brick, brick.physics), nbr = gbr.regionOf(50, 59), fbr = gbr.regionOf(200, 59);
+    check("a brick over the far side: no builder's bridge for the builder", nbr >= 0 && !gbr.regions[nbr].gates.some((gt) => gt.kind === "build" && gt.to === fbr && !gt.followersOnly), nbr >= 0 && gbr.regions[nbr].gates.filter((gt) => gt.to === fbr).map((gt) => gt.kind + (gt.followersOnly ? "(followers)" : "")));
+    // a climber whose own column meets terrain is clipped off the wall: no climb gate under an overhang
+    const clip = crossing(300, 1, 1, { CLIMBER: 1 });
+    clip.fill(150, 30, 160, 60, PM.SOLID);
+    clip.fill(140, 40, 150, 44, PM.SOLID); // a brick over the climber's column
+    check("an overhang over the climber: no climb gate", !kinds(clip, 50).kinds.includes("climb:CLIMBER"), kinds(clip, 50).kinds);
+    // a bash under a region that walks down over the wall's top: the tunnel takes the top away, the bash comes out
+    // in the far part alone (a ten-pixel wall, a brick's step down from its top toward the far floor)
+    const topless = crossing(300, 1, 1, { BASHER: 1 });
+    topless.fill(150, 50, 160, 60, PM.SOLID);
+    topless.fill(160, 54, 173, 60, PM.SOLID);
+    const gtl = R.build(topless, topless.physics), ntl = gtl.regionOf(50, 59);
+    const bgt = ntl >= 0 ? gtl.regions[ntl].gates.find((gt) => gt.kind === "bash") : null;
+    check("a bash under the far region's step: out in its far part", bgt && gtl.regions[bgt.to].alias !== undefined && gtl.regions[bgt.to].x0 * R.CELL >= 160, bgt && { to: bgt.to, alias: gtl.regions[bgt.to].alias, x0: gtl.regions[bgt.to].x0 * R.CELL });
+    // a six-pixel brick is a step a walker takes, wherever the ground lies inside the cell
+    const brick6 = crossing(300, 1, 1, {});
+    brick6.fill(0, 60, 152, 62, 0); // the near floor two pixels down into its cell
+    brick6.fill(152, 56, 300, 62, PM.SOLID); // a six-pixel step up on a cell's boundary: two cells to the cells
+    const g6 = R.build(brick6, brick6.physics), n6 = g6.regionOf(50, 61);
+    const p6 = n6 >= 0 ? R.plan(g6, { region: n6, dir: 1 }, {}, 1) : null;
+    check("a six-pixel step is walked: a slope, the exit at cost 0", n6 >= 0 && g6.regions[n6].ends.right.kind === "slope" && p6 && p6.cost === 0, n6 >= 0 && { end: g6.regions[n6].ends.right, cost: p6 && p6.cost });
   }
 
   console.log("a wall needs one basher, steel needs a climber");
