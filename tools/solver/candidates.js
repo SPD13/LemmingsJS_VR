@@ -128,7 +128,8 @@
     if (dbgLem) console.log("  debug: entries " + (ctx.plan || []).map((e) => e.skill + ">" + e.lemId + "@" + e.frame + " (" + e.x + "," + e.y + " " + e.dx + ")").join(" ") + "; free " + Array.from(free).join(",") + " nextGate " + Array.from(nextGate).map(gateKey).join(" ") + " route " + planRoute(ctx.planned, ctx.plan).map((st) => gateKey(st.gate)).join(" "));
     const planned = (c, e) => {
       lastGate = null; lastItem = null;
-      if (dbgLem && e && e.lemId === dbgLem && c.skill === "MINER" && e.type === "TICK") console.log("  debug MINER at TICK " + e.frame + " (" + e.x + "," + e.y + ") free " + (free.size && free.has(e.lemId)) + " gates " + steps.filter((st) => st.gate.skill === "MINER").map((st) => gateKey(st.gate) + "@" + st.gate.x + "," + st.gate.y + (nextGate.has(st.gate) ? "*" : "") + (st.before ? "(before)" : "")).join(" ") + " region " + (graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : "?"));
+      const dbgSkill = typeof process !== "undefined" && process.env.NX_CAND_SKILL, dbgType = typeof process !== "undefined" && process.env.NX_CAND_EVENT;
+      if (dbgLem && e && e.lemId === dbgLem && c.skill === (dbgSkill || "MINER") && e.type === (dbgType || "TICK")) console.log("  debug " + c.skill + " at " + e.type + " " + e.frame + " (" + e.x + "," + e.y + " dx " + e.dx + (e.climbing ? " climbing" : "") + ") free " + (free.size && free.has(e.lemId)) + " gates " + steps.filter((st) => st.gate.skill === c.skill).map((st) => gateKey(st.gate) + "@" + st.gate.x + "," + st.gate.y + " dir" + st.gate.dir + (nextGate.has(st.gate) ? "*" : "") + (st.before ? "(before)" : "")).join(" ") + " region " + (graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : "?"));
       if (!steps.length || !e) return 1;
       // a lemming with a free way out is left alone - except for a turn the plan wants (the blocker on the far
       // side is best one of them) and the plan's very next gate
@@ -163,8 +164,9 @@
         if (gt.kind === "unblock" && e.type !== "BLOCK") continue; // the bomber goes on the blocker itself
         // at the gate (a staircase up a wall: at the wall, the run-up is the candidate's own offset), in its region
         // in the gate's region - or in no region the node's graph knows, the terrain having changed in the rollout
+        // (a turn at a wall is at the wall whatever cell the foot of it belongs to - a step, the wall's own top)
         const er = graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : -1;
-        const inRegion = !graph || er === gt.from || er < 0;
+        const inRegion = !graph || er === gt.from || er < 0 || e.type === "TURN";
         const atWall = gt.wallX !== undefined && Math.abs(e.x - gt.wallX) <= 20 && (gt.kind === "bashup" || gt.kind === "bashbomb" || gt.kind === "raisedbash" || Math.abs(e.y - gt.y) <= 16) && inRegion;
         if (gt.also && c.skill === gt.also && !atWall) continue; // the second skill of a two-skill gate works at the far wall only
         // a bomber's blast is placed where it stands: under a thin roof or at a thin wall, its feet within a few
