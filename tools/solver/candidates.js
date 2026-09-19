@@ -379,7 +379,7 @@
       out.length = 0; for (const c of keep) out.push(c); for (const c of rest.slice(0, Math.max(0, 600 - keep.length))) out.push(c);
     }
     // the plan's route as one edge (solver.js takes it gate by gate), when there is a route of at least two skills
-    if (!ctx.lemFilter && steps.filter((st) => st.gate.skill && !st.gate.twin).length >= 2) {
+    if (steps.filter((st) => st.gate.skill && !st.gate.twin).length >= 2) {
       // its first pick is carried along: a node's list is let go once its edges are queued
       const route = planRoute(ctx.planned, ctx.plan);
       const keys = route.map((st) => gateKey(st.gate));

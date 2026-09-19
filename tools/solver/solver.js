@@ -394,7 +394,17 @@
         else if (!real && g.leadPerms < 0) g.leadLacking = mine;
       };
       let one = null;
-      if (lemFilter) { const id = Array.from(lemFilter)[0]; one = alive.find((L) => L.identifier.toUpperCase() === id.toUpperCase()) || null; if (!one) return null; }
+      if (lemFilter) { const id = Array.from(lemFilter)[0]; one = alive.find((L) => L.identifier.toUpperCase() === id.toUpperCase()) || null; }
+      if (lemFilter && !one) {
+        // the lead not out yet (the root): planned from where the hatch drops it, facing the hatch's way
+        if (game.lemmingsToRelease <= 0) return null;
+        const hr = graph.regions.find((r) => r.hatch), hatch = world.level.gadgets.find((gd) => gd.effect === "WINDOW");
+        if (!hr) return null;
+        const dir = hatch ? (hatch.flipLemming ? -1 : 1) : 0;
+        const lacking = {}; for (const p of perms) lacking[p] = 1;
+        const p = R.plan(graph, { region: hr.id, dir }, skills, { n: 1, lead: true, lacking });
+        return p ? { cost: p.cost, steps: p.steps, lead: p.steps, graph, free: new Set(), leadId: null, leadRegion: hr.id } : null;
+      }
       const CLIMBING = Lemmix.BA.CLIMBING, HOISTING = Lemmix.BA.HOISTING;
       for (const L of one ? [one] : alive) {
         let r = -1;

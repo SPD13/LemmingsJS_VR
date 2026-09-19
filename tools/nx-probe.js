@@ -9,7 +9,7 @@
  *   node tools/nx-probe.js pic <level> [frame]              the level as cells: # solid, S steel, ~ water, ! hazard, letters regions
  *   node tools/nx-probe.js reach <level> [frame]            the regions one lemming can reach with the level's skills, by cost
  *   node tools/nx-probe.js plan <level> [frame] [plan]      the crowd's plan (the search's own _plan) after a plan of actions
- *   node tools/nx-probe.js cands <level> <plan> [regex]     a node's candidates after a plan, filtered by a pattern on "kind SKILL>lem (why)"
+ *   node tools/nx-probe.js cands <level> <plan> [regex] [lead]   a node's candidates after a plan, filtered by a pattern on "kind SKILL>lem (why)"; "lead": the lead pass's node
  *   node tools/nx-probe.js chain <level> <plan> [lemId]     the rollout's events after a plan for one lemming (or every death)
  *   node tools/nx-probe.js pixels <level> <x0> <x1> <y0> <y1> [frame] [plan]   the physics map as pixels
  *
@@ -94,14 +94,14 @@ async function main() {
       console.log("at the action's end (frame " + at + "): " + (q ? "cost " + q.cost + " lead " + q.leadId + "\n  " + q.steps.map(stepStr).join("\n  ") : "no plan"));
     }
   } else if (cmd === "cands") {
-    const plan = placed(world, toPlan(rest[0] || "[]")), re = new RegExp(rest[1] || ".");
+    const plan = placed(world, toPlan(rest[0] || "[]")), re = new RegExp(rest[1] || "."), lead = rest[2] === "lead" ? new Set([plan.length ? plan[0].lemId : "N0"]) : null;
     const analysis = Solver.analyse(level);
     const search = new Solver.Search(world, analysis, Solver.tierParams(1, level), {});
     // the node as the search makes it: the frame after the plan's last action
     world.reset(Solver.copyPlan(plan));
     const at = plan.length ? plan[plan.length - 1].frame + 1 : 0; // the last entry is the node's action (the search appends)
     if (at > 0) world.step(at);
-    const node = search._makeNode(null, Solver.copyPlan(plan), level.needCount, null, false, true);
+    const node = search._makeNode(null, Solver.copyPlan(plan), lead ? 1 : level.needCount, lead, false, true);
     const o = node.outcome;
     console.log("outcome saved " + o.saved + " lost " + o.lost + " skills " + node.skillsUsed + " stuck " + !!o.stuck + " last " + o.lastFrame + " plan " + (node.planned ? node.planned.cost : "none") + " candidates " + (node.candidates || []).length);
     if (node.planned) console.log("  plan steps: " + node.planned.steps.map((st) => (st.who || "?")[0] + ":" + (st.gate.skill ? Solver.gateKey(st.gate) : st.gate.kind)).join(" "));
