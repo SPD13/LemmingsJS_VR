@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-18T22:50:09.763Z",
+ "generated": "2026-09-19T07:39:36.898Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12336,12 +12336,12 @@
    "file": "Lemmings_Redux/Gentle/A_Beast_of_a_level.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [],
-   "expansions": 154,
-   "elapsedMs": 9450
+   "expansions": 2215,
+   "elapsedMs": 108135
   },
   "Lemmings_Redux/Gentle/A_Block_from_Home.nxlv": {
    "status": "solved",
@@ -12404,29 +12404,29 @@
    "file": "Lemmings_Redux/Gentle/Careless_clicking_costs_lives.nxrp",
    "needed": 20,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 5,
-   "elapsedMs": 9253
+   "expansions": 164,
+   "elapsedMs": 109775
   },
   "Lemmings_Redux/Gentle/Catch_more_floaters..nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Gentle/Catch_more_floaters..nxrp",
    "needed": 9,
    "count": 10,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 10,
    "features": [
     "steel"
    ],
-   "expansions": 387,
-   "elapsedMs": 9272
+   "expansions": 18239,
+   "elapsedMs": 108071
   },
   "Lemmings_Redux/Gentle/CindyLand.nxlv": {
    "status": "solved",
@@ -12451,22 +12451,22 @@
    "file": "Lemmings_Redux/Gentle/Darkness_of_the_royal_family.nxrp",
    "needed": 20,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "trap"
    ],
-   "expansions": 142,
-   "elapsedMs": 9229
+   "expansions": 4331,
+   "elapsedMs": 108068
   },
   "Lemmings_Redux/Gentle/Doomsday.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Gentle/Doomsday.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -12474,8 +12474,8 @@
     "steel",
     "water"
    ],
-   "expansions": 39,
-   "elapsedMs": 9578
+   "expansions": 982,
+   "elapsedMs": 108234
   },
   "Lemmings_Redux/Gentle/Downwardly_Mobile_Lemmings.nxlv": {
    "status": "solved",
@@ -12514,15 +12514,15 @@
    "file": "Lemmings_Redux/Gentle/Going_Their_Separate_Ways.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 402,
-   "elapsedMs": 9218
+   "expansions": 17122,
+   "elapsedMs": 108072
   },
   "Lemmings_Redux/Gentle/Just_dig!.nxlv": {
    "status": "solved",
@@ -12564,15 +12564,15 @@
    "file": "Lemmings_Redux/Gentle/Konnichiwa_Lemming-san.nxrp",
    "needed": 50,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 100,
-   "elapsedMs": 9146
+   "expansions": 2789,
+   "elapsedMs": 108139
   },
   "Lemmings_Redux/Gentle/Lemming_toast.nxlv": {
    "status": "solved",
@@ -12597,30 +12597,30 @@
    "file": "Lemmings_Redux/Gentle/Lemmings_in_the_attic.nxrp",
    "needed": 20,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 151,
-   "elapsedMs": 9228
+   "expansions": 4644,
+   "elapsedMs": 108096
   },
   "Lemmings_Redux/Gentle/Let's_be_careful_out_there.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Gentle/Let's_be_careful_out_there.nxrp",
    "needed": 15,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 341,
-   "elapsedMs": 9123
+   "expansions": 8653,
+   "elapsedMs": 108106
   },
   "Lemmings_Redux/Gentle/Let's_go_to_the_moon!.nxlv": {
    "status": "solved",
@@ -12676,30 +12676,34 @@
    "optimal": false
   },
   "Lemmings_Redux/Gentle/Patience.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Patience.nxrp",
    "needed": 40,
    "count": 80,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 80,
    "features": [
     "steel"
    ],
-   "expansions": 94,
-   "elapsedMs": 9174
+   "expansions": 2240,
+   "elapsedMs": 115537,
+   "saved": 79,
+   "skillsUsed": 16,
+   "completionFrame": 1479,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Pillar_talking.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Gentle/Pillar_talking.nxrp",
    "needed": 8,
    "count": 10,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 10,
    "features": [],
-   "expansions": 249,
-   "elapsedMs": 9185
+   "expansions": 11558,
+   "elapsedMs": 108053
   },
   "Lemmings_Redux/Gentle/Quest_for_Kieran.nxlv": {
    "status": "solved",
@@ -12722,15 +12726,15 @@
    "file": "Lemmings_Redux/Gentle/Rainbow_Island.nxrp",
    "needed": 29,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire",
     "multiHatch"
    ],
-   "expansions": 88,
-   "elapsedMs": 9352
+   "expansions": 1376,
+   "elapsedMs": 108129
   },
   "Lemmings_Redux/Gentle/Snuggle_up_to_a_Lemming.nxlv": {
    "status": "solved",
@@ -12771,49 +12775,49 @@
    "file": "Lemmings_Redux/Gentle/The_Crankshaft.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "water"
    ],
-   "expansions": 58,
-   "elapsedMs": 9581
+   "expansions": 1362,
+   "elapsedMs": 108188
   },
   "Lemmings_Redux/Gentle/Turn_around,_young_lemmings!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Gentle/Turn_around,_young_lemmings!.nxrp",
    "needed": 35,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "water"
    ],
-   "expansions": 186,
-   "elapsedMs": 9126
+   "expansions": 6366,
+   "elapsedMs": 108069
   },
   "Lemmings_Redux/Gentle/Where_do_you_see_Lemmings_.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Gentle/Where_do_you_see_Lemmings_.nxrp",
    "needed": 28,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire"
    ],
-   "expansions": 67,
-   "elapsedMs": 9344
+   "expansions": 2138,
+   "elapsedMs": 108367
   },
   "Lemmings_Redux/Gentle/You_Live_and_Lem.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/You_Live_and_Lem.nxrp",
    "needed": 30,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -12821,8 +12825,12 @@
     "trap",
     "water"
    ],
-   "expansions": 15,
-   "elapsedMs": 9878
+   "expansions": 789,
+   "elapsedMs": 114136,
+   "saved": 35,
+   "skillsUsed": 8,
+   "completionFrame": 2809,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/You_need_bashers_this_time.nxlv": {
    "status": "solved",
@@ -12847,7 +12855,7 @@
    "file": "Lemmings_Redux/Lunatic/Anxiety.nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -12855,8 +12863,8 @@
     "trap",
     "water"
    ],
-   "expansions": 96,
-   "elapsedMs": 9497
+   "expansions": 2899,
+   "elapsedMs": 108186
   },
   "Lemmings_Redux/Lunatic/Be_more_than_just_a_number.nxlv": {
    "status": "unsolved",
@@ -13036,7 +13044,7 @@
    "file": "Lemmings_Redux/Lunatic/It's_hero_time!.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -13046,8 +13054,8 @@
     "trap",
     "water"
    ],
-   "expansions": 282,
-   "elapsedMs": 9136
+   "expansions": 8778,
+   "elapsedMs": 108097
   },
   "Lemmings_Redux/Lunatic/Lemming_about_town.nxlv": {
    "status": "unsolved",
@@ -13132,14 +13140,14 @@
    "file": "Lemmings_Redux/Lunatic/No_added_colours_or_Lemmings.nxrp",
    "needed": 50,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "water"
    ],
-   "expansions": 181,
-   "elapsedMs": 9215
+   "expansions": 5770,
+   "elapsedMs": 108102
   },
   "Lemmings_Redux/Lunatic/No_hurry,_relax..nxlv": {
    "status": "unsolved",
@@ -13224,15 +13232,15 @@
    "file": "Lemmings_Redux/Lunatic/The_Boiler_Room.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "fire",
     "steel"
    ],
-   "expansions": 132,
-   "elapsedMs": 9171
+   "expansions": 3090,
+   "elapsedMs": 108121
   },
   "Lemmings_Redux/Lunatic/The_Great_Lemming_Caper.nxlv": {
    "status": "unsolved",
@@ -13342,31 +13350,31 @@
    "file": "Lemmings_Redux/Manic/AAAAAARRRRRRGGGGGGHHHHHH!!!!!!.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [],
-   "expansions": 452,
-   "elapsedMs": 9121
+   "expansions": 15711,
+   "elapsedMs": 108059
   },
   "Lemmings_Redux/Manic/A_BeastII_of_a_level.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/A_BeastII_of_a_level.nxrp",
    "needed": 35,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [],
-   "expansions": 157,
-   "elapsedMs": 10025
+   "expansions": 2278,
+   "elapsedMs": 108552
   },
   "Lemmings_Redux/Manic/Acrophobia.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Acrophobia.nxrp",
    "needed": 24,
    "count": 25,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 25,
    "features": [
@@ -13374,71 +13382,75 @@
     "steel",
     "water"
    ],
-   "expansions": 874,
-   "elapsedMs": 9145
+   "expansions": 14590,
+   "elapsedMs": 108084
   },
   "Lemmings_Redux/Manic/Chill_out!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Chill_out!.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [],
-   "expansions": 208,
-   "elapsedMs": 9210
+   "expansions": 5929,
+   "elapsedMs": 108094
   },
   "Lemmings_Redux/Manic/Come_on_over_to_my_place.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Come_on_over_to_my_place.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 344,
-   "elapsedMs": 9399
+   "expansions": 15330,
+   "elapsedMs": 108092
   },
   "Lemmings_Redux/Manic/Down_the_tube.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Manic/Down_the_tube.nxrp",
    "needed": 19,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "water"
    ],
-   "expansions": 564,
-   "elapsedMs": 9137
+   "expansions": 11544,
+   "elapsedMs": 108527,
+   "saved": 19,
+   "skillsUsed": 7,
+   "completionFrame": 1092,
+   "optimal": false
   },
   "Lemmings_Redux/Manic/Electric_circuit.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Electric_circuit.nxrp",
    "needed": 100,
    "count": 100,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 100,
    "features": [
     "steel",
     "trap"
    ],
-   "expansions": 64,
-   "elapsedMs": 9808
+   "expansions": 1157,
+   "elapsedMs": 108189
   },
   "Lemmings_Redux/Manic/Fall_and_no_life..nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Fall_and_no_life..nxrp",
    "needed": 50,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -13446,87 +13458,87 @@
     "steel",
     "water"
    ],
-   "expansions": 217,
-   "elapsedMs": 9194
+   "expansions": 5400,
+   "elapsedMs": 108112
   },
   "Lemmings_Redux/Manic/If_at_first_you_don't_succeed....nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/If_at_first_you_don't_succeed....nxrp",
    "needed": 49,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "steel",
     "trap"
    ],
-   "expansions": 19,
-   "elapsedMs": 9593
+   "expansions": 684,
+   "elapsedMs": 108201
   },
   "Lemmings_Redux/Manic/Is_this_a_circus_.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Is_this_a_circus_.nxrp",
    "needed": 10,
    "count": 10,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 10,
    "features": [
     "fire",
     "steel"
    ],
-   "expansions": 317,
-   "elapsedMs": 9201
+   "expansions": 7504,
+   "elapsedMs": 108104
   },
   "Lemmings_Redux/Manic/It's_not_over_till_it's_over.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/It's_not_over_till_it's_over.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [],
-   "expansions": 228,
-   "elapsedMs": 9162
+   "expansions": 6148,
+   "elapsedMs": 108076
   },
   "Lemmings_Redux/Manic/Just_a_Minute....nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Just_a_Minute....nxrp",
    "needed": 50,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "fire",
     "timeLimit"
    ],
-   "expansions": 575,
-   "elapsedMs": 9122
+   "expansions": 14705,
+   "elapsedMs": 108067
   },
   "Lemmings_Redux/Manic/Just_a_Minute_(Part_Two).nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Just_a_Minute_(Part_Two).nxrp",
    "needed": 50,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "fire",
     "timeLimit"
    ],
-   "expansions": 494,
-   "elapsedMs": 9130
+   "expansions": 14446,
+   "elapsedMs": 108066
   },
   "Lemmings_Redux/Manic/Let's_get_together..nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Let's_get_together..nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -13534,15 +13546,15 @@
     "multiHatch",
     "water"
    ],
-   "expansions": 190,
-   "elapsedMs": 9237
+   "expansions": 7199,
+   "elapsedMs": 108073
   },
   "Lemmings_Redux/Manic/No_world_without_you.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/No_world_without_you.nxrp",
    "needed": 2,
    "count": 2,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 2,
    "features": [
@@ -13551,41 +13563,41 @@
     "steel",
     "water"
    ],
-   "expansions": 1597,
-   "elapsedMs": 9095
+   "expansions": 59530,
+   "elapsedMs": 108071
   },
   "Lemmings_Redux/Manic/Old_MacDonald_Had_a_Farm....nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Old_MacDonald_Had_a_Farm....nxrp",
    "needed": 36,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "trap"
    ],
-   "expansions": 331,
-   "elapsedMs": 9837
+   "expansions": 6000,
+   "elapsedMs": 108091
   },
   "Lemmings_Redux/Manic/Out,_away_from_the_tune.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Out,_away_from_the_tune.nxrp",
    "needed": 29,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [],
-   "expansions": 190,
-   "elapsedMs": 9108
+   "expansions": 6547,
+   "elapsedMs": 108055
   },
   "Lemmings_Redux/Manic/POOR_WEE_CREATURES!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/POOR_WEE_CREATURES!.nxrp",
    "needed": 20,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -13593,30 +13605,30 @@
     "trap",
     "water"
    ],
-   "expansions": 116,
-   "elapsedMs": 9193
+   "expansions": 4322,
+   "elapsedMs": 108106
   },
   "Lemmings_Redux/Manic/Poles_Apart.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Poles_Apart.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire",
     "water"
    ],
-   "expansions": 152,
-   "elapsedMs": 9285
+   "expansions": 5418,
+   "elapsedMs": 108084
   },
   "Lemmings_Redux/Manic/ROCKY_VI.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/ROCKY_VI.nxrp",
    "needed": 39,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -13625,29 +13637,29 @@
     "trap",
     "water"
    ],
-   "expansions": 114,
-   "elapsedMs": 9122
+   "expansions": 5455,
+   "elapsedMs": 108164
   },
   "Lemmings_Redux/Manic/Steel_Block_Party.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Steel_Block_Party.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "steel"
    ],
-   "expansions": 574,
-   "elapsedMs": 9117
+   "expansions": 16346,
+   "elapsedMs": 108063
   },
   "Lemmings_Redux/Manic/Synchronised_Lemming.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Synchronised_Lemming.nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -13656,15 +13668,15 @@
     "steel",
     "timeLimit"
    ],
-   "expansions": 388,
-   "elapsedMs": 9112
+   "expansions": 9745,
+   "elapsedMs": 108064
   },
   "Lemmings_Redux/Manic/THE_SILENCE_OF_THE_LEMMINGS.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/THE_SILENCE_OF_THE_LEMMINGS.nxrp",
    "needed": 30,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -13673,30 +13685,30 @@
     "trap",
     "water"
    ],
-   "expansions": 116,
-   "elapsedMs": 9246
+   "expansions": 5204,
+   "elapsedMs": 108107
   },
   "Lemmings_Redux/Manic/Temple_of_Love.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Temple_of_Love.nxrp",
    "needed": 28,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 224,
-   "elapsedMs": 9110
+   "expansions": 5721,
+   "elapsedMs": 108082
   },
   "Lemmings_Redux/Manic/The_Lemming_Funhouse.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/The_Lemming_Funhouse.nxrp",
    "needed": 18,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
@@ -13704,15 +13716,15 @@
     "trap",
     "water"
    ],
-   "expansions": 607,
-   "elapsedMs": 9166
+   "expansions": 19213,
+   "elapsedMs": 108058
   },
   "Lemmings_Redux/Manic/The_gate_trap_Lemmings..nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/The_gate_trap_Lemmings..nxrp",
    "needed": 100,
    "count": 100,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 100,
    "features": [
@@ -13721,29 +13733,29 @@
     "steel",
     "trap"
    ],
-   "expansions": 88,
-   "elapsedMs": 9278
+   "expansions": 5085,
+   "elapsedMs": 108114
   },
   "Lemmings_Redux/Manic/The_race_against_cliches.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/The_race_against_cliches.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "timeLimit"
    ],
-   "expansions": 117,
-   "elapsedMs": 9163
+   "expansions": 3379,
+   "elapsedMs": 108152
   },
   "Lemmings_Redux/Manic/Triple_Trouble.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Triple_Trouble.nxrp",
    "needed": 59,
    "count": 60,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 60,
    "features": [
@@ -13752,45 +13764,45 @@
     "steel",
     "water"
    ],
-   "expansions": 200,
-   "elapsedMs": 9127
+   "expansions": 5223,
+   "elapsedMs": 108080
   },
   "Lemmings_Redux/Manic/Upside-down_World.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Upside-down_World.nxrp",
    "needed": 49,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "oneway",
     "trap"
    ],
-   "expansions": 122,
-   "elapsedMs": 9265
+   "expansions": 3326,
+   "elapsedMs": 108174
   },
   "Lemmings_Redux/Manic/Watch_your_fingertip!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Watch_your_fingertip!.nxrp",
    "needed": 29,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 350,
-   "elapsedMs": 9132
+   "expansions": 9603,
+   "elapsedMs": 108094
   },
   "Lemmings_Redux/Manic/Where_Lemmings_Dare.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/Where_Lemmings_Dare.nxrp",
    "needed": 38,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -13798,27 +13810,27 @@
     "trap",
     "water"
    ],
-   "expansions": 338,
-   "elapsedMs": 9153
+   "expansions": 6035,
+   "elapsedMs": 108111
   },
   "Lemmings_Redux/Manic/With_a_twist_of_lemming,_please.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Manic/With_a_twist_of_lemming,_please.nxrp",
    "needed": 10,
    "count": 10,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 10,
    "features": [],
-   "expansions": 436,
-   "elapsedMs": 9099
+   "expansions": 26445,
+   "elapsedMs": 108081
   },
   "Lemmings_Redux/Quirky/A_Spot_of_Bother.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/A_Spot_of_Bother.nxrp",
    "needed": 18,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
@@ -13826,15 +13838,15 @@
     "steel",
     "trap"
    ],
-   "expansions": 131,
-   "elapsedMs": 9136
+   "expansions": 3365,
+   "elapsedMs": 108239
   },
   "Lemmings_Redux/Quirky/And_then_there_were_four....nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/And_then_there_were_four....nxrp",
    "needed": 50,
    "count": 60,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 60,
    "features": [
@@ -13842,15 +13854,15 @@
     "steel",
     "water"
    ],
-   "expansions": 78,
-   "elapsedMs": 9287
+   "expansions": 2025,
+   "elapsedMs": 108179
   },
   "Lemmings_Redux/Quirky/Cascade.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Cascade.nxrp",
    "needed": 10,
    "count": 100,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 100,
    "features": [
@@ -13858,15 +13870,15 @@
     "trap",
     "water"
    ],
-   "expansions": 139,
-   "elapsedMs": 9318
+   "expansions": 4766,
+   "elapsedMs": 108101
   },
   "Lemmings_Redux/Quirky/DON'T_PANIC.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/DON'T_PANIC.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -13874,29 +13886,29 @@
     "trap",
     "water"
    ],
-   "expansions": 160,
-   "elapsedMs": 9108
+   "expansions": 4426,
+   "elapsedMs": 108176
   },
   "Lemmings_Redux/Quirky/Emmings!__(No_L).nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Emmings!__(No_L).nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "multiHatch"
    ],
-   "expansions": 151,
-   "elapsedMs": 9241
+   "expansions": 2262,
+   "elapsedMs": 108127
   },
   "Lemmings_Redux/Quirky/Exodus!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Exodus!.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -13904,15 +13916,15 @@
     "trap",
     "water"
    ],
-   "expansions": 203,
-   "elapsedMs": 9150
+   "expansions": 8835,
+   "elapsedMs": 108062
   },
   "Lemmings_Redux/Quirky/Go_for_it!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Go_for_it!.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -13920,140 +13932,144 @@
     "steel",
     "water"
    ],
-   "expansions": 48,
-   "elapsedMs": 9778
+   "expansions": 1535,
+   "elapsedMs": 108099
   },
   "Lemmings_Redux/Quirky/Haunted_botanical_garden.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Haunted_botanical_garden.nxrp",
    "needed": 19,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "multiHatch",
     "trap"
    ],
-   "expansions": 227,
-   "elapsedMs": 9279
+   "expansions": 6047,
+   "elapsedMs": 108109
   },
   "Lemmings_Redux/Quirky/It's_Lemmingentry,_Watson.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/It's_Lemmingentry,_Watson.nxrp",
    "needed": 9,
    "count": 10,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 10,
    "features": [],
-   "expansions": 1125,
-   "elapsedMs": 9130
+   "expansions": 39450,
+   "elapsedMs": 108056
   },
   "Lemmings_Redux/Quirky/Izzie_Wizzie_lemmings_get_busy.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Quirky/Izzie_Wizzie_lemmings_get_busy.nxrp",
    "needed": 5,
    "count": 5,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 5,
    "features": [
     "fire"
    ],
-   "expansions": 413,
-   "elapsedMs": 9307
+   "expansions": 9522,
+   "elapsedMs": 108653,
+   "saved": 5,
+   "skillsUsed": 15,
+   "completionFrame": 1908,
+   "optimal": false
   },
   "Lemmings_Redux/Quirky/Just_a_Quicky.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Just_a_Quicky.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "timeLimit"
    ],
-   "expansions": 342,
-   "elapsedMs": 9088
+   "expansions": 8395,
+   "elapsedMs": 108054
   },
   "Lemmings_Redux/Quirky/Keep_all_enemies_out..nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Keep_all_enemies_out..nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "steel"
    ],
-   "expansions": 231,
-   "elapsedMs": 9093
+   "expansions": 7412,
+   "elapsedMs": 108063
   },
   "Lemmings_Redux/Quirky/Lunch_time.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Lunch_time.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "trap",
     "water"
    ],
-   "expansions": 125,
-   "elapsedMs": 9347
+   "expansions": 4245,
+   "elapsedMs": 108372
   },
   "Lemmings_Redux/Quirky/MENACING_!!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/MENACING_!!.nxrp",
    "needed": 30,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [],
-   "expansions": 92,
-   "elapsedMs": 9238
+   "expansions": 2111,
+   "elapsedMs": 108087
   },
   "Lemmings_Redux/Quirky/Meeting_Adjourned.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Meeting_Adjourned.nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "steel"
    ],
-   "expansions": 50,
-   "elapsedMs": 9463
+   "expansions": 1814,
+   "elapsedMs": 108202
   },
   "Lemmings_Redux/Quirky/Mr_Lemmy_Lives_Next_Door.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Mr_Lemmy_Lives_Next_Door.nxrp",
    "needed": 38,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 71,
-   "elapsedMs": 9615
+   "expansions": 2095,
+   "elapsedMs": 108283
   },
   "Lemmings_Redux/Quirky/No_choice_but_to_follow_them.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/No_choice_but_to_follow_them.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -14061,15 +14077,15 @@
     "trap",
     "water"
    ],
-   "expansions": 204,
-   "elapsedMs": 9114
+   "expansions": 8150,
+   "elapsedMs": 108089
   },
   "Lemmings_Redux/Quirky/One_way_or_another.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/One_way_or_another.nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -14077,38 +14093,38 @@
     "steel",
     "water"
    ],
-   "expansions": 112,
-   "elapsedMs": 9193
+   "expansions": 2735,
+   "elapsedMs": 108135
   },
   "Lemmings_Redux/Quirky/Over_the_wall.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Over_the_wall.nxrp",
    "needed": 27,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 143,
-   "elapsedMs": 9130
+   "expansions": 9709,
+   "elapsedMs": 108106
   },
   "Lemmings_Redux/Quirky/Perseverance.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Perseverance.nxrp",
    "needed": 20,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 529,
-   "elapsedMs": 9274
+   "expansions": 12353,
+   "elapsedMs": 108089
   },
   "Lemmings_Redux/Quirky/Plethora_of_Presents.nxlv": {
    "status": "solved",
@@ -14134,22 +14150,22 @@
    "file": "Lemmings_Redux/Quirky/PoP_YoR_ToP!!!.nxrp",
    "needed": 50,
    "count": 60,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 60,
    "features": [
     "multiHatch",
     "water"
    ],
-   "expansions": 30,
-   "elapsedMs": 9188
+   "expansions": 1271,
+   "elapsedMs": 108150
   },
   "Lemmings_Redux/Quirky/Speed_Trap.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Speed_Trap.nxrp",
    "needed": 15,
    "count": 15,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 15,
    "features": [
@@ -14157,15 +14173,15 @@
     "timeLimit",
     "water"
    ],
-   "expansions": 430,
-   "elapsedMs": 9210
+   "expansions": 9736,
+   "elapsedMs": 108069
   },
   "Lemmings_Redux/Quirky/Take_care,_Sweetie.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Take_care,_Sweetie.nxrp",
    "needed": 1,
    "count": 1,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 1,
    "features": [
@@ -14173,44 +14189,44 @@
     "trap",
     "water"
    ],
-   "expansions": 1324,
-   "elapsedMs": 9115
+   "expansions": 35608,
+   "elapsedMs": 108066
   },
   "Lemmings_Redux/Quirky/Tension_Sheet,_Good_Idea.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Tension_Sheet,_Good_Idea.nxrp",
    "needed": 39,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 147,
-   "elapsedMs": 9218
+   "expansions": 6246,
+   "elapsedMs": 108107
   },
   "Lemmings_Redux/Quirky/The_Far_Side.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/The_Far_Side.nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "steel"
    ],
-   "expansions": 134,
-   "elapsedMs": 9983
+   "expansions": 11416,
+   "elapsedMs": 108082
   },
   "Lemmings_Redux/Quirky/The_Island_of_the_Wicker_people.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/The_Island_of_the_Wicker_people.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -14218,100 +14234,100 @@
     "steel",
     "water"
    ],
-   "expansions": 124,
-   "elapsedMs": 9308
+   "expansions": 3342,
+   "elapsedMs": 108106
   },
   "Lemmings_Redux/Quirky/The_Long_Way_Around.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/The_Long_Way_Around.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel"
    ],
-   "expansions": 153,
-   "elapsedMs": 9135
+   "expansions": 3601,
+   "elapsedMs": 108144
   },
   "Lemmings_Redux/Quirky/The_Needs_of_the_Many....nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/The_Needs_of_the_Many....nxrp",
    "needed": 8,
    "count": 15,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 15,
    "features": [
     "steel"
    ],
-   "expansions": 230,
-   "elapsedMs": 9183
+   "expansions": 11706,
+   "elapsedMs": 108053
   },
   "Lemmings_Redux/Quirky/The_runaround.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/The_runaround.nxrp",
    "needed": 2,
    "count": 2,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 2,
    "features": [
     "multiHatch",
     "oneway"
    ],
-   "expansions": 1060,
-   "elapsedMs": 9082
+   "expansions": 38397,
+   "elapsedMs": 108074
   },
   "Lemmings_Redux/Quirky/Tunnel_vision.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Tunnel_vision.nxrp",
    "needed": 8,
    "count": 8,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 8,
    "features": [
     "multiHatch",
     "trap"
    ],
-   "expansions": 527,
-   "elapsedMs": 9103
+   "expansions": 20415,
+   "elapsedMs": 108064
   },
   "Lemmings_Redux/Quirky/Vacation_in_Gemland.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Quirky/Vacation_in_Gemland.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 154,
-   "elapsedMs": 9169
+   "expansions": 4894,
+   "elapsedMs": 108095
   },
   "Lemmings_Redux/Zany/Across_the_Gap.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Across_the_Gap.nxrp",
    "needed": 16,
    "count": 16,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 16,
    "features": [],
-   "expansions": 673,
-   "elapsedMs": 9094
+   "expansions": 21370,
+   "elapsedMs": 108037
   },
   "Lemmings_Redux/Zany/Compression_Method_1.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Compression_Method_1.nxrp",
    "needed": 20,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -14319,57 +14335,57 @@
     "steel",
     "trap"
    ],
-   "expansions": 223,
-   "elapsedMs": 9301
+   "expansions": 11147,
+   "elapsedMs": 108102
   },
   "Lemmings_Redux/Zany/Dolly_Dimple.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Dolly_Dimple.nxrp",
    "needed": 40,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "multiHatch"
    ],
-   "expansions": 336,
-   "elapsedMs": 9093
+   "expansions": 4895,
+   "elapsedMs": 108011
   },
   "Lemmings_Redux/Zany/Don't_leave_any_Lemmings.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Don't_leave_any_Lemmings.nxrp",
    "needed": 10,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire"
    ],
-   "expansions": 98,
-   "elapsedMs": 9371
+   "expansions": 4580,
+   "elapsedMs": 108060
   },
   "Lemmings_Redux/Zany/Flow_Control.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Flow_Control.nxrp",
    "needed": 3,
    "count": 21,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 21,
    "features": [
     "trap"
    ],
-   "expansions": 2036,
-   "elapsedMs": 9134
+   "expansions": 55590,
+   "elapsedMs": 108050
   },
   "Lemmings_Redux/Zany/Four_Play.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Four_Play.nxrp",
    "needed": 4,
    "count": 4,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 4,
    "features": [
@@ -14377,105 +14393,105 @@
     "steel",
     "timeLimit"
    ],
-   "expansions": 1083,
-   "elapsedMs": 9097
+   "expansions": 29652,
+   "elapsedMs": 108123
   },
   "Lemmings_Redux/Zany/Got_anything..._Lemmingy___.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Got_anything..._Lemmingy___.nxrp",
    "needed": 19,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 598,
-   "elapsedMs": 9098
+   "expansions": 19615,
+   "elapsedMs": 108050
   },
   "Lemmings_Redux/Zany/Have_a_nice_day!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Have_a_nice_day!.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 97,
-   "elapsedMs": 9601
+   "expansions": 1514,
+   "elapsedMs": 108425
   },
   "Lemmings_Redux/Zany/I_have_a_cunning_plan.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/I_have_a_cunning_plan.nxrp",
    "needed": 100,
    "count": 100,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 100,
    "features": [
     "fire",
     "water"
    ],
-   "expansions": 356,
-   "elapsedMs": 9063
+   "expansions": 8083,
+   "elapsedMs": 108058
   },
   "Lemmings_Redux/Zany/Jump_down!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Jump_down!.nxrp",
    "needed": 25,
    "count": 25,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 25,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 214,
-   "elapsedMs": 9331
+   "expansions": 8561,
+   "elapsedMs": 108074
   },
   "Lemmings_Redux/Zany/KEEP_ON_TRUCKING.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/KEEP_ON_TRUCKING.nxrp",
    "needed": 35,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "trap",
     "water"
    ],
-   "expansions": 132,
-   "elapsedMs": 9195
+   "expansions": 2375,
+   "elapsedMs": 108029
   },
   "Lemmings_Redux/Zany/LEMTRIS.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/LEMTRIS.nxrp",
    "needed": 36,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 52,
-   "elapsedMs": 9223
+   "expansions": 1724,
+   "elapsedMs": 108063
   },
   "Lemmings_Redux/Zany/Last_one_out_is_a_rotten_egg!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Last_one_out_is_a_rotten_egg!.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -14483,15 +14499,15 @@
     "steel",
     "water"
    ],
-   "expansions": 233,
-   "elapsedMs": 10250
+   "expansions": 3404,
+   "elapsedMs": 108105
   },
   "Lemmings_Redux/Zany/LeMming_ToMato_KetchUp_fAcilitY.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/LeMming_ToMato_KetchUp_fAcilitY.nxrp",
    "needed": 18,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -14500,87 +14516,87 @@
     "steel",
     "trap"
    ],
-   "expansions": 576,
-   "elapsedMs": 9168
+   "expansions": 19482,
+   "elapsedMs": 108070
   },
   "Lemmings_Redux/Zany/Lemming_Lament.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Lemming_Lament.nxrp",
    "needed": 20,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 82,
-   "elapsedMs": 9999
+   "expansions": 3511,
+   "elapsedMs": 108216
   },
   "Lemmings_Redux/Zany/Lemmy_in_the_cold,_cold_ground.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Lemmy_in_the_cold,_cold_ground.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "multiHatch",
     "steel"
    ],
-   "expansions": 129,
-   "elapsedMs": 9170
+   "expansions": 2872,
+   "elapsedMs": 108186
   },
   "Lemmings_Redux/Zany/Mutiny_on_the_Bounty.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Mutiny_on_the_Bounty.nxrp",
    "needed": 29,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 347,
-   "elapsedMs": 9149
+   "expansions": 11792,
+   "elapsedMs": 108049
   },
   "Lemmings_Redux/Zany/No_justice_for_the_hero.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/No_justice_for_the_hero.nxrp",
    "needed": 19,
    "count": 20,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 20,
    "features": [],
-   "expansions": 169,
-   "elapsedMs": 9122
+   "expansions": 5489,
+   "elapsedMs": 108069
   },
   "Lemmings_Redux/Zany/No_time_for_a_detour.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/No_time_for_a_detour.nxrp",
    "needed": 98,
    "count": 100,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 100,
    "features": [
     "fire",
     "timeLimit"
    ],
-   "expansions": 99,
-   "elapsedMs": 9166
+   "expansions": 2857,
+   "elapsedMs": 108104
   },
   "Lemmings_Redux/Zany/ONWARD_AND_UPWARD.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/ONWARD_AND_UPWARD.nxrp",
    "needed": 35,
    "count": 40,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 40,
    "features": [
@@ -14588,15 +14604,15 @@
     "trap",
     "water"
    ],
-   "expansions": 108,
-   "elapsedMs": 9190
+   "expansions": 2330,
+   "elapsedMs": 108095
   },
   "Lemmings_Redux/Zany/Pitfall.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Pitfall.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -14604,44 +14620,44 @@
     "steel",
     "water"
    ],
-   "expansions": 227,
-   "elapsedMs": 9092
+   "expansions": 5880,
+   "elapsedMs": 108099
   },
   "Lemmings_Redux/Zany/Postcard_from_Lemmingland.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Postcard_from_Lemmingland.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "water"
    ],
-   "expansions": 165,
-   "elapsedMs": 9343
+   "expansions": 3000,
+   "elapsedMs": 108141
   },
   "Lemmings_Redux/Zany/ROCKY_ROAD.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/ROCKY_ROAD.nxrp",
    "needed": 20,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "trap",
     "water"
    ],
-   "expansions": 158,
-   "elapsedMs": 9173
+   "expansions": 3616,
+   "elapsedMs": 108084
   },
   "Lemmings_Redux/Zany/SNOW_JOKE.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/SNOW_JOKE.nxrp",
    "needed": 25,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -14649,50 +14665,50 @@
     "oneway",
     "water"
    ],
-   "expansions": 200,
-   "elapsedMs": 9212
+   "expansions": 4687,
+   "elapsedMs": 108090
   },
   "Lemmings_Redux/Zany/Temporary_peace.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Temporary_peace.nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 95,
-   "elapsedMs": 9300
+   "expansions": 21901,
+   "elapsedMs": 108088
   },
   "Lemmings_Redux/Zany/The_North_Poles.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/The_North_Poles.nxrp",
    "needed": 2,
    "count": 2,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 2,
    "features": [],
-   "expansions": 1698,
-   "elapsedMs": 9120
+   "expansions": 43846,
+   "elapsedMs": 108049
   },
   "Lemmings_Redux/Zany/The_bridge_is_breaking_down..nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/The_bridge_is_breaking_down..nxrp",
    "needed": 30,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire",
     "steel"
    ],
-   "expansions": 228,
-   "elapsedMs": 9101
+   "expansions": 11325,
+   "elapsedMs": 108084
   },
   "Lemmings_Redux/Zany/Twins.nxlv": {
    "status": "solved",
@@ -14715,7 +14731,7 @@
    "file": "Lemmings_Redux/Zany/Watch_out,_there's_traps_about.nxrp",
    "needed": 40,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [
@@ -14724,27 +14740,27 @@
     "trap",
     "water"
    ],
-   "expansions": 120,
-   "elapsedMs": 9410
+   "expansions": 1980,
+   "elapsedMs": 108157
   },
   "Lemmings_Redux/Zany/What_an_AWESOME_level.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/What_an_AWESOME_level.nxrp",
    "needed": 30,
    "count": 50,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 50,
    "features": [],
-   "expansions": 32,
-   "elapsedMs": 9583
+   "expansions": 853,
+   "elapsedMs": 108181
   },
   "Lemmings_Redux/Zany/With_a_little_help_from_my_Lem.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/With_a_little_help_from_my_Lem.nxrp",
    "needed": 2,
    "count": 2,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 2,
    "features": [
@@ -14752,15 +14768,15 @@
     "multiHatch",
     "steel"
    ],
-   "expansions": 1185,
-   "elapsedMs": 9101
+   "expansions": 47281,
+   "elapsedMs": 108071
   },
   "Lemmings_Redux/Zany/Worra_load_of_old_blocks!.nxlv": {
    "status": "unsolved",
    "file": "Lemmings_Redux/Zany/Worra_load_of_old_blocks!.nxrp",
    "needed": 24,
    "count": 30,
-   "tier": 1,
+   "tier": 2,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
@@ -14768,8 +14784,8 @@
     "trap",
     "water"
    ],
-   "expansions": 645,
-   "elapsedMs": 9096
+   "expansions": 14893,
+   "elapsedMs": 108059
   },
   "NeoLemmix_Introduction_Pack/Advanced_Training/A_Different_Kind_Of_Space.nxlv": {
    "status": "unsolved",
