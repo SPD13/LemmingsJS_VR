@@ -67,7 +67,7 @@
     // - and, unless right on the spot, the entry's way is the gate's (a staircase up the wall on the left is not the
     // bridge to the right from the ledge it reaches, a step away)
     // - and a bridge of several builders is worked once they are all laid
-    const worked = (gt) => gt.sequence ? gt.sequence.every((it) => itemDone(it, plan)) : (gt.builders || 1) > 1 ? bridgeProgress(gt, plan).n >= gt.builders : (plan || []).some((e) => e.type === "assignment" && e.skill === gt.skill && Math.abs(e.x - gt.x) <= 24 && Math.abs(e.y - gt.y) <= 16 && (!gt.dir || e.dx === gt.dir || (Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)));
+    const worked = (gt) => gt.sequence ? gt.sequence.every((it) => itemDone(it, plan)) : (gt.builders || 1) > 1 ? bridgeProgress(gt, plan, planned.graph ? planned.graph.gates : null).n >= gt.builders : (plan || []).some((e) => e.type === "assignment" && e.skill === gt.skill && Math.abs(e.x - gt.x) <= 24 && Math.abs(e.y - gt.y) <= 16 && (!gt.dir || e.dx === gt.dir || (Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)));
     let li = 0;
     const take = (st) => { const k = gateKey(st.gate); if (!seen.has(k)) { seen.add(k); if (!worked(st.gate)) seq.push(st); } };
     for (const st of steps) {
@@ -91,14 +91,20 @@
    * line, its way - {n, x, y}, the next builder's spot after the n laid (24 px along and 12 up a builder from the
    * first entry).
    */
-  const bridgeProgress = (gt, plan) => {
+  const bridgeProgress = (gt, plan, gates) => {
     const k = gt.builders || 1, rise = gt.skill === "BUILDER" ? 12 : 0;
+    const sx = gt.px !== undefined ? gt.px : gt.x, sy = gt.py !== undefined ? gt.py : gt.y;
+    // an entry is the gate's only when no other bridge gate of the region, the same way, starts nearer to it (a
+    // bridge of one from the brick's edge and a bridge of two from ten back share a line)
+    const nearer = (e) => (gates || []).some((g2) => g2 !== gt && g2.from === gt.from && g2.dir === gt.dir && g2.skill === gt.skill && (g2.builders || 1) !== k
+      && Math.abs(e.x - (g2.px !== undefined ? g2.px : g2.x)) + Math.abs(e.y - (g2.py !== undefined ? g2.py : g2.y)) < Math.abs(e.x - sx) + Math.abs(e.y - sy));
     let n = 0, first = null;
     for (const e of plan || []) {
       if (e.type !== "assignment" || e.skill !== gt.skill) continue;
       if (gt.dir && e.dx !== gt.dir && !(Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)) continue;
       const along = gt.dir ? (e.x - gt.x) * gt.dir : Math.abs(e.x - gt.x), up = gt.y - e.y;
       if (along < -24 || along > 24 * k + 8 || up < -16 || up > rise * k + 16) continue;
+      if (n === 0 && nearer(e)) continue; // the first builder decides whose bridge it is
       if (!first || e.frame < first.frame) first = e;
       n++;
     }
@@ -200,7 +206,7 @@
         // a bridge of several builders under way: the next builder goes where the last one's bricks end (on the
         // bricks, in no region the graph knows)
         let progress = null;
-        if ((gt.builders || 1) > 1 && c.skill === gt.skill) { let pg = progressMemo.get(gt); if (!pg) { pg = bridgeProgress(gt, ctx.plan); progressMemo.set(gt, pg); } if (pg.n >= 1 && pg.n < gt.builders) { progress = pg; near = Math.abs(e.x - pg.x) <= 20 && Math.abs(e.y - pg.y) <= 16; } }
+        if ((gt.builders || 1) > 1 && c.skill === gt.skill) { let pg = progressMemo.get(gt); if (!pg) { pg = bridgeProgress(gt, ctx.plan, graph ? graph.gates : null); progressMemo.set(gt, pg); } if (pg.n >= 1 && pg.n < gt.builders) { progress = pg; near = Math.abs(e.x - pg.x) <= 20 && Math.abs(e.y - pg.y) <= 16; } }
         // a gate away from a wall is worked facing away: the turn's new way is the way
         const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing && !gt.fromWall ? -e.dx : e.dx) === gt.dir;
         if (near && way) { lastGate = gt; lastItem = progress; return nextGate.has(gt) ? 3 : 2.5; }
@@ -391,6 +397,53 @@
     // the node's own list is cut to the best by prior (the macros and the plan's picks ride on top)
     // the plan's pick worked by a dozen lemmings one after the other is one pick: per skill and spot, the
     // earliest few moments stay (the search takes the gate once), the rest of the crowd's copies go
+    // a builder placed by the pixel: a bridge gate's own start (the spot the planner's simulation laid its bricks
+    // from), found in a walk's ring - the moment the lemming stood on that very pixel heading the gate's way. A
+    // bridge is a pixel's matter: from four short of the brick's edge the last brick ends over the fire.
+    if (steps.length) {
+      const seenPx = new Set();
+      for (const st of steps) {
+        const gt = st.gate;
+        if (gt.px === undefined || !gt.skill || (gt.skill !== "BUILDER" && gt.skill !== "PLATFORMER") || (skillCounts[gt.skill] || 0) <= 0) continue;
+        if (st.before) continue;
+        if ((gt.builders || 1) > 1 && bridgeProgress(gt, ctx.plan, graph ? graph.gates : null).n >= 1) continue; // under way: the next builder's spot is the progress's
+        for (const e of events) {
+          if (!e.lemId || (ctx.lemFilter && !ctx.lemFilter.has(e.lemId))) continue;
+          if (free.size && free.has(e.lemId) && !nextGate.has(gt)) continue;
+          if (st.who === "lead" && ctx.planned.leadId && e.lemId !== ctx.planned.leadId) continue; // the lead's gate: the lead's own moment
+          const ring = e.ring || [];
+          let hit = false;
+          for (let i = 0; i < ring.length; i++) {
+            if (ring[i][1] !== gt.px || Math.abs(ring[i][2] - gt.py) > 2) continue;
+            const prev = i > 0 ? ring[i - 1] : null, next = i + 1 < ring.length ? ring[i + 1] : null;
+            const dir = prev && prev[1] !== gt.px ? Math.sign(gt.px - prev[1]) : next && next[1] !== gt.px ? Math.sign(next[1] - gt.px) : 0;
+            if (dir !== gt.dir) continue;
+            const frame = ring[i][0];
+            const key = e.lemId + ":" + gt.id + ":" + frame;
+            if (seenPx.has(key)) continue;
+            seenPx.add(key);
+            push({ kind: "assign", lemId: e.lemId, skill: gt.skill, frame, why: "pixel!", prior: nextGate.has(gt) ? 3 : 2.5, gate: gt, itemX: gt.px, x: gt.px });
+            hit = true;
+            break;
+          }
+          // no walk recorded over that pixel: from a landing, a turn or a tick the walker gets there along flat
+          // ground a pixel a frame (a lemming landing two pixels short of a brick's edge and off it before any
+          // event has the pixel in its ring)
+          if (hit || !game || (e.type !== "LAND" && e.type !== "TURN" && e.type !== "TICK" && e.type !== "SPAWN")) continue;
+          const dir = e.type === "TURN" && !e.climbing ? -e.dx : e.dx;
+          if (dir !== gt.dir || Math.abs(e.y - gt.py) > 1) continue;
+          const d = (gt.px - e.x) * dir;
+          if (d <= 0 || d > 40) continue;
+          let flat = true;
+          for (let n = 1; n <= d && flat; n++) { const x = e.x + n * dir; if (!game.hasPixelAt(x, e.y) || game.hasPixelAt(x, e.y - 1)) flat = false; }
+          if (!flat) continue;
+          const frame = e.frame + d, key = e.lemId + ":" + gt.id + ":" + frame;
+          if (seenPx.has(key)) continue;
+          seenPx.add(key);
+          push({ kind: "assign", lemId: e.lemId, skill: gt.skill, frame, why: "pixel!", prior: nextGate.has(gt) ? 3 : 2.5, gate: gt, itemX: gt.px, x: gt.px });
+        }
+      }
+    }
     const boostedBySkill = new Map();
     for (const c of out) { if (!/!/.test(c.why) || c.kind !== "assign") continue; const k = c.skill + ":" + c.why.replace(/[0-9]/g, ""); if (!boostedBySkill.has(k)) boostedBySkill.set(k, []); boostedBySkill.get(k).push(c); }
     const drop = new Set();
@@ -448,12 +501,26 @@
     // a blocker holding the crowd is freed with a bomber once the rest is done: a candidate a while
     // after it took its post, and at the end (a stuck crowd behind it)
     if (has("BOMBER")) {
+      // ... and once the plan's last worker is done (the lead's route built, the crowd held for it the while)
+      const entries = (ctx.plan || []).filter((e) => e.type === "assignment");
+      const lastEntry = entries.length ? entries.reduce((a, b) => (b.frame > a.frame ? b : a)) : null;
+      const lastExit = lastEntry ? events.find((e) => e.lemId === lastEntry.lemId && e.frame > lastEntry.frame && e.type === "EXIT") : null;
+      const lastDone = lastExit || (lastEntry ? events.find((e) => e.lemId === lastEntry.lemId && e.frame > lastEntry.frame && (e.type === "WORK_END" || e.type === "SHRUG")) : null);
       for (const e of events) {
         if (e.type !== "BLOCK" || (ctx.lemFilter && !ctx.lemFilter.has(e.lemId))) continue;
         const boost = planned({ skill: "BOMBER" }, e), why = "BLOCK:free" + (boost > 1 ? "!" : "");
         push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: e.frame + 170, why, prior: 0.5 * boost });
         if (outcome.lastFrame > e.frame + 200) push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: Math.max(nodeFrame, outcome.lastFrame - 60), why, prior: 0.45 * boost });
+        if (lastDone && lastDone.frame + 8 > e.frame) push({ kind: "assign", lemId: e.lemId, skill: "BOMBER", frame: lastDone.frame + 8, why: "BLOCK:free late!", prior: lastDone.type === "EXIT" ? 3.5 : 1.2 }); // the lead out: the release is the plan's next move, before its picks
       }
+    }
+    // a seeded root (the lead's whole way in as the plan) whose crowd dies following it: the crowd held first - a
+    // blocker on the lemming just behind the lead a frame before the lead's first move (the search's guard, as the
+    // route macro sets it), let go by the bomber above once the route is built
+    if (ctx.seeded && !ctx.lemFilter && (ctx.plan || []).some((e) => e.type === "assignment") && has("BLOCKER") && has("BOMBER") && analysis && ctx.level) {
+      const first = (ctx.plan || []).filter((e) => e.type === "assignment").reduce((a, b) => (b.frame < a.frame ? b : a));
+      const allowed = analysis.maxSavable - ctx.level.needCount;
+      if ((outcome.lost || 0) > allowed && first.frame - 1 > nodeFrame) push({ kind: "guard", lemId: first.lemId, frame: first.frame - 1, why: "hold:guard", prior: 3.5 });
     }
     // the release rate: at the root the extremes, after the first exit the fastest
     const level = ctx.level;

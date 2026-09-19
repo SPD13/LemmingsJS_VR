@@ -23,7 +23,8 @@ const Solver = require("./solver");
 const gateStr = (gt) => gt.kind + (gt.skill ? ":" + gt.skill : "") + (gt.also ? "+" + gt.also : "") + "->" + gt.to + "@" + gt.x + "," + gt.y + (gt.dir < 0 ? "<" : gt.dir > 0 ? ">" : "") + " c" + gt.cost + (gt.perLemming ? "/lem" : "") + (gt.twoWay ? " 2w" : "");
 const stepStr = (st) => (st.turn ? "TURN(" + st.how + ")+" : "") + gateStr(st.gate) + (st.who ? " [" + st.who + "]" : "");
 const endStr = (e) => !e ? "?" : e.kind + (e.height ? e.height : e.cells !== undefined ? "v" + e.cells : "");
-const toPlan = (json) => JSON.parse(json).map(([frame, lemId, skill]) => ({ type: "assignment", frame, skill, lemIndex: +String(lemId).slice(1), lemId, x: 0, y: 0, dx: 1 }));
+// (two entries on one frame: the second goes a frame later, as the search records them - the trace prints the candidate's frame)
+const toPlan = (json) => { const used = new Set(); return JSON.parse(json).map(([frame, lemId, skill]) => { while (used.has(frame)) frame++; used.add(frame); return { type: "assignment", frame, skill, lemIndex: +String(lemId).slice(1), lemId, x: 0, y: 0, dx: 1 }; }); };
 /** The entries' positions as the game would record them: the lemming's spot at the entry's frame, the plan applied. */
 function placed(world, plan) {
   world.reset(Solver.copyPlan(plan));

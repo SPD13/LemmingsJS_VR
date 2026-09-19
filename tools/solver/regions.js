@@ -275,7 +275,7 @@
       let x = x0, y = y0, bricks = 0;
       const ends = []; // where the lemming stands after each builder's last brick, or where it turned back
       for (let b = 0; b < 12 * k; b++) {
-        if (y - 10 < 0 || x < 0 || x >= w) { ends.push({ x, y, bricks, blocked: true, laid }); return ends; } // the level's edge: a lemming out of it is lost
+        if (y <= 1 || x < 0 || x >= w) return ends; // the level's edge: a lemming out of it (its feet at the top row) is lost, so no bridge goes on from here
         for (let n = 0; n <= 5; n++) laid.add(x + n * dir + (y - 1) * w);
         bricks++;
         const left = 12 * k - b - 1;
@@ -374,18 +374,21 @@
               // a builder's bridge as the engine lays it, from the end's pixel (and four short of it): where the
               // lemming gets off the bricks after each builder, or where followers step off a bridge whose builder
               // was turned back by terrain in front
+              // from the end's pixel and up to ten short of it: a start a pixel or two back makes the difference
+              // between bricks that meet the far brick's face (the builder turned back, a bridge for those behind)
+              // and bricks level with its top (the builder walks on) - the builder's own way across preferred
               const found = new Map();
-              for (const off of [0, 4]) {
+              for (let off = 0; off <= 10; off++) {
                 const sx = (dir > 0 ? ex * CELL + CELL - 1 : ex * CELL) - dir * off, sy = groundTop(sx, ey);
                 if (sy < 0 || regionAt(Math.floor(sx / CELL), Math.floor((sy - 1) / CELL)) !== r.id) continue;
                 for (const e of buildFrom(sx, sy, dir, MAX_BUILDERS)) {
                   const k = Math.ceil(e.bricks / 12), st = walkOff(e.x, e.y, dir, e.laid);
                   if (!st || st.region < 0 || st.region === r.id || st.fall > SPLAT_CELLS * CELL) continue;
                   const cur = found.get(st.region);
-                  if (!cur || k < cur.k || (k === cur.k && cur.blocked && !e.blocked)) found.set(st.region, { k, blocked: e.blocked, fall: st.fall });
+                  if (!cur || (cur.blocked && !e.blocked) || (cur.blocked === e.blocked && k < cur.k)) found.set(st.region, { k, blocked: e.blocked, fall: st.fall, px: sx, py: sy });
                 }
               }
-              for (const [to, b] of found) gate(r.id, to, kind, skill, b.k, ex, ey, dir, { builders: b.k, twoWay: b.fall <= 6, followersOnly: b.blocked });
+              for (const [to, b] of found) gate(r.id, to, kind, skill, b.k, ex, ey, dir, { builders: b.k, twoWay: b.fall <= 6, followersOnly: b.blocked, px: b.px, py: b.py });
               return;
             }
             const seen = new Set();
@@ -594,17 +597,17 @@
             // as the engine lays it, from the pixel beside the wall (and two off it, where the turn leaves the lemming)
             const back = -dir;
             const found = new Map();
-            for (const off of [0, 2]) {
+            for (let off = 0; off <= 6; off++) {
               const sx = (dir > 0 ? ex * CELL + CELL - 1 : ex * CELL) + back * off, sy = groundTop(sx, ey);
               if (sy < 0 || regionAt(Math.floor(sx / CELL), Math.floor((sy - 1) / CELL)) !== r.id) continue;
               for (const e of buildFrom(sx, sy, back, MAX_BUILDERS)) {
                 const k = Math.ceil(e.bricks / 12), st = walkOff(e.x, e.y, back, e.laid);
                 if (!st || st.region < 0 || st.region === r.id || st.fall > SPLAT_CELLS * CELL) continue;
                 const cur = found.get(st.region);
-                if (!cur || k < cur.k || (k === cur.k && cur.blocked && !e.blocked)) found.set(st.region, { k, blocked: e.blocked, fall: st.fall });
+                if (!cur || (cur.blocked && !e.blocked) || (cur.blocked === e.blocked && k < cur.k)) found.set(st.region, { k, blocked: e.blocked, fall: st.fall, px: sx, py: sy });
               }
             }
-            for (const [to, b] of found) gate(r.id, to, "build", "BUILDER", b.k, ex, ey, back, { builders: b.k, twoWay: b.fall <= 6, followersOnly: b.blocked, fromWall: true });
+            for (const [to, b] of found) gate(r.id, to, "build", "BUILDER", b.k, ex, ey, back, { builders: b.k, twoWay: b.fall <= 6, followersOnly: b.blocked, fromWall: true, px: b.px, py: b.py });
           }
           // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one; a staircase
           // of builders up it, one per three cells of height, given the run-up (six cells of floor a builder)
@@ -735,8 +738,8 @@
       for (const dir of [-1, 1]) {
         const ex = dir < 0 ? r.x0 : r.x1, wallX = ex * CELL + 2;
         const best = new Map(); // to -> {k, cx, cy, followersOnly, twoWay, starts}
-        for (const j of r.cells) {
-          const jx = j % cw, jy = (j / cw) | 0, px = jx * CELL + 2;
+        for (const j of r.cells) for (const half of [0, 2]) {
+          const jx = j % cw, jy = (j / cw) | 0, px = jx * CELL + half;
           let y0 = jy * CELL; while (y0 < h && !solid(px, y0)) y0++;
           if (y0 - jy * CELL > CELL + 1) continue;
           const runUp = Math.abs(wallX - px);
@@ -747,16 +750,16 @@
             const st = walkOff(e.x, e.y, dir, e.laid || new Set());
             if (!st || st.region < 0 || st.region === r.id || st.fall > SPLAT_CELLS * CELL) continue;
             const cur = best.get(st.region);
-            if (!cur || k < cur.k || (k === cur.k && cur.followersOnly && !e.blocked)) best.set(st.region, { k, cx: jx, cy: jy, followersOnly: e.blocked, twoWay: st.fall <= 6, runUp, starts: (cur && cur.k === k ? cur.starts : 0) + 1 });
-            else if (k === cur.k) cur.starts++;
+            if (process.env.NX_STEP_DEBUG && r.id === +process.env.NX_STEP_DEBUG) console.log("step", r.id, "dir", dir, "from", px, y0, "k", k, "blocked", e.blocked, "->", st.region, "fall", st.fall);
+            const better = !cur || (cur.followersOnly && !e.blocked) || (cur.followersOnly === e.blocked && k < cur.k);
+            if (better) best.set(st.region, { k, cx: jx, cy: jy, followersOnly: e.blocked, twoWay: st.fall <= 6, runUp, starts: (cur && cur.k === k && cur.followersOnly === e.blocked ? cur.starts : 0) + 1, px, py: y0 });
+            else if (k === cur.k && cur.followersOnly === e.blocked) cur.starts++;
           }
         }
         for (const [to, b] of best) {
-          // a bridge the search can place: one that works from two starts at least (four pixels apart), a single
-          // start being a pixel's luck
-          if (b.starts < 2 && r.cells.length > 2) continue;
+          // (a single start is no pixel's luck: the search places the builder on the gate's own pixel)
           if (r.gates.some((gt) => gt.to === to && gt.dir === dir && (gt.kind === "build" || gt.kind === "buildup" || gt.kind === "platform") && gt.cost <= b.k)) continue;
-          gate(r.id, to, "buildup", "BUILDER", b.k, b.cx, b.cy, dir, { builders: b.k, wallX, runUp: b.runUp, fromStep: true, twoWay: b.twoWay, followersOnly: b.followersOnly });
+          gate(r.id, to, "buildup", "BUILDER", b.k, b.cx, b.cy, dir, { builders: b.k, wallX, runUp: b.runUp, fromStep: true, twoWay: b.twoWay, followersOnly: b.followersOnly, px: b.px, py: b.py });
         }
       }
     }

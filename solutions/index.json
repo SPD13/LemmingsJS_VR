@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-19T09:48:03.449Z",
+ "generated": "2026-09-19T13:57:52.121Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12807,18 +12807,22 @@
    "elapsedMs": 108069
   },
   "Lemmings_Redux/Gentle/Where_do_you_see_Lemmings_.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Where_do_you_see_Lemmings_.nxrp",
    "needed": 28,
    "count": 30,
-   "tier": 2,
+   "tier": 3,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "fire"
    ],
-   "expansions": 2138,
-   "elapsedMs": 108367
+   "expansions": 6391,
+   "elapsedMs": 819436,
+   "saved": 29,
+   "skillsUsed": 17,
+   "completionFrame": 4652,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/You_Live_and_Lem.nxlv": {
    "status": "solved",

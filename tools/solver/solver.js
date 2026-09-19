@@ -95,7 +95,10 @@
         id: this.nodes++, parent, frame: world.frame, plan, state: world.save(), depth: parent ? parent.depth + 1 : 0,
         skillsUsed: world.skillsUsed(), isRoot: !!isRoot, solved: false, // skillsUsed: at the node now, the whole plan's after the rollout
       };
-      const skillCounts = world.skillCounts();
+      // the crowd's hold (a guard blocker set by a route macro) is the world's: it stays with every node while the
+      // blocker stands, so no second guard is set and the release finds it
+      if (parent && parent.held) { const G = world.lemmingById(parent.held.id); if (G && !G.removed && G.action === Lemmix.BA.BLOCKING) node.held = parent.held; }
+      const skillCounts = this._skills();
       let skillsLeft = 0; for (const k of Object.keys(skillCounts)) skillsLeft += skillCounts[k];
       const hash = Solver.hashState(game, false);
       const seenWith = this.transposition.get(hash);
@@ -122,7 +125,7 @@
       // its post), with the lemmings as they stand then - not at the rollout's end, where the worker who takes the
       // next gate may long have left, and not with the terrain the plan's later entries will make
       let after = null;
-      const changedAfter = !lemFilter && planned && this._planVersion() !== this._graphVersion;
+      const changedAfter = planned && this._planVersion() !== this._graphVersion; // (the lead pass too: its builder stands on its bricks at the node)
       if (changedAfter) {
         const last = plan.length ? plan[plan.length - 1] : null;
         const done = last && last.type === "assignment" ? events.find((e) => e.lemId === last.lemId && e.frame > node.frame && (e.type === "WORK_END" || e.type === "SHRUG" || e.type === "BLOCK" || e.type === "EXIT")) : null;
@@ -159,7 +162,7 @@
       const tC = now();
       node.candidates = node.depth >= this.params.depth ? [] : Solver.candidates(events, outcome, {
         game, skillCounts, activeSkills: game.activeSkills, params: this.params, analysis: this.analysis,
-        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, level: world.level, plan, planned: node.planned,
+        lemFilter, nodeFrame: node.frame, isRoot: !!isRoot, seeded: !parent && plan.length > 0, level: world.level, plan, planned: node.planned,
       });
       if (this.log && now() - tC > 1000) this.log("  slow: candidates " + Math.round(now() - tC) + " ms, " + node.candidates.length + " of them, " + events.length + " events");
       this._hold(node);
@@ -200,6 +203,39 @@
       return false;
     }
 
+    /** The skills the search may spend: the world's, the permanent ones hidden when a pass is to do without them. */
+    _skills() {
+      const counts = this.world.skillCounts();
+      if (this.hidePerms) for (const p of Solver.Regions.PERMS) if (counts[p]) counts[p] = 0;
+      return counts;
+    }
+
+    /**
+     * The crowd held behind the lead: at `cand.frame` (a frame before the lead's first move) the lemming just
+     * behind the lead - the same way, six to eighty pixels back - is made a blocker; the node carries the hold.
+     */
+    _guard(node, cand, target, lemFilter) {
+      const world = this.world;
+      if (!this._goto(node)) { this.dropped.ended++; return null; }
+      if (cand.frame > world.frame) world.step(cand.frame - world.frame);
+      if (world.frame !== cand.frame) { this.dropped.ended++; return null; }
+      const B = world.lemmingById(cand.lemId);
+      if (!B) { this.dropped.refused++; return null; }
+      const WALKING = Lemmix.BA.WALKING;
+      let bestL = null, bestD = Infinity;
+      for (const L2 of world.game.lemmings) {
+        if (L2 === B || L2.removed || L2.cannotReceiveSkills || L2.action !== WALKING || L2.dx !== B.dx || Math.abs(L2.y - B.y) > 12) continue;
+        const d = (B.x - L2.x) * B.dx;
+        if (d >= 6 && d <= 80 && d < bestD) { bestD = d; bestL = L2; }
+      }
+      if (!bestL || !world.assign(bestL, "BLOCKER")) { this.dropped.refused++; if (this.trace && this.log) this.log("  refused f=" + cand.frame + " guard behind " + cand.lemId); return null; }
+      world.step(1);
+      const child = this._child(node, { kind: "assign", lemId: bestL.identifier, skill: "BLOCKER", frame: cand.frame, why: "hold:guard(" + cand.lemId + ")" }, target, lemFilter);
+      if (child) child.held = { id: bestL.identifier, builder: cand.lemId, frame: cand.frame };
+      if (child && this.trace && this.log) this.log("  guard: " + bestL.identifier + " behind " + cand.lemId + ", " + (child.candidates || []).filter((c) => /free late/.test(c.why)).length + " late release(s) among " + (child.candidates || []).length + " candidates");
+      return child;
+    }
+
     /** The child of `node` by `cand`, or null when the action could not be taken. */
     _expand(node, cand, target, lemFilter) {
       const t0 = now();
@@ -210,6 +246,7 @@
     _expandInner(node, cand, target, lemFilter) {
       const world = this.world;
       if (cand.kind === "plan") return this._planMacro(node, cand, target, lemFilter);
+      if (cand.kind === "guard") return this._guard(node, cand, target, lemFilter);
       if (!this._goto(node)) { this.dropped.ended++; return null; }
       if (cand.frame > world.frame) world.step(cand.frame - world.frame);
       if (world.frame !== cand.frame) { this.dropped.ended++; return null; }
@@ -260,7 +297,9 @@
     _planMacro(node, cand, target, lemFilter) {
       const world = this.world;
       const chain = [];
-      let cur = node, held = null;
+      // a hold carried over from the node's own chain (a long route: the crowd stays held from edge to edge)
+      let cur = node, held = node.held || null;
+      const longRoute = (n) => { const rt = Solver.planRoute(n.planned, n.plan); return rt.filter((st) => st.gate.skill && !st.gate.twin).length >= 3; };
       for (let i = 0; i < 6 && cur; i++) {
         // the route's next gate, from the node's own plan each time (the plan moves on with every gate taken):
         // the candidate's own pick for the first, then the best moment boosted for that gate among the child's
@@ -308,7 +347,10 @@
         // bridge, or the chain ends
         const nextRoute = Solver.planRoute(child.planned, child.plan);
         const nextIsBridge = nextRoute.length && (nextRoute[0].gate.kind === "build" || nextRoute[0].gate.kind === "platform" || nextRoute[0].gate.kind === "buildup");
-        if (held && child.events && !nextIsBridge) {
+        // ... and not at all while the route ahead is long (three skilled gates or more): the crowd would walk the
+        // bridges built so far and off the end of the next one; the hold is the node's, for the next edge to carry
+        if (held && longRoute(child)) child.held = held;
+        else if (held && child.events && !nextIsBridge) {
           const done = child.events.find((e) => e.lemId === held.builder && e.frame > held.frame && (e.type === "WORK_END" || e.type === "SHRUG"));
           if (done && this._goto(child)) {
             const at = done.frame + 8;
@@ -323,8 +365,9 @@
         }
         cur = child;
       }
-      // the chain over, the crowd still held: let go now (the bridges built so far are theirs to cross)
-      if (held && cur && cur.events && !cur.dead && !cur.solved) {
+      // the chain over, the crowd still held: let go now (the bridges built so far are theirs to cross) - unless the
+      // route ahead is long, when the hold stays with the node
+      if (held && cur && cur.events && !cur.dead && !cur.solved && !longRoute(cur)) {
         const done = cur.events.find((e) => e.lemId === held.builder && e.frame > held.frame && (e.type === "WORK_END" || e.type === "SHRUG"));
         if (done && this._goto(cur)) {
           const at = done.frame + 8;
@@ -424,7 +467,7 @@
       }
       const graph = this._graph;
       if (!graph) return null;
-      const skills = world.skillCounts();
+      const skills = this._skills();
       // a blocker is spent unless a walker frees it: then it is a lemming of the region beside it, a walker dearer
       const walkers = skills.WALKER > 0;
       const blocking = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills && L.action === BLOCKING);
@@ -469,12 +512,14 @@
         // a bridge of one, two or three builders reaches)
         let bestGate = null, bestPg = null;
         for (const gt of graph.gates) {
-          if ((gt.builders || 1) < 2 || (gt.skill !== "BUILDER" && gt.skill !== "PLATFORMER") || gt.dir !== L.dx) continue;
-          const pg = Solver.bridgeProgress(gt, game.recorded);
-          if (pg.n < 1 || pg.n >= gt.builders || Math.abs(L.x - pg.x) > 30 || Math.abs(L.y - pg.y) > 20) continue;
+          if ((gt.skill !== "BUILDER" && gt.skill !== "PLATFORMER") || gt.dir !== L.dx || gt.px === undefined) continue;
+          const pg = Solver.bridgeProgress(gt, game.recorded, graph.gates);
+          if (pg.n < 1 || Math.abs(L.x - pg.x) > 30 || Math.abs(L.y - pg.y) > 20) continue;
           if (!bestGate || pg.d0 < bestPg.d0) { bestGate = gt; bestPg = pg; }
         }
         if (!bestGate) continue;
+        // all its builders laid: the lemming on the last bricks is as good as landed where the bridge leads
+        if (bestPg.n >= (bestGate.builders || 1)) { onBridge.set(L, { from: bestGate.to, landed: true }); continue; }
         onBridge.set(L, bestGate);
         if (typeof process !== "undefined" && process.env.NX_PLAN_DEBUG) console.log("  on a bridge: " + L.identifier + " at " + L.x + "," + L.y + " gate " + bestGate.kind + "@" + bestGate.x + "," + bestGate.y + " " + bestPg.n + "/" + bestGate.builders);
         if (!discounted.includes(bestGate)) { discounted.push(bestGate); bestGate.fullCost = bestGate.cost; bestGate.cost = Math.max(0, bestGate.cost - bestPg.n); }
@@ -598,7 +643,7 @@
   }
 
   const planEntry = (e) => e.type === "assignment" ? e.skill + "@" + e.frame + ">" + e.lemId : e.type === "nuke" ? "NUKE@" + e.frame : "SI" + e.interval + "@" + e.frame;
-  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "follow" ? c.perms.map((p) => p.skill).join("+") + ">" + c.lemId + " (follow)" : c.kind === "plan" ? "PLAN (the route as one edge)" : c.kind === "si" ? "SI=" + c.si : "NUKE";
+  const describe = (c) => c.kind === "assign" || c.kind === "repeat" ? c.skill + ">" + c.lemId + " (" + c.why + ")" : c.kind === "follow" ? c.perms.map((p) => p.skill).join("+") + ">" + c.lemId + " (follow)" : c.kind === "plan" ? "PLAN (the route as one edge)" : c.kind === "guard" ? "GUARD behind " + c.lemId : c.kind === "si" ? "SI=" + c.si : "NUKE";
 
   /**
    * Solve the level `world` holds: { best, stats }. `opts` = { tier,
@@ -632,6 +677,21 @@
       search.report();
       lead = search.run([{ plan: [], frame: 0 }], 1, new Set([firstOut]), leadDeadline);
       if (log) log("lead pass: " + (lead ? "a way in with " + lead.skillsUsed + " skills at frame " + lead.completionFrame : "none") + ", " + search.expansions + " expansions");
+      // a way in on permanent skills the crowd cannot afford (a climber each for thirty) is no seed for the crowd:
+      // a second lead pass without them looks for the crowd's own route, as long again
+      const perms = Solver.Regions ? Solver.Regions.PERMS : [];
+      const usedPerms = lead ? lead.plan.filter((e) => e.type === "assignment" && perms.includes(e.skill)).map((e) => e.skill) : [];
+      const counts = world.skillCounts();
+      if (lead && usedPerms.some((p) => (counts[p] || 0) < need) && now() < searchEnd - budget * 0.3) {
+        const end2 = Math.min(searchEnd - budget * 0.3, now() + budget * (1 - optimiseShare) * Math.max(params.leadShare, 0.2));
+        search.hidePerms = true; search.planMin = Infinity; search.planMinAt = 0; search.best = null; search.transposition.clear();
+        search.phase = "lead pass, no permanent skills";
+        search.report();
+        const lead2 = search.run([{ plan: [], frame: 0 }], 1, new Set([firstOut]), () => (search.best ? 0 : Math.min(end2, search.planMinAt + leadWindow)));
+        search.hidePerms = false;
+        if (log) log("lead pass without permanent skills: " + (lead2 ? "a way in with " + lead2.skillsUsed + " skills at frame " + lead2.completionFrame : "none") + ", " + search.expansions + " expansions");
+        if (lead2) lead = lead2;
+      }
     }
     // the crowd pass: the count, from the root and every lead solution. When the
     // frontier runs dry with time to spare, the pass runs again wider - the next
@@ -639,6 +699,7 @@
     const seeds = [{ plan: [], frame: 0 }];
     // the root and the best lead solution: more seeds spread the crowd pass too thin to go deep
     for (const s of search.solutions.slice().sort((a, b) => compare(b, a)).slice(0, 1)) seeds.push({ plan: s.plan, frame: 0 });
+    if (lead && !seeds.some((s) => s.plan === lead.plan)) seeds.push({ plan: lead.plan, frame: 0 }); // the crowd's own route when it differs from the best way in
     search.solutions = []; search.best = null;
     let best = null;
     for (let widen = 0; widen < 3 && now() < searchEnd; widen++) {

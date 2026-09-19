@@ -773,8 +773,12 @@ shape of it:
   for lost ground; a dig shaft goes on while any pixel within three of its
   centre is solid; a climber's own column must be clear to the wall's top;
   a bash whose tunnel takes away the wall's top the far region walked over
-  comes out in that region's far part alone. Water, fire and traps are
-  ends too -
+  comes out in that region's far part alone. Every bridge gate carries
+  the pixel it was laid from (its start scanned pixel by pixel, one the
+  builder itself gets across from preferred), and the candidates place
+  the builder on that very pixel - the frame read from a walk's ring or
+  counted forward along flat ground from a landing or a turn. Water,
+  fire and traps are ends too -
   deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
   gone for all after, a once-only trap taking one lemming; a force field
   turns whoever walks against it. A plan is a Dijkstra over (region,
@@ -815,11 +819,17 @@ shape of it:
   lost ignored).
   A lead pass (skills to the first lemming out, one save is a success;
   its share of the time stretched, up to half, while its cheapest plan
-  keeps falling - an eighteen-builder route)
+  keeps falling - an eighteen-builder route; run again without the
+  permanent skills when the way in spends one the crowd cannot afford,
+  both routes seeding the crowd pass, and a seeded root whose crowd dies
+  following the lead gets a guard blocker behind the lead and a bomber on
+  it once the last worker is done)
   seeds a crowd pass for the count; a bridge of several builders is
   followed builder by builder (the plan's worked test counts them on the
   bridge's line, the lemming on the bricks planned from the bridge's gate
-  at what is left of its price); the plan is scored again at the
+  at what is left of its price, on the last bricks as landed); a guard
+  blocker set behind a builder stays for the route while three skilled
+  gates or more remain, carried from node to node; the plan is scored again at the
   moment an action's work is done, and the plan's route - the crowd's
   gates and, before any that rides on a gate the lead opens, the lead's
   own, a gate of several skills (a staircase then a bash) taken skill by
