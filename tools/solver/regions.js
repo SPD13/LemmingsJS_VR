@@ -74,7 +74,7 @@
    * {left, right}, exit, hatch}, and gates [{from, to, kind, skill, cost,
    * x, y (px), dir, side}]. `level` for the gadgets, `physics` as it now is.
    */
-  function build(level, physics, blockers) {
+  function build(level, physics, blockers, masks) {
     const w = level.width, h = level.height;
     const g = cells(physics || level.physics, w, h);
     const { cw, ch, kind } = g;
@@ -181,8 +181,10 @@
      * drop stops it (-1). At most 64 pixels of it.
      */
     const walkUp = (ex, ey, dir, fromId) => {
-      let x = dir > 0 ? ex * CELL + CELL - 1 : ex * CELL;
-      let y = ey * CELL + CELL; // the pixel under the feet
+      // from the end cell's inner pixel (its outer one may lie inside the wall, the cell straddling it), on the
+      // ground's top - which may lie inside the floor cell (a six-pixel brick)
+      let x = dir > 0 ? ex * CELL : ex * CELL + CELL - 1;
+      let y = ey * CELL;
       while (y < h && !solid(x, y)) y++;
       for (let n = 0; n < 64; n++) {
         x += dir;
@@ -195,6 +197,115 @@
         if (id >= 0 && id !== fromId) return id;
       }
       return -1;
+    };
+    /**
+     * Where a digger at pixel column `px` on the floor cell row `cy` ends: the shaft goes down a row at a time
+     * while any pixel within three of the centre is solid (the engine's digOneRow), stops on steel under the feet,
+     * else the digger falls from the shaft's end to the ground below. {region, cells (the fall for those after)}
+     * or null (off the level).
+     */
+    const digShaft = (px, cy) => {
+      let top = cy * CELL; while (top < h && !solid(px, top)) top++; // the ground's top under the feet
+      if (top >= h) return null;
+      let y = top;
+      while (y < h) {
+        if ((phys[px + y * w] & PM.STEEL) !== 0) break; // stands on the steel
+        let any = false; for (let n = -3; n <= 3 && !any; n++) any = solid(px + n, y) && (phys[px + n + y * w] & PM.STEEL) === 0;
+        if (!any) break;
+        y++;
+      }
+      while (y < h && !solid(px, y)) y++; // the fall
+      if (y >= h) return null;
+      const cx = Math.floor(px / CELL);
+      let id = regionAt(cx, Math.floor((y - 1) / CELL)); if (id < 0) id = regionAt(cx, Math.floor((y - 1) / CELL) - 1);
+      return { region: id, cells: Math.round((y - top) / CELL) };
+    };
+    /**
+     * A miner's ramp as the engine digs it, from the lemming standing on pixel (x0, y0) heading dir: the miner's
+     * mask taken out twice a cycle, two steps of two along and one down a cycle, the engine's own tests for steel
+     * (a turn) and for the ground gone under it (a fall). {region, fall} where the fall lands, {turn: true} at
+     * steel, null off the level - or undefined without the masks (the cells' word stands then).
+     */
+    const rampCache = new Map();
+    const mineFrom = (x0, y0, dir) => {
+      const m = masks && masks.miner;
+      if (!m) return undefined;
+      const key = x0 + "," + y0 + "," + dir;
+      if (rampCache.has(key)) return rampCache.get(key);
+      const removed = new Set();
+      const has = (x, y) => solid(x, y) && !removed.has(x + y * w);
+      const steel = (x, y) => x >= 0 && y >= 0 && x < w && y < h && (phys[x + y * w] & PM.STEEL) !== 0;
+      const md = m.data, sx = dir === 1 ? 16 : 0;
+      const applyMask = (x, y, frame) => {
+        const mx = x + dir - 8, my = y + frame - 12;
+        for (let yy = 0; yy < 13; yy++) for (let xx = 0; xx < 16; xx++) {
+          if (md[((frame * 13 + yy) * m.width + sx + xx) * 4 + 3] === 0) continue;
+          const px = mx + xx, py = my + yy;
+          if (px >= 0 && px < w && py >= 0 && py < h && !steel(px, py)) removed.add(px + py * w);
+        }
+      };
+      const fallFrom = (x, y) => {
+        while (y < h && !has(x, y)) y++;
+        if (y >= h) return null;
+        const cx = Math.floor(x / CELL);
+        let id = regionAt(cx, Math.floor((y - 1) / CELL)); if (id < 0) id = regionAt(cx, Math.floor((y - 1) / CELL) - 1);
+        return { region: id, fall: y - y0, x, y };
+      };
+      let x = x0, y = y0, out = { turn: true };
+      done: for (let cycle = 0; cycle < 40; cycle++) {
+        applyMask(x, y, 0); applyMask(x, y, 1);
+        for (const first of [true, false]) {
+          x += 2 * dir; y++;
+          if (x < 0 || x >= w || y >= h) { out = null; break done; }
+          if (steel(x - dir, y - 1) && steel(x, y - 1)) break done;
+          if (first && steel(x - dir, y - 2)) break done;
+          if (!has(x - dir, y - 1) && !has(x - dir, y) && !has(x - dir, y + 1)) { out = fallFrom(x - dir, y + 1); break done; }
+          if (steel(x, y - 2)) break done;
+          if (!has(x, y)) { out = fallFrom(x, y + 1); break done; }
+          if (steel(x + dir, y - 2) || steel(x, y)) break done;
+        }
+      }
+      rampCache.set(key, out);
+      return out;
+    };
+    /** The ground's top under pixel column px from cell row cy (the pixel the feet stand on), or -1. */
+    const groundTop = (px, cy) => { let y = cy * CELL; while (y < h && !solid(px, y)) y++; return y < h && y - cy * CELL <= CELL + 1 ? y : -1; };
+    const buildFrom = (x0, y0, dir, k) => {
+      const laid = new Set(); const has = (x, y) => solid(x, y) || laid.has(x + y * w);
+      let x = x0, y = y0, bricks = 0;
+      const ends = []; // where the lemming stands after each builder's last brick, or where it turned back
+      for (let b = 0; b < 12 * k; b++) {
+        if (y - 10 < 0 || x < 0 || x >= w) { ends.push({ x, y, bricks, blocked: true, laid }); return ends; } // the level's edge: a lemming out of it is lost
+        for (let n = 0; n <= 5; n++) laid.add(x + n * dir + (y - 1) * w);
+        bricks++;
+        const left = 12 * k - b - 1;
+        if (has(x + dir, y - 2)) { ends.push({ x, y, bricks, blocked: true, laid }); return ends; }
+        if (has(x + dir, y - 3) || has(x + 2 * dir, y - 2) || (has(x + 2 * dir, y - 10) && left > 0)) { ends.push({ x: x + dir, y: y - 1, bricks, blocked: true, laid }); return ends; }
+        y--; x += 2 * dir;
+        if (has(x, y - 2) || has(x, y - 3) || has(x + dir, y - 3) || (has(x + dir, y - 9) && left > 0)) { ends.push({ x, y, bricks, blocked: true, laid }); return ends; }
+        if (bricks % 12 === 0) ends.push({ x, y, bricks, blocked: false, laid: new Set(laid) });
+      }
+      return ends;
+    };
+    /**
+     * Where a walker from pixel (x, y) heading dir gets off the bricks `laid`: along them, up six pixels or down a
+     * fall, to the first real ground - {region, fall} or null (a wall, off the level, still on the bricks).
+     */
+    const walkOff = (x, y, dir, laid) => {
+      const has = (px, py) => solid(px, py) || laid.has(px + py * w);
+      let cx = x, cy = y;
+      for (let n = 0; n < 16; n++) {
+        const nx = cx + dir; let ny = cy;
+        if (nx < 0 || nx >= w) return null;
+        if (has(nx, ny)) { let up = 0; while (up <= 6 && has(nx, ny - 1)) { ny--; up++; } if (up > 6) return null; }
+        else { while (ny + 1 < h && !has(nx, ny + 1)) ny++; if (ny + 1 >= h) return null; }
+        cx = nx; cy = ny;
+        if (!laid.has(cx + cy * w)) break;
+      }
+      if (laid.has(cx + cy * w)) return null;
+      const col = Math.floor(cx / CELL);
+      let id = regionAt(col, Math.floor((cy - 1) / CELL)); if (id < 0) id = regionAt(col, Math.floor((cy - 1) / CELL) - 1);
+      return { region: id, fall: cy - y };
     };
     /** The floor a fall from (cx, cy) lands on: {cy, region} or null (off the level). */
     const landing = (cx, cy) => {
@@ -259,6 +370,24 @@
           // terrain with no floor above it blocks the bridge - so does a wall in the way (the column beside a
           // hill is not built over)
           const bridge = (kind, skill, rise) => {
+            if (kind === "build") {
+              // a builder's bridge as the engine lays it, from the end's pixel (and four short of it): where the
+              // lemming gets off the bricks after each builder, or where followers step off a bridge whose builder
+              // was turned back by terrain in front
+              const found = new Map();
+              for (const off of [0, 4]) {
+                const sx = (dir > 0 ? ex * CELL + CELL - 1 : ex * CELL) - dir * off, sy = groundTop(sx, ey);
+                if (sy < 0 || regionAt(Math.floor(sx / CELL), Math.floor((sy - 1) / CELL)) !== r.id) continue;
+                for (const e of buildFrom(sx, sy, dir, MAX_BUILDERS)) {
+                  const k = Math.ceil(e.bricks / 12), st = walkOff(e.x, e.y, dir, e.laid);
+                  if (!st || st.region < 0 || st.region === r.id || st.fall > SPLAT_CELLS * CELL) continue;
+                  const cur = found.get(st.region);
+                  if (!cur || k < cur.k || (k === cur.k && cur.blocked && !e.blocked)) found.set(st.region, { k, blocked: e.blocked, fall: st.fall });
+                }
+              }
+              for (const [to, b] of found) gate(r.id, to, kind, skill, b.k, ex, ey, dir, { builders: b.k, twoWay: b.fall <= 6, followersOnly: b.blocked });
+              return;
+            }
             const seen = new Set();
             for (let t = 1; t <= BUILD_ACROSS * MAX_BUILDERS; t++) {
               const col = ex + dir * t, row = ey - Math.floor((t * rise) / BUILD_ACROSS);
@@ -408,11 +537,20 @@
             }
           }
           if (!steel && !sideForbids && far >= 0 && far < cw) {
-            if (!(ow & 12) && l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bash", "BASHER", 1, ex, ey, dir, { thickness, fall: l.cells, twoWay: l.cells === 0 });
+            if (!(ow & 12) && l && l.region >= 0 && l.region !== r.id) gate(r.id, l.region, "bash", "BASHER", 1, ex, ey, dir, { thickness, fall: l.cells, twoWay: l.cells === 0, span: [Math.min(nx, far), Math.max(nx, far)], arrival: { col: far, row: l.cy } });
           // a miner: down and along, to the floor it breaks into
             if (!(ow & 8)) for (let k = 1, mx = nx, my = ey + 1; k < 40 && mx >= 0 && mx < cw && my < ch; k++, mx += dir, my++) {
               if (at(mx, my) === 2 || (g.oneway[mx + my * cw] & 8)) break;
-              if (at(mx, my) === 0) { const l2 = landing(mx, my); if (l2 && l2.region >= 0 && l2.region !== r.id) gate(r.id, l2.region, "mine", "MINER", 1, ex, ey, dir, { twoWay: true }); break; }
+              if (at(mx, my) === 0) {
+                const l2 = landing(mx, my);
+                if (l2 && l2.region >= 0 && l2.region !== r.id) {
+                  // the ramp as the engine digs it must come out where the cells say (a ramp off a pillar's side falls out of the level)
+                  const sx = dir > 0 ? ex * CELL + CELL - 1 : ex * CELL, sy = groundTop(sx, ey);
+                  const sim = sy >= 0 ? mineFrom(sx, sy, dir) : undefined;
+                  if (sim === undefined || (sim && sim.region === l2.region)) gate(r.id, l2.region, "mine", "MINER", 1, ex, ey, dir, { twoWay: true });
+                }
+                break;
+              }
             }
           }
           // a bash from higher up: a staircase of k builders at the wall raises the feet six pixels a builder, and the
@@ -453,28 +591,37 @@
           // and away from it: a lemming turned at the wall builds back the way it came, a staircase up over its own
           // region to whatever floor its line meets (a slope across a cavity), as the crossings at a drop do
           {
+            // as the engine lays it, from the pixel beside the wall (and two off it, where the turn leaves the lemming)
             const back = -dir;
-            const seen = new Set();
-            for (let t = 1; t <= BUILD_ACROSS * MAX_BUILDERS; t++) {
-              const col = ex + back * t, row = ey - Math.floor((t * BUILD_UP) / BUILD_ACROSS);
-              if (col < 0 || col >= cw || row < 1) break;
-              const k = Math.ceil(t / BUILD_ACROSS);
-              if (at(col, row) !== 0 || at(col, row - 1) !== 0) {
-                const id = at(col, row) !== 0 ? regionAt(col, row - 1) : -1;
-                if (id >= 0 && id !== r.id && !seen.has(id)) gate(r.id, id, "build", "BUILDER", k, ex, ey, back, { builders: k, twoWay: true, fromWall: true });
-                break;
+            const found = new Map();
+            for (const off of [0, 2]) {
+              const sx = (dir > 0 ? ex * CELL + CELL - 1 : ex * CELL) + back * off, sy = groundTop(sx, ey);
+              if (sy < 0 || regionAt(Math.floor(sx / CELL), Math.floor((sy - 1) / CELL)) !== r.id) continue;
+              for (const e of buildFrom(sx, sy, back, MAX_BUILDERS)) {
+                const k = Math.ceil(e.bricks / 12), st = walkOff(e.x, e.y, back, e.laid);
+                if (!st || st.region < 0 || st.region === r.id || st.fall > SPLAT_CELLS * CELL) continue;
+                const cur = found.get(st.region);
+                if (!cur || k < cur.k || (k === cur.k && cur.blocked && !e.blocked)) found.set(st.region, { k, blocked: e.blocked, fall: st.fall });
               }
-              const id = regionAt(col, row);
-              if (id >= 0 && id !== r.id && !seen.has(id)) { seen.add(id); gate(r.id, id, "build", "BUILDER", k, ex, ey, back, { builders: k, twoWay: true, fromWall: true }); break; }
-              if (t % BUILD_ACROSS === 0) { const l = landing(col, row + 1); if (l && l.region >= 0 && l.region !== r.id && l.cells <= SPLAT_CELLS && !seen.has(l.region)) { seen.add(l.region); gate(r.id, l.region, "build", "BUILDER", k, ex, ey, back, { builders: k, twoWay: false, fromWall: true }); } }
             }
+            for (const [to, b] of found) gate(r.id, to, "build", "BUILDER", b.k, ex, ey, back, { builders: b.k, twoWay: b.fall <= 6, followersOnly: b.blocked, fromWall: true });
           }
           // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one; a staircase
           // of builders up it, one per three cells of height, given the run-up (six cells of floor a builder)
           if (top >= 1 && at(nx, top - 1) === 0) {
             const topRegion = regionAt(nx, top - 1);
             if (topRegion >= 0 && topRegion !== r.id) {
-              gate(r.id, topRegion, "climb", "CLIMBER", 1, ex, ey, dir, { perLemming: true, height });
+              // the climber's own column (the pixel beside the wall) must be clear from six over its feet to the
+              // wall's top: terrain there clips it off the wall (the brick over the ramp's top under a two-brick wall)
+              // the wall's own pixel column: the first solid pixel a step over the feet, out from the end cell's middle
+              let feetY = groundTop(ex * CELL + 2, ey), wallPx = ex * CELL + 2;
+              if (feetY >= 0) { for (let n = 0; n < 8 && wallPx >= 0 && wallPx < w && !solid(wallPx, feetY - 3); n++) wallPx += dir; }
+              const bodyX = wallPx - dir;
+              if (feetY >= 0) feetY = groundTop(bodyX, ey);
+              let wallTop = top * CELL; while (wallTop < h && !solid(wallPx, wallTop)) wallTop++;
+              let clear = feetY >= 0 && wallPx >= 0 && wallPx < w && solid(wallPx, feetY - 3);
+              if (clear) for (let y = feetY - 6; y >= wallTop - 2 && y >= 0; y--) if (solid(bodyX, y)) { clear = false; break; }
+              if (clear) gate(r.id, topRegion, "climb", "CLIMBER", 1, ex, ey, dir, { perLemming: true, height });
               if (height <= JUMP_LEDGE) gate(r.id, topRegion, "jump", "JUMPER", 1, ex, ey, dir, { perLemming: true, height });
               if (height <= STACK_UP) gate(r.id, topRegion, "stack", "STACKER", 1, ex, ey, dir, { height });
               const k = Math.ceil(height / BUILD_UP);
@@ -529,7 +676,9 @@
         if (id >= 0 && id !== r.id && !ups.has(id)) { ups.add(id); up = { to: id, cx: jx, cy: jy }; }
         if (up) gate(r.id, up.to, "bombup", "BOMBER", 1.5, up.cx, up.cy, 0);
       }
-      // the floor dug through, from anywhere in the region: the region below
+      // the floor dug through, from anywhere in the region: the region below - the shaft as the engine digs it
+      // (a row at a time while any pixel within three of the centre is solid, so a shaft over a pillar's edge runs
+      // down its side and off the level; the cells alone read a landing on the pillar's decoration)
       let dug = null;
       for (const j of r.cells) {
         const jx = j % cw, jy = (j / cw) | 0;
@@ -537,7 +686,11 @@
         let y = jy + 1; while (y < ch && at(jx, y) !== 0) { if (at(jx, y) === 2) { y = -1; break; } y++; }
         if (y < 0 || y >= ch) continue;
         const l = landing(jx, y);
-        if (l && l.region >= 0 && l.region !== r.id) { dug = { to: l.region, cx: jx, cy: jy, depth: (l.cy - jy) }; break; }
+        if (!l || l.region < 0 || l.region === r.id) continue;
+        const shaft = digShaft(jx * CELL + 2, jy);
+        if (process.env.NX_DIG_DEBUG) console.log("dig", r.id, "cell", jx * CELL + 2, jy * CELL, "cells say", l.region, "shaft", JSON.stringify(shaft));
+        if (!shaft || shaft.region < 0 || shaft.region === r.id) continue;
+        dug = { to: shaft.region, cx: jx, cy: jy, depth: shaft.cells }; break;
       }
       // the shaft is the digger's own way down, a step at a time; for everyone after it is a fall of the shaft's
       // depth - deadly past the splat height, a floater's job then
@@ -570,6 +723,43 @@
         if (above >= 0 && above !== t.from && !ups.has(above) && false) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); } // (no bomb-up, as above)
       }
     }
+    // a staircase from inside a region, as the engine lays it: a builder given on a step of the floor (a brick's
+    // top, a slope's foot) whose bricks clear a wall's top or reach a ledge no bridge from the region's end does
+    // (the exit block over the brick under it: from the brick a builder's bricks pass over the block's top, from
+    // the floor at the block's foot they run into it). Every fourth pixel of the floor is tried, both ways, up to
+    // six builders in a row, the bricks checked pixel by pixel by the builder's own rules; a builder turned back by
+    // terrain in front leaves a bridge for those behind. One gate per pair and way, the fewest builders kept, and
+    // none where a bridge from the end already leads for as few.
+    for (const r of regions) {
+      if (r.virtual || r.exit) continue;
+      for (const dir of [-1, 1]) {
+        const ex = dir < 0 ? r.x0 : r.x1, wallX = ex * CELL + 2;
+        const best = new Map(); // to -> {k, cx, cy, followersOnly, twoWay, starts}
+        for (const j of r.cells) {
+          const jx = j % cw, jy = (j / cw) | 0, px = jx * CELL + 2;
+          let y0 = jy * CELL; while (y0 < h && !solid(px, y0)) y0++;
+          if (y0 - jy * CELL > CELL + 1) continue;
+          const runUp = Math.abs(wallX - px);
+          if (runUp < 6 || runUp > 48) continue; // the moment is found from the walk to the end: within the ring's reach
+          const ends = buildFrom(px, y0, dir, MAX_BUILDERS);
+          for (const e of ends) {
+            const k = Math.ceil(e.bricks / 12);
+            const st = walkOff(e.x, e.y, dir, e.laid || new Set());
+            if (!st || st.region < 0 || st.region === r.id || st.fall > SPLAT_CELLS * CELL) continue;
+            const cur = best.get(st.region);
+            if (!cur || k < cur.k || (k === cur.k && cur.followersOnly && !e.blocked)) best.set(st.region, { k, cx: jx, cy: jy, followersOnly: e.blocked, twoWay: st.fall <= 6, runUp, starts: (cur && cur.k === k ? cur.starts : 0) + 1 });
+            else if (k === cur.k) cur.starts++;
+          }
+        }
+        for (const [to, b] of best) {
+          // a bridge the search can place: one that works from two starts at least (four pixels apart), a single
+          // start being a pixel's luck
+          if (b.starts < 2 && r.cells.length > 2) continue;
+          if (r.gates.some((gt) => gt.to === to && gt.dir === dir && (gt.kind === "build" || gt.kind === "buildup" || gt.kind === "platform") && gt.cost <= b.k)) continue;
+          gate(r.id, to, "buildup", "BUILDER", b.k, b.cx, b.cy, dir, { builders: b.k, wallX, runUp: b.runUp, fromStep: true, twoWay: b.twoWay, followersOnly: b.followersOnly });
+        }
+      }
+    }
     // a miner's ramp from any floor to a floor below within twelve cells: two cells along for one down, through
     // plain terrain (no steel, no air), landing on a cell of the region below - into a tunnel in waiting as into a
     // real region; one gate per pair and way. Walked both ways once mined.
@@ -595,11 +785,48 @@
               const row = rowsOf[v.id].get(y + 1);
               if (k >= 2 && row && row.has(x)) { if (!v.virtual || at(x, y + 2) === 2) found = { ux, uy, dir }; break; }
             }
+            if (found && !v.virtual) {
+              // the ramp as the engine digs it must come out in v (the cells read a landing on a pillar's decoration
+              // where the miner runs off its side and out of the level)
+              const sy = groundTop(ux * CELL + 2, uy), sim = sy >= 0 ? mineFrom(ux * CELL + 2, sy, dir) : undefined;
+              if (process.env.NX_RAMP_DEBUG) console.log("ramp", u.id, "->", v.id, "from", ux * CELL + 2, sy, dir, "sim", JSON.stringify(sim));
+              if (sim !== undefined && !(sim && sim.region === v.id)) found = null;
+            }
             if (found) break;
           }
           if (found) gate(u.id, v.id, "mine", "MINER", 1, found.ux, found.uy, found.dir, { twoWay: true, ramp: true });
         }
       }
+    }
+    // a bash whose tunnel runs under cells of the region it comes out in - the region walks over the wall's top,
+    // a brick's step down onto the far floor - takes those cells away (the wall's top is left ten pixels over the
+    // tunnel's floor, no step): the bash comes out in what is left, the far floor's own part, a region of its own
+    // for the plan (`alias` the region it is cut from, for the search's matching), with the gates worked from there
+    for (const bg of gates.slice()) {
+      if (bg.kind !== "bash" || !bg.span || bg.to < 0) continue;
+      const to = regions[bg.to];
+      if (to.virtual) continue;
+      const lost = new Set();
+      for (const j of to.cells) { const jx = j % cw, jy = (j / cw) | 0; if (jx >= bg.span[0] && jx < bg.span[1] && jy <= bg.y / CELL) lost.add(j); }
+      // the tunnel's own columns beyond the wall count too when the region's cells there stand over the tunnel row
+      if (!lost.size) continue;
+      const keep = new Set(to.cells.filter((j) => !lost.has(j)));
+      const start = to.cells.find((j) => j % cw === bg.arrival.col && !lost.has(j) && Math.abs(((j / cw) | 0) - bg.arrival.row) <= 1);
+      if (start === undefined) continue;
+      const comp = new Set([start]), stack = [start];
+      while (stack.length) { const j = stack.pop(); const jx = j % cw, jy = (j / cw) | 0; for (const dx of [-1, 1]) for (const dy of [-1, 0, 1]) { const k = jx + dx + (jy + dy) * cw; if (jx + dx >= 0 && jx + dx < cw && keep.has(k) && !comp.has(k)) { comp.add(k); stack.push(k); } } }
+      if (comp.size === keep.size && !lost.size) continue;
+      const cells = Array.from(comp);
+      let x0 = Infinity, x1 = -Infinity, ymin = Infinity, ymax = -Infinity;
+      for (const j of cells) { const jx = j % cw, jy = (j / cw) | 0; if (jx < x0) x0 = jx; if (jx > x1) x1 = jx; if (jy < ymin) ymin = jy; if (jy > ymax) ymax = jy; }
+      const V = { id: regions.length, cells, x0, x1, ymin, ymax, exit: to.exit, hatch: false, overhang: to.overhang, ends: to.ends, gates: [], virtual: false, alias: to.id, afterBash: bg };
+      regions.push(V);
+      for (const gt of to.gates) {
+        const cx = Math.floor(gt.x / CELL), cy = Math.floor(gt.y / CELL);
+        if (!comp.has(cx + cy * cw) && !comp.has(cx + (cy + 1) * cw) && !comp.has(cx + (cy - 1) * cw)) continue;
+        const copy = Object.assign({}, gt, { from: V.id, id: gates.length }); gates.push(copy); V.gates.push(copy);
+      }
+      bg.to = V.id;
     }
     return { cw, ch, kind, floor, hazard, slit, slitDepth, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
   }

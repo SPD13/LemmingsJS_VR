@@ -54,7 +54,7 @@ async function main() {
   const R = Solver.Regions;
   if (cmd === "graph" || cmd === "pic" || cmd === "reach") {
     world.reset(rest[1] ? toPlan(rest[1]) : []); world.step(+(rest[0] || 120));
-    const g = R.build(level, world.game.physics, blockersOf(world.game));
+    const g = R.build(level, world.game.physics, blockersOf(world.game), masks);
     if (cmd === "graph") {
       console.log(level.width + "x" + level.height + " gadgets " + level.gadgets.map((gd) => gd.effect + "@" + gd.triggerRect.x0 + "," + gd.triggerRect.y0).join(" "));
       for (const r of g.regions) console.log(r.id + ":[x" + r.x0 * 4 + "-" + (r.x1 * 4 + 3) + " y" + r.ymin * 4 + "-" + r.ymax * 4 + "]" + (r.exit ? " EXIT" : "") + (r.hatch ? " HATCH" : "") + (r.virtual ? " TUNNEL" : "") + " L:" + endStr(r.ends.left) + " R:" + endStr(r.ends.right) + " | " + r.gates.map(gateStr).join(", "));
@@ -113,10 +113,19 @@ async function main() {
     const plan = toPlan(rest[0] || "[]"), who = rest[1];
     world.reset(plan);
     const analysis = Solver.analyse(level);
-    const { events, outcome } = Solver.rollout(world, { field: analysis.field });
+    // the rollout in segments up to each entry's frame (a rollout stops on a stuck crowd, and a long plan's later
+    // entries would never fire), the events gathered; then the rollout to the end
+    let events = [], outcome = null;
+    for (const e of plan.slice().sort((a, b) => a.frame - b.frame)) {
+      if (e.frame <= world.frame) continue;
+      const seg = Solver.rollout(world, { field: analysis.field, maxFrames: e.frame - world.frame });
+      events = events.concat(seg.events);
+      if (world.frame < e.frame) world.step(e.frame - world.frame);
+    }
+    { const seg = Solver.rollout(world, { field: analysis.field }); events = events.concat(seg.events); outcome = seg.outcome; }
     console.log("outcome " + JSON.stringify({ saved: outcome.saved, lost: outcome.lost, alive: outcome.alive, stuck: outcome.stuck, end: outcome.endFrame, last: outcome.lastFrame, skills: outcome.skillsUsed }));
     for (const e of events) if ((who && e.lemId === who) || (!who && e.type === "DEATH")) console.log(e.frame + " " + e.type + " " + e.lemId + " " + e.x + "," + e.y + " " + (e.dx > 0 ? ">" : "<") + " " + (e.cause || "") + (e.job !== undefined ? " job " + e.job : ""));
-    const g = R.build(level, world.game.physics, blockersOf(world.game));
+    const g = R.build(level, world.game.physics, blockersOf(world.game), masks);
     for (const L of world.game.lemmings) if (!L.removed) console.log(L.identifier + " " + L.x + "," + L.y + " action " + L.action + " region " + R.regionOfLemming(g, L.x, L.y));
   } else if (cmd === "pixels") {
     const [x0, x1, y0, y1] = rest.slice(0, 4).map(Number), frame = +(rest[4] || 120), plan = rest[5] ? toPlan(rest[5]) : [];

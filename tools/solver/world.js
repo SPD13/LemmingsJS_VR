@@ -22,6 +22,7 @@
     /** `level` a built Lemmix.Level (mutated by the game), `masks` from Lemmix.loadMasks. */
     constructor(level, masks) {
       this.level = level;
+      this.masks = masks;
       this.game = new Lemmix.LemGame(level, masks);
       this.game.start();
       // replay-insert mode: an action joins the record without cutting what the plan holds

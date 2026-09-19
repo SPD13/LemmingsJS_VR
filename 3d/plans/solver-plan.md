@@ -677,6 +677,96 @@ skills** (813 s; 11828 lead and 4520 crowd expansions) - the plan's
 cost to the skill - recorded and verified. No mechanism missing here
 beyond the turn's boost: a crowd of fifty is a budget question.
 
+### Later (20 September, evening): Where do you see Lemmings? - the cells lie, the pixels decide
+
+*Where do you see Lemmings?* (Redux, Gentle: 30 lemmings, save 28, ten of
+everything and twenty builders): a lattice of six-pixel bricks, the hatch
+on a ramp at the bottom left, the exit on a bar at the top right. Every
+gate the four-pixel cells offered here was wrong at the pixels, and the
+lead pass spent its budget on them:
+
+- **A dig shaft judged on cells** landed on a three-pixel ledge of a
+  pillar's decoration; the engine's digger goes on while any pixel within
+  three of its centre is solid, so the shaft runs down the pillar's side
+  and off the level. Dig gates are now checked by that rule (`digShaft`).
+- **A ramp judged on cells** did the same; ramps are now dug as the engine
+  digs them - the miner's own mask taken out twice a cycle, its tests for
+  steel and for the ground gone under it (`mineFrom`, the masks passed
+  into the graph) - and a ramp gate stands only where the simulation comes
+  out where the cells said.
+- **A bridge judged on cells** left a ledge the builder is blocked on at
+  the second brick (the bar overhead), and another from a brick the
+  builder's head meets a brick twelve pixels up. Every builder's bridge
+  from a region's end, and every staircase away from a wall, is now laid
+  by the engine's own rules (`buildFrom`: the foot, the head, the brick
+  ahead, blocked builders turned back) and walked off to real ground
+  (`walkOff`); a builder turned back leaves a follower-only bridge.
+- **A staircase from inside a region** (`fromStep` buildup gates): a
+  builder given on a step of the floor whose bricks clear a wall's top or
+  reach a ledge no bridge from the end does - every fourth pixel tried,
+  both ways, the moment found from the walk to the end (the run-up).
+- **A six-pixel brick the cells called a wall**: the pixel walk started
+  from the floor cell's bottom, inside the brick, and read eight pixels
+  of rise; it starts from the ground's real top now.
+- **A climber clipped by its own column**: the brick over the ramp's top
+  is above the climber's body, and the engine drops a climber whose
+  column meets terrain - the climb gate wants that column clear from six
+  over the feet to the wall's top, the wall's pixel column found from the
+  end cell (the cells put it two pixels off, inside a steel fixture's wall).
+- **A bash that takes the wall's top away**: the region beyond the wall
+  walked down over it, a brick's step onto the far floor; the tunnel
+  leaves the wall's top ten pixels over its floor, no step, and the plan's
+  cost-5 route through it was an illusion (plan 10 the moment the bash was
+  done). Such a bash now comes out in a region of its own - the far floor's
+  part, cut from the region it belongs to (`alias`, for the search's
+  region matching) with the gates worked from there.
+
+With the graph honest the plan reads the level at cost 17-18 for one
+lemming: a staircase at the column's foot, four builders to the left
+structure, four more to the top of the chain-link column, three to the
+top row, then a builder or two over each fire pit, and the drop onto the
+exit bar - eighteen of the twenty builders. Three things kept the search
+from following it:
+
+- **A bridge of several builders** was marked worked after its first
+  (the route moved on to a gate the lemming had not reached), and a
+  staircase's entry marked the bridge beside it worked (24 px, the other
+  way). The worked test wants the entry's way now, and a bridge of k
+  builders is worked once k are laid (`bridgeProgress`: the entries on
+  its line, its way); until then the boosts match the next builder's spot,
+  24 px along and 12 up from the last, so the macro lays them one after
+  the other at each SHRUG.
+- **A lemming on the bricks is in no region**: planned from the floor
+  below, its plan jumped back to 18 mid-bridge. It is planned from the
+  bridge's gate now, the builders laid so far off the gate's price (the
+  gate chosen by the nearness of the first builder's spot, several gates
+  sharing a line).
+- **The lead pass's share** (15 % at tiers 2 and 3) is short of an
+  eighteen-gate route: it runs on now, up to half the search's time,
+  while its cheapest plan still fell within the last third of the share.
+
+Also: the plan is memoised per graph version and situation (the lead
+pass asks the same question from the same region hundreds of times), and
+a bridge's progress once per node; the profile had the planner's greedy
+sweeps and the boost at 40 % and 25 % of a run.
+
+**Still unsolved.** At tier 3 the lead pass (4600 expansions in its
+stretched share) lays the staircase, the bridges to the left structure
+and to the chain-link column's top and reaches the top row - two nodes
+read plan 0 - and gets no further: the bridges over the fire pits want
+the builder within a pixel or two of the brick's edge (from four short
+the last brick ends over the fire), and a bridge laid from a spot the
+sim did not try lands on the next brick's face and is turned back. A
+route of eighteen builders where each is a moment of its own is past what
+the search can chain with the anchors it has; what the level asks for
+next is a builder placed by the pixel (the moment computed from the
+gate's own start, not the nearest sampled one) and a crowd held by one
+blocker for the whole route. The fixtures gained four (57): the bridge
+under a brick, the climber's column, the after-bash region, the six-pixel
+step. Regressions hold (CindyLand 39/40 with 8 at tier 2; Keep your hair,
+Snuggle, Up For A Walk at tier 1; You need bashers is flaky at ten seconds
+on this machine today with the committed solver too).
+
 ### What limits the solver now
 
 1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang

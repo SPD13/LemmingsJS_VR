@@ -64,7 +64,10 @@
     const seq = [], seen = new Set();
     // a gate the plan's own entries already work (a basher given at the wall, its tunnel under way) is done
     // (the entry's own dx is the lemming's at the record, which at a turn is the way it came, not the way it works)
-    const worked = (gt) => gt.sequence ? gt.sequence.every((it) => itemDone(it, plan)) : (plan || []).some((e) => e.type === "assignment" && e.skill === gt.skill && Math.abs(e.x - gt.x) <= 24 && Math.abs(e.y - gt.y) <= 16);
+    // - and, unless right on the spot, the entry's way is the gate's (a staircase up the wall on the left is not the
+    // bridge to the right from the ledge it reaches, a step away)
+    // - and a bridge of several builders is worked once they are all laid
+    const worked = (gt) => gt.sequence ? gt.sequence.every((it) => itemDone(it, plan)) : (gt.builders || 1) > 1 ? bridgeProgress(gt, plan).n >= gt.builders : (plan || []).some((e) => e.type === "assignment" && e.skill === gt.skill && Math.abs(e.x - gt.x) <= 24 && Math.abs(e.y - gt.y) <= 16 && (!gt.dir || e.dx === gt.dir || (Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)));
     let li = 0;
     const take = (st) => { const k = gateKey(st.gate); if (!seen.has(k)) { seen.add(k); if (!worked(st.gate)) seq.push(st); } };
     for (const st of steps) {
@@ -83,6 +86,26 @@
   Solver.planRoute = planRoute;
 
   /** Of a two-skill gate (a staircase then a bash), the skill wanted now: the second once the first is in the plan. */
+  /**
+   * How far a bridge of several builders (or platformers) is along: the plan's entries of the gate's skill on its
+   * line, its way - {n, x, y}, the next builder's spot after the n laid (24 px along and 12 up a builder from the
+   * first entry).
+   */
+  const bridgeProgress = (gt, plan) => {
+    const k = gt.builders || 1, rise = gt.skill === "BUILDER" ? 12 : 0;
+    let n = 0, first = null;
+    for (const e of plan || []) {
+      if (e.type !== "assignment" || e.skill !== gt.skill) continue;
+      if (gt.dir && e.dx !== gt.dir && !(Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)) continue;
+      const along = gt.dir ? (e.x - gt.x) * gt.dir : Math.abs(e.x - gt.x), up = gt.y - e.y;
+      if (along < -24 || along > 24 * k + 8 || up < -16 || up > rise * k + 16) continue;
+      if (!first || e.frame < first.frame) first = e;
+      n++;
+    }
+    n = Math.min(n, k);
+    return { n, x: first ? first.x + gt.dir * 24 * n : gt.x, y: first ? first.y - rise * n : gt.y, d0: first ? Math.abs(first.x - gt.x) + Math.abs(first.y - gt.y) : Infinity };
+  };
+  Solver.bridgeProgress = bridgeProgress;
   /** Is a sequence item of a gate done: an entry of its skill near its spot. */
   const itemDone = (it, plan) => (plan || []).some((e) => e.type === "assignment" && e.skill === it.skill && Math.abs(e.x - it.x) <= 40 && Math.abs(e.y - it.y) <= 24);
   function wantedSkill(gt, plan) {
@@ -124,6 +147,7 @@
     // the route's first gate, and the first of the other lane (a gate already worked - the bash under way - is none of them)
     { const route = planRoute(ctx.planned, ctx.plan); if (route.length) nextGate.add(route[0].gate); const other = route.find((st) => st.who !== route[0].who); if (other) nextGate.add(other.gate); }
     let lastGate = null, lastItem = null; // the gate (and the sequence item) the last boost came from (a side channel for the candidate's record)
+    const progressMemo = new Map(); // a bridge gate's progress, once per node
     const dbgLem = typeof process !== "undefined" && process.env.NX_CAND_DEBUG;
     if (dbgLem) console.log("  debug: entries " + (ctx.plan || []).map((e) => e.skill + ">" + e.lemId + "@" + e.frame + " (" + e.x + "," + e.y + " " + e.dx + ")").join(" ") + "; free " + Array.from(free).join(",") + " nextGate " + Array.from(nextGate).map(gateKey).join(" ") + " route " + planRoute(ctx.planned, ctx.plan).map((st) => gateKey(st.gate)).join(" "));
     const planned = (c, e) => {
@@ -166,16 +190,20 @@
         // in the gate's region - or in no region the node's graph knows, the terrain having changed in the rollout
         // (a turn at a wall is at the wall whatever cell the foot of it belongs to - a step, the wall's own top)
         const er = graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : -1;
-        const inRegion = !graph || er === gt.from || er < 0 || e.type === "TURN";
+        const inRegion = !graph || er === gt.from || er < 0 || e.type === "TURN" || (graph.regions[gt.from] && graph.regions[gt.from].alias === er);
         const atWall = gt.wallX !== undefined && Math.abs(e.x - gt.wallX) <= 20 && (gt.kind === "bashup" || gt.kind === "bashbomb" || gt.kind === "raisedbash" || Math.abs(e.y - gt.y) <= 16) && inRegion;
         if (gt.also && c.skill === gt.also && !atWall) continue; // the second skill of a two-skill gate works at the far wall only
         // a bomber's blast is placed where it stands: under a thin roof or at a thin wall, its feet within a few
         // pixels of the gate's row (the floor above the roof is a different place altogether)
         const dy = gt.kind === "bombup" || gt.kind === "bomb" ? 6 : 16;
-        const near = atWall || (Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= dy && inRegion);
+        let near = atWall || (Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= dy && inRegion);
+        // a bridge of several builders under way: the next builder goes where the last one's bricks end (on the
+        // bricks, in no region the graph knows)
+        let progress = null;
+        if ((gt.builders || 1) > 1 && c.skill === gt.skill) { let pg = progressMemo.get(gt); if (!pg) { pg = bridgeProgress(gt, ctx.plan); progressMemo.set(gt, pg); } if (pg.n >= 1 && pg.n < gt.builders) { progress = pg; near = Math.abs(e.x - pg.x) <= 20 && Math.abs(e.y - pg.y) <= 16; } }
         // a gate away from a wall is worked facing away: the turn's new way is the way
         const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing && !gt.fromWall ? -e.dx : e.dx) === gt.dir;
-        if (near && way) { lastGate = gt; return nextGate.has(gt) ? 3 : 2.5; }
+        if (near && way) { lastGate = gt; lastItem = progress; return nextGate.has(gt) ? 3 : 2.5; }
       }
       return 1;
     };
