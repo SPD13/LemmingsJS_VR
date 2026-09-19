@@ -750,22 +750,77 @@ pass asks the same question from the same region hundreds of times), and
 a bridge's progress once per node; the profile had the planner's greedy
 sweeps and the boost at 40 % and 25 % of a run.
 
-**Still unsolved.** At tier 3 the lead pass (4600 expansions in its
-stretched share) lays the staircase, the bridges to the left structure
-and to the chain-link column's top and reaches the top row - two nodes
-read plan 0 - and gets no further: the bridges over the fire pits want
-the builder within a pixel or two of the brick's edge (from four short
-the last brick ends over the fire), and a bridge laid from a spot the
-sim did not try lands on the next brick's face and is turned back. A
-route of eighteen builders where each is a moment of its own is past what
-the search can chain with the anchors it has; what the level asks for
-next is a builder placed by the pixel (the moment computed from the
-gate's own start, not the nearest sampled one) and a crowd held by one
-blocker for the whole route. The fixtures gained four (57): the bridge
-under a brick, the climber's column, the after-bash region, the six-pixel
-step. Regressions hold (CindyLand 39/40 with 8 at tier 2; Keep your hair,
-Snuggle, Up For A Walk at tier 1; You need bashers is flaky at ten seconds
-on this machine today with the committed solver too).
+At tier 3 the lead pass (4600 expansions in its stretched share) laid
+the staircase, the bridges to the left structure and to the chain-link
+column's top and reached the top row, and got no further: the bridges
+over the fire pits want the builder within a pixel or two of the brick's
+edge (from four short the last brick ends over the fire). The fixtures
+gained four (57): the bridge under a brick, the climber's column, the
+after-bash region, the six-pixel step.
+
+### Later (20 September, night): a builder placed by the pixel, a crowd held for the route
+
+- **The gate's own pixel.** Every bridge gate the simulation makes
+  carries the start it was laid from (`px`, `py`); a bridge's start is
+  scanned pixel by pixel (ten short of the end at most, six for a
+  staircase away from a wall, two a cell from inside a region) and a
+  start from which the builder itself walks on is preferred over one
+  that leaves a followers' bridge (the top-row bridges: from the brick's
+  edge the builder is turned back at the next brick's face, from two
+  short its last brick is level with the top). A bridge ends where the
+  engine loses the lemming (its feet at the level's top row), not ten
+  pixels under it - the second fire pit's bridge rises to y 2.
+- **The moment on that pixel.** A candidate of its own (`pixel!`): the
+  frame the lemming stood on the gate's pixel heading its way, read from
+  a walk's ring (every event on a walk carries the last 56 positions), or
+  - when no event has that pixel in its ring, a landing two pixels short
+  of the brick's edge and off it before the next event - counted forward
+  from a landing, a turn or a tick along flat ground, a pixel a frame.
+  The macro's pick measures its fit to that pixel, so the exact moment
+  outranks the sampled ones. With it the lead crosses the fire pits in
+  the engine as the simulation said.
+- **Bridges the lead pass can see through.** The post-action plan is
+  taken in the lead pass too (the builder at the node stands on its own
+  bricks, in no region), and a lemming on the last bricks of a finished
+  bridge is planned as landed where the bridge leads.
+- **The hold kept for the route.** The guard blocker a route macro sets
+  behind the builder is no longer bombed at the chain's end when the
+  route ahead still has three skilled gates or more: the hold stays with
+  the node (and with every child while the blocker stands), the next
+  macro edge carries it on and sets no second guard, and the release
+  comes when the route is nearly done - or whenever the search bombs the
+  blocker itself.
+- The probe's `chain` puts two entries on one frame a frame apart, as the
+  search records them (its replays diverged from the search's before).
+- **A builder entry belongs to the nearest bridge gate.** A bridge of one
+  from the brick's edge and a bridge of two from ten pixels back share a
+  line; the two-builder gate claimed the one-builder entry, asked for a
+  second builder at the shrug and sent the lead into the sky. The first
+  builder's spot decides whose bridge it is (`bridgeProgress` with the
+  region's gates), in the planner's on-bridge logic and the boosts alike.
+- **The crowd's own way in.** The lead pass found a way in on a climber
+  the crowd cannot afford (thirty lemmings, ten climbers): the followers
+  paced at the staircase's top. When the way in spends a permanent skill
+  the crowd lacks, a second lead pass runs with the permanent skills
+  hidden (`hidePerms`), as long again while its plan keeps falling, and
+  both routes seed the crowd pass.
+- **The guard and the late release on a seeded root.** A seeded root (the
+  lead's whole way in as its plan) whose crowd dies following it gets a
+  `guard` candidate: a blocker on the lemming just behind the lead a frame
+  before the lead's first move, the node carrying the hold; and a standing
+  blocker gets a bomber once the plan's last worker is done (`BLOCK:free
+  late`, ranked before the plan's own picks once the lead is out). By
+  hand: the fifteen-builder route, the guard on N1 at frame 299, the
+  bomber at 3547 - 29 of 30 with 17 skills.
+
+**Solved at tier 3: 29/30 with 17 skills, frame 4652** (819 s, 6391
+expansions: the lead pass's way in with a climber in 2000, the lead pass
+without permanent skills in 280 more, the crowd pass's guard and release
+within 230 s of the start) - fifteen builders for one lemming's route
+across the lattice, a blocker behind it and a bomber on the blocker once
+the lead is out; recorded and verified (82 solutions, 0 mismatches).
+Regressions hold: Keep your hair 9, Snuggle 4, Up For A Walk 2 at tier 1,
+CindyLand 37/40 with 8 at tier 2.
 
 ### What limits the solver now
 
