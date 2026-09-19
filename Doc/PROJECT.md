@@ -759,7 +759,11 @@ shape of it:
   ways; a ramp into a real region enters at floor level), a bash from a
   builder's staircase at the wall (six pixels higher a builder, coming
   out where the tunnel's span meets an opening); bridges are walked
-  along their line to where they meet terrain; water, fire and traps are
+  along their line to where they meet terrain, from drop ends and away
+  from wall ends alike; a slit narrower than a cell (a pixel or three,
+  bounded by ground at the floor's level) ends a region in a drop as deep
+  as the column, bridged by a builder; a dig shaft deeper than the splat
+  height costs a group a floater each; water, fire and traps are
   ends too -
   deadly on foot, water swum by a swimmer, a trap passed by a disarmer and
   gone for all after, a once-only trap taking one lemming; a force field

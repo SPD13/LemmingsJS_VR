@@ -570,6 +570,53 @@ unsolved would take a night on three workers. `tools/nx-probe.js` holds the prob
 the picture, the reach, a node's plan and candidates, a plan's rollout, the
 pixels) so the next level's diagnosis starts from there.
 
+### Later (19 September): Darkness of the royal family - slits, and a level the lead cannot solve alone
+
+*Darkness of the royal family* (Redux, Gentle: 30 lemmings, save 20,
+five of each skill and ten builders) - every lemming walked up the long
+slope and died. The pixels showed why: a **one-pixel slit** between the
+steel tower and the terrain at x 280, from the slope's top to the level's
+bottom, invisible to the four-pixel cells (which read a wall there); two
+more slits split the "fins" under the exit. So: a floor cell with a pixel
+column whose ground lies more than eight pixels under the floor is no
+floor - the region ends there in a drop as deep as the column, bridged by
+a builder or a platformer to the floor beyond - a slit being a run of at
+most three such columns bounded on both sides by ground at the floor's
+level (a ledge's end, where the ground stays deep beyond, is the cells'
+own drop; the first version cut a floor cell straddling the hatch's
+ledge and lost two drop gates).
+
+Then what the level asks: a **staircase away from a wall** (a lemming
+turned at the wall builds back the way it came - three builders from the
+cavity floor's top corner up onto the slope under the exit pillar), which
+the bridge finder never tried (it built from drop ends only); **the lead
+planned from the hatch's landing** at the root, where it has not spawned
+yet (the lead pass had no plan at all before); **the plan macro in the
+lead pass**; and **a dig shaft deeper than the splat height is deadly for
+everyone but the digger** - a floater each for a group, so the crowd's
+plan takes the miner's ramp instead (the dig route killed the crowd in
+the trace: N17 splatting at the shaft's foot).
+
+With that the crowd plan reads the level at cost 10: a miner's ramp off
+the slope, a bridge over the pit, a bridge over the slit onto the plateau,
+the trap (a gauntlet), down onto the cavity floor, three builders up to
+the slope, a bash through the pillar into the exit. The search's chain at
+tier 2 is the right one - blocker at the top, miner, pit bridge - and
+fails on two things the pixels show: **a partial bridge is a cliff** (the
+crowd diverted by the ramp walks up the unfinished staircase and off its
+end - a bridge with a crowd behind it needs a blocker and a bomber, a
+macro of its own, unpriced by the plan), and **the slit bridge is a
+follower's bridge** (a builder blocked by terrain turns around, as the
+engine's `transition(L, WALKING, true)` says, so the one who bridges the
+slit from the low side walks back and only those behind cross; the lead
+pass can never finish this level alone, and neither can a lane that
+expects its builder to go on). Unsolved at tier 2 (962 expansions);
+**solved at tier 3: 20/30 with 21 skills** (1087 s - past the 900 s
+budget, the optimiser and the verification on top - 13817 lead and 568
+crowd expansions), recorded and verified. Twenty-one skills where the
+route needs ten: the crowd control (blockers and bombers around the
+bridges) the plan does not price, found by the search's breadth alone.
+
 ### What limits the solver now
 
 1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang

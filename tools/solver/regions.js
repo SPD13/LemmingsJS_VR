@@ -81,6 +81,33 @@
     const at = (cx, cy) => (cx < 0 || cy < 0 || cx >= cw || cy >= ch) ? 1 : kind[cx + cy * cw];
     const floor = new Uint8Array(cw * ch);
     for (let cy = 0; cy < ch - 1; cy++) for (let cx = 0; cx < cw; cx++) if (at(cx, cy) === 0 && at(cx, cy + 1) !== 0 && at(cx, cy - 1) === 0) floor[cx + cy * cw] = 1;
+    // slits: a gap narrower than a cell between two terrain pieces (a pixel or three), invisible to the cells, which
+    // a walker falls into all the same - a floor cell with a pixel column whose ground lies more than eight pixels
+    // under the cell's floor is no floor: the region ends there, in a drop as deep as the column goes
+    const phys0 = physics || level.physics;
+    const solid0 = (x, y) => x >= 0 && y >= 0 && x < w && y < h && (phys0[x + y * w] & PM.SOLID) !== 0;
+    const slit = new Int16Array(cw * ch).fill(-1); // the cell's slit column (px), or -1
+    const slitDepth = new Int16Array(cw * ch);     // pixels down to the ground in that column (-1: off the level)
+    for (let cy = 0; cy < ch - 1; cy++) for (let cx = 0; cx < cw; cx++) {
+      const i = cx + cy * cw;
+      if (!floor[i]) continue;
+      // the floor's level: the topmost ground pixel in the cell below across its columns
+      let top = Infinity;
+      for (let x = cx * CELL; x < Math.min(w, (cx + 1) * CELL); x++) for (let y = cy * CELL; y < Math.min(h, (cy + 2) * CELL); y++) if (solid0(x, y)) { if (y < top) top = y; break; }
+      if (top === Infinity) continue;
+      // a slit is a run of three columns at most with deep ground, bounded on both sides by ground at the floor's
+      // level (a ledge's end, where the ground stays deep beyond, is a drop the cells see by themselves)
+      const groundY = (x) => { let y = top; while (y < h && !solid0(x, y)) y++; return y; };
+      const deep = (x) => x < 0 || x >= w || groundY(x) - top > 8;
+      for (let x = cx * CELL; x < Math.min(w, (cx + 1) * CELL); x++) {
+        if (!deep(x)) continue;
+        let l = x - 1; while (l >= x - 3 && deep(l)) l--;
+        let rr = x + 1; while (rr <= x + 3 && deep(rr)) rr++;
+        if (l < 0 || rr >= w || deep(l) || deep(rr) || rr - l - 1 > 3) continue;
+        const y = groundY(x);
+        slit[i] = x; slitDepth[i] = y >= h ? -1 : y - top; floor[i] = 0; break;
+      }
+    }
     // hazards: water drowns, fire burns, a trap kills - none of their cells is floor to walk on
     const hazard = new Uint8Array(cw * ch);
     const HAZARD = { WATER, FIRE, TRAP, TRAPONCE, FORCELEFT, FORCERIGHT };
@@ -262,7 +289,20 @@
           }
           if (to >= 0) gate(r.id, to, "jump", "JUMPER", 1, ex, ey, dir, { perLemming: true });
         };
-        if (hz === FORCELEFT || hz === FORCERIGHT) {
+        const si = (nx >= 0 && nx < cw) ? nx + ey * cw : -1;
+        if (si >= 0 && slit[si] >= 0) {
+          // a slit: a drop as deep as the column - deadly past the splat height or off the level - crossed by a bridge
+          // (one builder or platformer) to the floor beyond it, if any; a floater rides a deep one down
+          const depth = slitDepth[si], cells = depth < 0 ? Infinity : Math.ceil(depth / CELL);
+          const l = depth < 0 ? null : landing(nx, ey + Math.floor(depth / CELL));
+          r.ends[side] = { kind: "drop", cells, region: l ? l.region : -1, slit: true };
+          if (l && l.region >= 0 && l.region !== r.id) {
+            if (cells <= SPLAT_CELLS) gate(r.id, l.region, "drop", null, 0, ex, ey, dir);
+            else gate(r.id, l.region, "drop", "FLOATER", 1, ex, ey, dir, { perLemming: true });
+          }
+          for (let k = 1; k <= 2; k++) { const id = regionAt(nx + dir * k, ey); if (id >= 0 && id !== r.id) { gate(r.id, id, "build", "BUILDER", 1, ex, ey, dir, { builders: 1, twoWay: true }); gate(r.id, id, "platform", "PLATFORMER", 1, ex, ey, dir, { platformers: 1, twoWay: true }); break; } }
+          crossings();
+        } else if (hz === FORCELEFT || hz === FORCERIGHT) {
           // a force field: it turns whoever comes against it and lets the others through on foot
           r.ends[side] = { kind: "force", dir: hz === FORCELEFT ? -1 : 1 };
           let far = nx; while (far >= 0 && far < cw && hazardAt(far, ey) === hz) far += dir;
@@ -401,6 +441,25 @@
             }
             if (id >= 0 && id !== r.id) { gate(r.id, id, "raisedbash", "BASHER", cost, ex, ey, dir, { sequence: seq, builders: k, wallX, runUp: BUILD_ACROSS * CELL * k, feetY }); break; }
           }
+          // and away from it: a lemming turned at the wall builds back the way it came, a staircase up over its own
+          // region to whatever floor its line meets (a slope across a cavity), as the crossings at a drop do
+          {
+            const back = -dir;
+            const seen = new Set();
+            for (let t = 1; t <= BUILD_ACROSS * MAX_BUILDERS; t++) {
+              const col = ex + back * t, row = ey - Math.floor((t * BUILD_UP) / BUILD_ACROSS);
+              if (col < 0 || col >= cw || row < 1) break;
+              const k = Math.ceil(t / BUILD_ACROSS);
+              if (at(col, row) !== 0 || at(col, row - 1) !== 0) {
+                const id = at(col, row) !== 0 ? regionAt(col, row - 1) : -1;
+                if (id >= 0 && id !== r.id && !seen.has(id)) gate(r.id, id, "build", "BUILDER", k, ex, ey, back, { builders: k, twoWay: true, fromWall: true });
+                break;
+              }
+              const id = regionAt(col, row);
+              if (id >= 0 && id !== r.id && !seen.has(id)) { seen.add(id); gate(r.id, id, "build", "BUILDER", k, ex, ey, back, { builders: k, twoWay: true, fromWall: true }); break; }
+              if (t % BUILD_ACROSS === 0) { const l = landing(col, row + 1); if (l && l.region >= 0 && l.region !== r.id && l.cells <= SPLAT_CELLS && !seen.has(l.region)) { seen.add(l.region); gate(r.id, l.region, "build", "BUILDER", k, ex, ey, back, { builders: k, twoWay: false, fromWall: true }); } }
+            }
+          }
           // up it: a climber to the wall's top whatever it is made of; a jump or a stack up a low one; a staircase
           // of builders up it, one per three cells of height, given the run-up (six cells of floor a builder)
           if (top >= 1 && at(nx, top - 1) === 0) {
@@ -469,9 +528,11 @@
         let y = jy + 1; while (y < ch && at(jx, y) !== 0) { if (at(jx, y) === 2) { y = -1; break; } y++; }
         if (y < 0 || y >= ch) continue;
         const l = landing(jx, y);
-        if (l && l.region >= 0 && l.region !== r.id) { dug = { to: l.region, cx: jx, cy: jy }; break; }
+        if (l && l.region >= 0 && l.region !== r.id) { dug = { to: l.region, cx: jx, cy: jy, depth: (l.cy - jy) }; break; }
       }
-      if (dug) gate(r.id, dug.to, "dig", "DIGGER", 1, dug.cx, dug.cy, 0);
+      // the shaft is the digger's own way down, a step at a time; for everyone after it is a fall of the shaft's
+      // depth - deadly past the splat height, a floater's job then
+      if (dug) gate(r.id, dug.to, "dig", "DIGGER", 1, dug.cx, dug.cy, 0, { depth: dug.depth, deep: dug.depth > SPLAT_CELLS });
     }
     // a tunnel a basher digs into the bedrock up to steel is a floor of its own once dug, and what can be
     // done from it or into it is worth planning before the first stroke: it becomes a region in waiting,
@@ -531,7 +592,7 @@
         }
       }
     }
-    return { cw, ch, kind, floor, hazard, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
+    return { cw, ch, kind, floor, hazard, slit, slitDepth, region, regions, gates, exitAt, regionOf: (x, y) => regionAt(Math.floor(x / CELL), Math.floor(y / CELL)) };
   }
 
   /** The region a climber on the wall beside (x, y), heading dx, gets to: the floor at the wall's top, or -1. */
@@ -624,10 +685,13 @@
         const per = gt.perLemming ? (crowd && crowd.lacking && crowd.lacking[gt.skill] !== undefined ? crowd.lacking[gt.skill] : crowd && crowd.n !== undefined ? crowd.n : crowd || 1) : 1;
         // closed: the skill is out, or too few of it for everyone in the group who lacks it
         if (!free && gt.skill && (!(skills[gt.skill] > 0) || per > skills[gt.skill])) continue;
+        // a deep shaft (a dig past the splat height) for a group: a floater each for those without one
+        let deepCost = 0;
+        if (gt.deep && crowd && !crowd.lead) { const need = crowd.lacking && crowd.lacking.FLOATER !== undefined ? crowd.lacking.FLOATER : crowd.n !== undefined ? crowd.n : 1; if (need > (skills.FLOATER || 0)) continue; deepCost = need; }
         if (!free && gt.also && !(skills[gt.also] > 0)) continue;
         const { extra, turn, how } = turnCost(reg, d, gt, skills, climber);
         if (extra === Infinity) continue;
-        const cost = c + extra + (free ? 0 : gt.cost * per);
+        const cost = c + extra + (free ? 0 : gt.cost * per) + deepCost;
         push(gt.to, gt.dir === 0 ? d : gt.dir, cost, { from: k, step: { gate: gt, dir: gt.dir === 0 ? d : gt.dir, turn, how } });
       }
     }
@@ -691,7 +755,7 @@
     const terrain = graph.gates.filter((gt) => TERRAIN.has(gt.kind) && (!gt.skill || skills[gt.skill] > 0));
     let best = null;
     for (const leadGroup of taken) {
-      const lead = { n: 1, lacking: leadGroup.leadLacking || scaled(leadGroup.lacking, 1) };
+      const lead = { n: 1, lead: true, lacking: leadGroup.leadLacking || scaled(leadGroup.lacking, 1) };
       const start = { region: leadGroup.region, dir: leadGroup.dir };
       const others = [];
       for (const g of taken) {
@@ -762,6 +826,7 @@
           const per = gt.perLemming ? (st.who === "lead" ? (lead.lacking[gt.skill] !== undefined ? lead.lacking[gt.skill] : 1) : (st.group.lacking && st.group.lacking[gt.skill] !== undefined ? st.group.lacking[gt.skill] : st.group.n)) : 1;
           if (gt.sequence) for (const it of gt.sequence) spend(it.skill, 1);
           else { spend(gt.skill, gt.cost * per); if (gt.also) spend(gt.also, gt.alsoCost || per); }
+          if (gt.deep && st.who === "group" && st.group) spend("FLOATER", st.group.lacking && st.group.lacking.FLOATER !== undefined ? st.group.lacking.FLOATER : st.group.n);
           if (st.turn && st.how === "BLOCKER") { spend("BLOCKER", 1); spend("BOMBER", 1); } else if (st.turn && st.how) spend(st.how, 1);
         }
         for (const k of Object.keys(used)) if (used[k] > (skills[k] || 0)) { if (dbg) console.log("      over budget " + k + " " + used[k] + "/" + (skills[k] || 0)); return null; }

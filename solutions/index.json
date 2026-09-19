@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-19T07:50:05.441Z",
+ "generated": "2026-09-19T08:34:25.404Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12447,19 +12447,23 @@
    "optimal": false
   },
   "Lemmings_Redux/Gentle/Darkness_of_the_royal_family.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Darkness_of_the_royal_family.nxrp",
    "needed": 20,
    "count": 30,
-   "tier": 2,
+   "tier": 3,
    "solverVersion": "0.1.0",
+   "saved": 20,
+   "skillsUsed": 21,
+   "completionFrame": 2385,
    "maxSavable": 30,
+   "optimal": false,
+   "elapsedMs": 1087400,
+   "expansions": 14385,
    "features": [
     "steel",
     "trap"
-   ],
-   "expansions": 4331,
-   "elapsedMs": 108068
+   ]
   },
   "Lemmings_Redux/Gentle/Doomsday.nxlv": {
    "status": "unsolved",
