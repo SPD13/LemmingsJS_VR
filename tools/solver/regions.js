@@ -300,8 +300,17 @@
             if (cells <= SPLAT_CELLS) gate(r.id, l.region, "drop", null, 0, ex, ey, dir);
             else gate(r.id, l.region, "drop", "FLOATER", 1, ex, ey, dir, { perLemming: true });
           }
-          for (let k = 1; k <= 2; k++) { const id = regionAt(nx + dir * k, ey); if (id >= 0 && id !== r.id) { gate(r.id, id, "build", "BUILDER", 1, ex, ey, dir, { builders: 1, twoWay: true }); gate(r.id, id, "platform", "PLATFORMER", 1, ex, ey, dir, { platformers: 1, twoWay: true }); break; } }
+          // the builder's first bricks meet the far side's floor when it stands two pixels or more above the near feet: the
+          // builder is blocked and turns back (the engine's transition with a turn) - the bridge is for those behind
+          const nearTop = (() => { let y = ey * CELL; while (y < h && !solid(ex * CELL + (dir > 0 ? CELL - 1 : 0), y)) y++; return y; })();
+          let farTop = 0; { let x = slit[si]; while (x >= 0 && x < w && !solid(x, nearTop) && Math.abs(x - slit[si]) <= 4) x += dir; let y = Math.max(0, nearTop - 12); while (y < h && !solid(x, y)) y++; farTop = y; }
+          const blocked = farTop <= nearTop - 2;
+          let beyondId = -1;
+          for (let k = 1; k <= 2 && beyondId < 0; k++) for (const dy of [0, -1, 1]) { const id = regionAt(nx + dir * k, ey + dy); if (id >= 0 && id !== r.id) { beyondId = id; break; } }
+          if (beyondId >= 0) { gate(r.id, beyondId, "build", "BUILDER", 1, ex, ey, dir, { builders: 1, twoWay: true, followersOnly: blocked }); gate(r.id, beyondId, "platform", "PLATFORMER", 1, ex, ey, dir, { platformers: 1, twoWay: true, followersOnly: blocked }); }
           crossings();
+          // every bridge from here onto the floor beyond the slit is the same bridge: blocked the same way
+          if (beyondId >= 0 && blocked) for (const gt of r.gates) if (gt.to === beyondId && (gt.kind === "build" || gt.kind === "platform")) gt.followersOnly = true;
         } else if (hz === FORCELEFT || hz === FORCERIGHT) {
           // a force field: it turns whoever comes against it and lets the others through on foot
           r.ends[side] = { kind: "force", dir: hz === FORCELEFT ? -1 : 1 };
@@ -681,10 +690,12 @@
       const twins = [];
       if (opened) for (const og of opened) if (og.twoWay && og.to === r) twins.push({ from: r, to: og.from, kind: og.kind, skill: null, cost: 0, x: og.x, y: og.y, dir: -og.dir, twin: og });
       for (const gt of reg.gates.concat(twins)) {
-        const free = (opened && opened.has(gt)) || !!gt.twin;
+        const free = ((opened && opened.has(gt)) || !!gt.twin) && !(gt.deep && crowd && !crowd.lead); // a deep shaft is no one's to open for the next
         const per = gt.perLemming ? (crowd && crowd.lacking && crowd.lacking[gt.skill] !== undefined ? crowd.lacking[gt.skill] : crowd && crowd.n !== undefined ? crowd.n : crowd || 1) : 1;
         // closed: the skill is out, or too few of it for everyone in the group who lacks it
         if (!free && gt.skill && (!(skills[gt.skill] > 0) || per > skills[gt.skill])) continue;
+        // a bridge only those behind the builder cross (the builder turns back): none for the lead's own way
+        if (gt.followersOnly && !free && crowd && crowd.lead) continue;
         // a deep shaft (a dig past the splat height) for a group: a floater each for those without one
         let deepCost = 0;
         if (gt.deep && crowd && !crowd.lead) { const need = crowd.lacking && crowd.lacking.FLOATER !== undefined ? crowd.lacking.FLOATER : crowd.n !== undefined ? crowd.n : 1; if (need > (skills.FLOATER || 0)) continue; deepCost = need; }
@@ -752,7 +763,7 @@
       memo.set(mk, r);
       return r;
     };
-    const terrain = graph.gates.filter((gt) => TERRAIN.has(gt.kind) && (!gt.skill || skills[gt.skill] > 0));
+    const terrain = graph.gates.filter((gt) => TERRAIN.has(gt.kind) && (!gt.skill || skills[gt.skill] > 0) && !gt.followersOnly);
     let best = null;
     for (const leadGroup of taken) {
       const lead = { n: 1, lead: true, lacking: leadGroup.leadLacking || scaled(leadGroup.lacking, 1) };
@@ -767,6 +778,7 @@
         let pos = start, cost = 0, steps = [];
         const opened = new Set();
         for (const T of order) {
+          if (T.followersOnly) return null; // not the lead's to take: it would turn back
           const sw = sweep(graph, pos, skills, lead, opened);
           const reg = graph.regions[T.from];
           let via = null;
@@ -786,6 +798,8 @@
         }
         const rest = graph.regions[pos.region].exit ? { cost: 0, steps: [] } : exitCost(pos, lead, opened);
         if (!rest) return null;
+        // whatever terrain the lead works on the rest of its way is open for the crowd as well
+        for (const st of rest.steps) if (TERRAIN.has(st.gate.kind) && !st.gate.twin && !st.gate.followersOnly) opened.add(st.gate);
         return { cost: cost + rest.cost, steps: steps.concat(rest.steps), opened };
       };
       // each lead's greedy climbs against its own best: another lead's plan as the mark would stop a chain of
@@ -838,7 +852,7 @@
       for (const g of others) {
         const own = groupCost(g, new Set(), "");
         if (!own) continue;
-        const order = []; for (const st of own.steps) if (TERRAIN.has(st.gate.kind) && !order.includes(st.gate)) order.push(st.gate);
+        const order = []; for (const st of own.steps) if (TERRAIN.has(st.gate.kind) && !st.gate.followersOnly && !order.includes(st.gate)) order.push(st.gate);
         if (order.length) consider(evaluate(order));
       }
       // one gate opened, the nearest first (one gate per crossing, the cheapest); then, while it helps, one more on top of the best
@@ -856,6 +870,35 @@
       }
       if (typeof process !== "undefined" && process.env.NX_PLAN_DEBUG) console.log("  lead from region " + leadGroup.region + " n" + leadGroup.n + " dir " + leadGroup.dir + ": " + (lb ? "cost " + lb.cost + " order " + lb.order.map((T) => T.kind + "@" + T.x).join(",") : "none") + " ranked " + ranked.slice(0, 8).map((x) => x.T.kind + "@" + x.T.x + "=" + x.d).join(" "));
       if (lb && (!best || lb.cost < best.cost)) best = lb;
+    }
+    if (!best) {
+      // no lead reaches an exit on its own (a bridge only those behind its builder cross): every group pays its own
+      // way, the gates one opens open for the next
+      let opened = new Set(), key = "", total = 0; const parts = [], all = [];
+      for (const g of taken.slice().sort((a, b) => b.n - a.n)) { // the crowd first: its route is the one the search follows
+        const gc = groupCost(g, opened, key);
+        if (!gc) return null;
+        total += gc.cost; parts.push(Object.assign({}, g, gc));
+        for (const st of gc.steps) all.push(Object.assign({}, st, { who: "group", group: g }));
+        const more = gc.steps.filter((st) => TERRAIN.has(st.gate.kind) && !st.gate.twin && !opened.has(st.gate)).map((st) => st.gate);
+        if (more.length) { opened = new Set([...opened, ...more]); key = keyOf(opened); }
+      }
+      // the route's skills must fit the stock here as well
+      const used = {};
+      const spend = (skill, n) => { if (skill) used[skill] = (used[skill] || 0) + n; };
+      const paid = new Set();
+      for (const st of all) {
+        const gt = st.gate;
+        if (gt.twin || paid.has(gt)) continue;
+        paid.add(gt);
+        const per = gt.perLemming ? (st.group.lacking && st.group.lacking[gt.skill] !== undefined ? st.group.lacking[gt.skill] : st.group.n) : 1;
+        if (gt.sequence) for (const it of gt.sequence) spend(it.skill, 1);
+        else { spend(gt.skill, gt.cost * per); if (gt.also) spend(gt.also, gt.alsoCost || per); }
+        if (gt.deep) spend("FLOATER", st.group.lacking && st.group.lacking.FLOATER !== undefined ? st.group.lacking.FLOATER : st.group.n);
+        if (st.turn && st.how === "BLOCKER") { spend("BLOCKER", 1); spend("BOMBER", 1); } else if (st.turn && st.how) spend(st.how, 1);
+      }
+      for (const k of Object.keys(used)) if (used[k] > (skills[k] || 0)) return null;
+      best = { cost: total, steps: all, lead: [], leadGroup: null, groups: parts, order: [] };
     }
     return best;
   }

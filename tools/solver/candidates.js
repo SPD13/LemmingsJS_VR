@@ -171,7 +171,8 @@
         // pixels of the gate's row (the floor above the roof is a different place altogether)
         const dy = gt.kind === "bombup" || gt.kind === "bomb" ? 6 : 16;
         const near = atWall || (Math.abs(e.x - gt.x) <= 20 && Math.abs(e.y - gt.y) <= dy && inRegion);
-        const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing ? -e.dx : e.dx) === gt.dir;
+        // a gate away from a wall is worked facing away: the turn's new way is the way
+        const way = gt.dir === 0 || (e.type === "TURN" && !e.climbing && !gt.fromWall ? -e.dx : e.dx) === gt.dir;
         if (near && way) { lastGate = gt; return nextGate.has(gt) ? 3 : 2.5; }
       }
       return 1;
@@ -309,6 +310,9 @@
               // a staircase up this wall: the builder starts its run-up before it (24 px a builder), a plan's gate says how far;
               // a builder right at the wall is then the wrong moment (its bricks meet the wall at once)
               const stair = skill === "BUILDER" && e.type === "TURN" ? steps.find((st) => (st.gate.kind === "buildup" || st.gate.kind === "bashup" || st.gate.kind === "raisedbash") && st.gate.wallX !== undefined && Math.abs(e.x - st.gate.wallX) <= 20 && st.gate.dir === dir && (!st.gate.sequence || wantedSkill(st.gate, ctx.plan) === "BUILDER")) : null;
+              // a staircase away from the wall: the moment just after the turn, facing away (the k-short moments face the wall)
+              const away = e.type === "TURN" && !e.climbing && (skill === "BUILDER" || skill === "PLATFORMER") ? steps.find((st) => st.gate.fromWall && st.gate.skill === skill && Math.abs(e.x - st.gate.x) <= 20 && st.gate.dir === e.dx) : null;
+              if (away) { frames.push([e.frame + 2, 1.2, e.x]); break; }
               for (const k of params.offsets) frames.push([frameShortOf(e.ring || [], edge, dir, k), (stair ? 0.4 : 1) / (1 + k / 8), edge - k * dir]);
               if (stair) {
                 const gt = stair.gate;

@@ -121,7 +121,7 @@
       // its post), with the lemmings as they stand then - not at the rollout's end, where the worker who takes the
       // next gate may long have left, and not with the terrain the plan's later entries will make
       let after = null;
-      const changedAfter = !lemFilter && planned && !events.some((e) => e.type === "DEATH") && this._planVersion() !== this._graphVersion;
+      const changedAfter = !lemFilter && planned && this._planVersion() !== this._graphVersion;
       if (changedAfter) {
         const last = plan.length ? plan[plan.length - 1] : null;
         const done = last && last.type === "assignment" ? events.find((e) => e.lemId === last.lemId && e.frame > node.frame && (e.type === "WORK_END" || e.type === "SHRUG" || e.type === "BLOCK" || e.type === "EXIT")) : null;
@@ -256,7 +256,7 @@
     _planMacro(node, cand, target, lemFilter) {
       const world = this.world;
       const chain = [];
-      let cur = node;
+      let cur = node, held = null;
       for (let i = 0; i < 6 && cur; i++) {
         // the route's next gate, from the node's own plan each time (the plan moves on with every gate taken):
         // the candidate's own pick for the first, then the best moment boosted for that gate among the child's
@@ -271,16 +271,67 @@
         }
         if (!pick) break;
         if (!this._goto(cur)) break;
+        // a bridge with a crowd close behind is a cliff while it is built (the followers walk off the bricks' end): the
+        // one just behind the builder is made a blocker first, and bombed once the bridge stands
+        const bridge = !lemFilter && (pick.skill === "BUILDER" || pick.skill === "PLATFORMER") && pick.gate && (pick.gate.kind === "build" || pick.gate.kind === "platform" || pick.gate.kind === "buildup");
+        let guard = null;
+        if (bridge && !held && world.skillCounts().BLOCKER > 0 && world.skillCounts().BOMBER > 0 && pick.frame - 1 > world.frame) {
+          world.step(pick.frame - 1 - world.frame);
+          const B = world.lemmingById(pick.lemId);
+          if (B) {
+            const WALKING = Lemmix.BA.WALKING;
+            let bestL = null, bestD = Infinity;
+            for (const L2 of world.game.lemmings) {
+              if (L2 === B || L2.removed || L2.cannotReceiveSkills || L2.action !== WALKING || L2.dx !== B.dx || Math.abs(L2.y - B.y) > 12) continue;
+              const d = (B.x - L2.x) * B.dx; // behind the builder, the same way
+              if (d >= 6 && d <= 80 && d < bestD) { bestD = d; bestL = L2; }
+            }
+            if (bestL && world.assign(bestL, "BLOCKER")) { guard = bestL.identifier; world.step(1); }
+          }
+        }
         if (pick.frame > world.frame) world.step(pick.frame - world.frame);
         if (world.frame !== pick.frame) break;
         const L = world.lemmingById(pick.lemId);
         if (!L || !world.assign(L, pick.skill)) break;
         world.step(1);
-        const child = this._child(cur, Object.assign({}, pick, { why: pick.why + " plan" }), target, lemFilter, true);
+        let child = this._child(cur, Object.assign({}, pick, { why: pick.why + (guard ? " plan+hold(" + guard + "@" + (pick.frame - 1) + ")" : " plan") }), target, lemFilter, true);
         if (!child) break;
         chain.push(child);
         if (child.dead || child.solved) break;
+        if (guard) held = { id: guard, builder: pick.lemId, frame: pick.frame };
+        // the crowd stays held while the route goes on over bridges (the next gate another bridge, taken by the same
+        // hand as often as not); it is let go - the blocker bombed, a node of its own - once the next gate is no
+        // bridge, or the chain ends
+        const nextRoute = Solver.planRoute(child.planned, child.plan);
+        const nextIsBridge = nextRoute.length && (nextRoute[0].gate.kind === "build" || nextRoute[0].gate.kind === "platform" || nextRoute[0].gate.kind === "buildup");
+        if (held && child.events && !nextIsBridge) {
+          const done = child.events.find((e) => e.lemId === held.builder && e.frame > held.frame && (e.type === "WORK_END" || e.type === "SHRUG"));
+          if (done && this._goto(child)) {
+            const at = done.frame + 8;
+            if (at > world.frame) world.step(at - world.frame);
+            const G = world.lemmingById(held.id);
+            if (world.frame === at && G && world.assign(G, "BOMBER")) {
+              world.step(1);
+              const freed = this._child(child, { kind: "assign", lemId: held.id, skill: "BOMBER", frame: at, why: "BLOCK:free plan" }, target, lemFilter, true);
+              if (freed) { chain.push(freed); held = null; if (freed.dead || freed.solved) break; child = freed; }
+            }
+          }
+        }
         cur = child;
+      }
+      // the chain over, the crowd still held: let go now (the bridges built so far are theirs to cross)
+      if (held && cur && cur.events && !cur.dead && !cur.solved) {
+        const done = cur.events.find((e) => e.lemId === held.builder && e.frame > held.frame && (e.type === "WORK_END" || e.type === "SHRUG"));
+        if (done && this._goto(cur)) {
+          const at = done.frame + 8;
+          if (at > world.frame) world.step(at - world.frame);
+          const G = world.lemmingById(held.id);
+          if (world.frame === at && G && world.assign(G, "BOMBER")) {
+            world.step(1);
+            const freed = this._child(cur, { kind: "assign", lemId: held.id, skill: "BOMBER", frame: at, why: "BLOCK:free plan" }, target, lemFilter, true);
+            if (freed) chain.push(freed);
+          }
+        }
       }
       return chain.length ? chain : null;
     }
