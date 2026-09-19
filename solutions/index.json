@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-19T08:34:25.404Z",
+ "generated": "2026-09-19T09:21:37.243Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12454,12 +12454,12 @@
    "tier": 3,
    "solverVersion": "0.1.0",
    "saved": 20,
-   "skillsUsed": 21,
-   "completionFrame": 2385,
+   "skillsUsed": 14,
+   "completionFrame": 2278,
    "maxSavable": 30,
    "optimal": false,
-   "elapsedMs": 1087400,
-   "expansions": 14385,
+   "elapsedMs": 813800,
+   "expansions": 25954,
    "features": [
     "steel",
     "trap"

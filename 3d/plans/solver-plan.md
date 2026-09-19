@@ -617,6 +617,47 @@ crowd expansions), recorded and verified. Twenty-one skills where the
 route needs ten: the crowd control (blockers and bombers around the
 bridges) the plan does not price, found by the search's breadth alone.
 
+### Later (19 September, evening): guarded bridges, follower-only bridges
+
+The two mechanisms left open above, and what they dragged in:
+
+- **A guarded bridge.** When the route macro takes a bridge gate (a build,
+  a platform, a staircase up a wall) and other lemmings walk close behind
+  the builder - the same way, within eighty pixels - the one just behind
+  is made a blocker a frame before the builder starts, and bombed once the
+  bridge stands: the crowd stays held while the route goes on over
+  bridges (the next gate another bridge, taken by the same hand as often
+  as not) and is let go when the next gate is no bridge or the chain
+  ends. On the level's pit bridge the loss went from 29 to 4. The trace
+  names the guard (`plan+hold(N5@664)`).
+- **A follower-only bridge.** A slit bridge whose far floor stands two
+  pixels or more above the near feet blocks the builder's first bricks, and
+  a blocked builder turns around (the engine's `transition(L, WALKING,
+  true)`): the bridge is for those behind. Such gates are none of the
+  lead's to take - not in its route, not in the greedy's order - and a
+  group pays them itself. When no lead can reach an exit at all (this
+  level), the plan falls back to the groups paying their own way in turn,
+  the crowd's group first, what one opens open for the next, under the
+  same skill budget.
+- With them: a deep shaft is no one's to open for the next group (a
+  follower falls it all the same); the lead's whole route opens its
+  terrain for the crowd, not only the greedy's chosen gates; the
+  post-action plan is taken even when someone died in the rollout (on a
+  crowd level someone always has); a staircase away from a wall is
+  worked the moment after the turn, facing away (the k-short moments face
+  the wall); the fallback plan orders the crowd's group first.
+
+*Darkness of the royal family* at tier 2 now runs the whole cooperative
+chain inside one macro edge - hold at the top, miner, guarded pit bridge,
+slit bridge, release, the cavity's staircase - and still ends unsolved
+(1698 expansions): the branch that reaches the staircase has lost twelve
+(dead by count), the other ten with the trap still to pass and none to
+spare. The plan prices the trap as a gauntlet at one per group where it
+takes five of twenty; a bridge over the trap, or a blocker beside it, is
+the next thing the level asks for. **Tier 3 with all this: 20/30 with 14
+skills** (814 s, within the budget; 13606 lead and 12348 crowd
+expansions), against 21 skills and 1087 s before - recorded and verified.
+
 ### What limits the solver now
 
 1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang

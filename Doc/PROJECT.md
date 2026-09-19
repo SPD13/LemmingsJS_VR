@@ -808,8 +808,12 @@ shape of it:
   moment an action's work is done, and the plan's route - the crowd's
   gates and, before any that rides on a gate the lead opens, the lead's
   own, a gate of several skills (a staircase then a bash) taken skill by
-  skill - is one edge of its own, followed gate after gate; a pass that
-  runs dry with time left
+  skill - is one edge of its own, followed gate after gate, a bridge
+  with a crowd close behind guarded by a blocker until the bridges stand
+  and a bomber then; a bridge only those behind its builder cross (the
+  builder blocked by the far floor turns around) is a group's, never the
+  lead's, and with no lead able to reach an exit the groups pay their own
+  way in turn; a pass that runs dry with time left
   runs again at the next tier's breadth, and at the widest, with the
   priors jiggled (tier 3's three restarts, a seeded generator). Tiers:
   10 s, 2 min, 15 min.
