@@ -194,6 +194,104 @@ async function main() {
     const g6 = R.build(brick6, brick6.physics), n6 = g6.regionOf(50, 61);
     const p6 = n6 >= 0 ? R.plan(g6, { region: n6, dir: 1 }, {}, 1) : null;
     check("a six-pixel step is walked: a slope, the exit at cost 0", n6 >= 0 && g6.regions[n6].ends.right.kind === "slope" && p6 && p6.cost === 0, n6 >= 0 && { end: g6.regions[n6].ends.right, cost: p6 && p6.cost });
+    // a chamber high in a wall (its floor seven builders over the room's): a long staircase from the floor's pixel
+    // that brings the last shrug to the wall's face, a landing in waiting at its top, the bash from there
+    const attic = (hatchX, leftWall, skills) => {
+      const lv = F.makeLevel(420, 160, 140);
+      F.setSpawn(lv, [F.makeWindow(hatchX, 100, 1)], 1, 1, 20);
+      lv.skills = Object.keys(skills).map((name) => ({ name, count: skills[name] }));
+      if (leftWall) lv.fill(0, 0, 20, 140, PM.SOLID); else lv.fill(0, 140, 24, 160, 0);
+      lv.fill(300, 0, 420, 140, PM.SOLID);
+      lv.fill(312, 36, 420, 56, 0); // the chamber, its floor at 56: 84 px over the room's
+      lv.gadgets.push(F.makeExit(370, 56));
+      return lv;
+    };
+    const high = (lv) => { const gg = R.build(lv, lv.physics); const hr = gg.regions.find((r) => r.hatch); const gt = hr ? hr.gates.find((x) => x.high) : null; return { gg, hr, gt, plan: hr ? R.plan(gg, { region: hr.id, dir: 1 }, Object.fromEntries(lv.skills.map((s) => [s.name, s.count])), 1) : null }; };
+    const a1 = high(attic(60, true, { BUILDER: 8, BASHER: 1 }));
+    check("a chamber high in a wall: a staircase of seven and a bash, cost 8", a1.gt && a1.gt.builders === 7 && a1.gt.px !== undefined && a1.gg.regions[a1.gt.to].landing && a1.plan && a1.plan.cost === 8, a1.gt && { builders: a1.gt.builders, px: a1.gt.px, cost: a1.plan && a1.plan.cost });
+    check("the hatch behind the staircase's start: no run-in", a1.gt && !a1.gt.runIn, a1.gt && a1.gt.runIn);
+    // the hatch past the start: the lemming comes by it the right way once the far end has turned it - a wall
+    // for nothing, a drop never: a turn of its own then (a blocker and its bomber), and none without them
+    const a2 = high(attic(220, true, { BUILDER: 8, BASHER: 1 }));
+    check("the hatch past the start, a wall at the far end: the same cost", a2.gt && a2.gt.runIn && a2.plan && a2.plan.cost === 8 && !a2.plan.steps[0].turn, a2.plan && a2.plan.cost);
+    const a3 = high(attic(220, false, { BUILDER: 8, BASHER: 1, BLOCKER: 1, BOMBER: 1 }));
+    check("a drop at the far end: a turn of its own", a3.plan && a3.plan.cost === 10 && a3.plan.steps[0].turn, a3.plan && a3.plan.cost);
+    check("no blocker for it: no plan", !high(attic(220, false, { BUILDER: 8, BASHER: 1 })).plan);
+    const ra = solve(attic(220, true, { BUILDER: 8, BASHER: 1 }), 8000);
+    check("solved: seven builders and a basher", ra.best && ra.best.saved === 1 && skillsIn(ra.best.plan, "BUILDER") === 7 && skillsIn(ra.best.plan, "BASHER") === 1, ra.best && ra.best.plan.map(Solver.planEntry));
+    // a tunnel bashed up to steel under solid rock: no climber goes up the steel from inside it
+    const core = crossing(300, 1, 1, { BASHER: 1, CLIMBER: 1 });
+    core.fill(150, 20, 200, 60, PM.SOLID);
+    core.fill(176, 20, 186, 60, PM.SOLID | PM.STEEL);
+    const gc = R.build(core, core.physics), tun = gc.regions.find((r) => r.virtual && !r.landing);
+    check("a tunnel under rock: no climb out of it", tun && !tun.gates.some((gt) => gt.kind === "climb"), tun && tun.gates.map((gt) => gt.kind));
+    // a drop eighteen pixels too long onto a floor: a landing pad of two builders across the fall's column, worked
+    // down there by the one floater (a wall beyond turns it back to the pad's start), the drop then anyone's
+    const ledge = (skills, h) => {
+      const lv = F.makeLevel(400, h || 200, 140);
+      lv.fill(40, 60, 200, 68, PM.SOLID); // the ledge, 80 px over the floor
+      lv.fill(330, 0, 400, 140, PM.SOLID); // the wall beyond the landing
+      F.setSpawn(lv, [F.makeWindow(80, 20, 1)], 12, 2, 99);
+      lv.gadgets.push(F.makeExit(100, 140));
+      lv.skills = Object.keys(skills).map((name) => ({ name, count: skills[name] }));
+      return lv;
+    };
+    const lp = ledge({ FLOATER: 1, BUILDER: 2 }), glp = R.build(lp, lp.physics), top = glp.regions.find((r) => r.hatch);
+    const pad = top ? top.gates.find((gt) => gt.kind === "pad" && gt.dropDir > 0 && gt.dir < 0) : null;
+    const ppl = top ? R.planAll(glp, [{ region: top.id, dir: 1, n: 12, lacking: { FLOATER: 12 }, leadLacking: { FLOATER: 1 } }], { FLOATER: 1, BUILDER: 2 }, 2) : null;
+    check("a drop too long by a staircase's height: a pad gate of two builders, worked below", pad && pad.builders === 2 && pad.workIn === pad.to && pad.px === 200 + 2 * (80 - 61), pad && { builders: pad.builders, px: pad.px, workIn: pad.workIn, to: pad.to });
+    check("the plan: the lead's floater and the pad, the crowd riding it", ppl && ppl.cost === 3 && ppl.steps.some((st) => st.who === "group" && st.gate.kind === "pad"), ppl && { cost: ppl.cost, steps: ppl.steps.map((st) => st.who + ":" + st.gate.kind) });
+    check("no pad for a group on its own: a floater each", top && !R.plan(glp, { region: top.id, dir: 1 }, { BUILDER: 2 }, 1));
+    // the pad standing: the fall measures short at the pixels, the drop is free
+    const built = ledge({});
+    for (let b = 0; b < 24; b++) built.fill(pad ? pad.px - 2 * b - 5 : 0, 139 - b, pad ? pad.px - 2 * b + 1 : 0, 140 - b, PM.SOLID);
+    const gbt = R.build(built, built.physics), tb = gbt.regions.find((r) => r.hatch);
+    check("the pad standing: a free drop", tb && tb.gates.some((gt) => gt.kind === "drop" && !gt.skill && gt.dir > 0), tb && tb.gates.map((gt) => gt.kind + ":" + gt.skill));
+    const rp = solve(ledge({ FLOATER: 1, BUILDER: 2 }), 9000);
+    check("solved: a floater, two builders", rp.best && rp.best.saved >= 2 && skillsIn(rp.best.plan, "FLOATER") === 1 && skillsIn(rp.best.plan, "BUILDER") === 2, rp.best && rp.best.plan.map(Solver.planEntry));
+    // a blocker on a floor thinner than a bomber's crater, the void under it: no bomber to free it, a builder over it
+    const thin = F.makeLevel(300, 148, 140), thick = F.makeLevel(300, 200, 140);
+    const gatesAt = (lv) => { const gg = R.build(lv, lv.physics, [{ x: 150, y: 140 }]); const id = gg.regionOf(100, 139); return id >= 0 ? gg.regions[id].gates.map((gt) => gt.kind) : []; };
+    check("a blocker on a thin floor over the void: over it, never bombed", gatesAt(thin).includes("overblock") && !gatesAt(thin).includes("unblock"), gatesAt(thin));
+    check("a blocker on a thick floor: either", gatesAt(thick).includes("overblock") && gatesAt(thick).includes("unblock"), gatesAt(thick));
+    // a miner's ramp off a deadly edge: a block thirty pixels thick over a floor 80 px down - the ramp comes out
+    // of the block's side twenty lower, the fall from there safe; the same block with steel in the way, none
+    const cliff = (steel) => {
+      const lv = F.makeLevel(400, 200, 120);
+      lv.fill(40, 40, 200, 70, PM.SOLID); // the block: top 40, underside 70, its right edge at 200; the floor at 120
+      lv.fill(0, 0, 40, 200, PM.SOLID); // a wall at its left end (a follower turned at the miner's face paces back to it)
+      if (steel) lv.fill(150, 40, 200, 70, PM.SOLID | PM.STEEL);
+      F.setSpawn(lv, [F.makeWindow(80, 10, 1)], 5, 5, 200); // (a follower close behind the miner passes it over the block's top and off the edge: the ramp is theirs once it is deep)
+      lv.gadgets.push(F.makeExit(330, 120));
+      lv.skills = [{ name: "MINER", count: 2 }];
+      return lv;
+    };
+    const cl = cliff(false), gcl = R.build(cl, cl.physics, [], masks), tcl = gcl.regions.find((r) => r.hatch);
+    const ramp = tcl ? tcl.gates.find((gt) => gt.kind === "mine" && gt.offEdge && gt.dir > 0) : null;
+    check("a deadly edge: a miner's ramp off it, the fall short of the splat", ramp && ramp.dir > 0 && ramp.fall <= 61 && ramp.px !== undefined, ramp && { fall: ramp.fall, px: ramp.px });
+    const gst = R.build(cliff(true), cliff(true).physics, [], masks), tst = gst.regions.find((r) => r.hatch);
+    check("steel at the edge: no ramp", tst && !tst.gates.some((gt) => gt.kind === "mine" && gt.offEdge && gt.dir > 0), tst && tst.gates.map((gt) => gt.kind + (gt.dir > 0 ? ">" : "<")));
+    const rc = solve(cliff(false), 6000);
+    check("solved: one miner, everyone down the ramp", rc.best && rc.best.saved === 5 && rc.best.skillsUsed === 1, rc.best && rc.best.plan.map(Solver.planEntry));
+    // a builder's staircase, a pixel thick, is floor the cells do not see: laid by hand between two floors, its
+    // cells join the two into one region
+    const stair = crossing(300, 1, 1, {});
+    stair.fill(150, 20, 300, 100, PM.SOLID); stair.fill(150, 20, 300, 48, 0); // the far floor 12 px up (top at 48)
+    for (let b = 0; b < 12; b++) stair.fill(126 + 2 * b, 59 - b, 132 + 2 * b, 60 - b, PM.SOLID); // twelve bricks from (126, 60) up to the step
+    const gsr = R.build(stair, stair.physics);
+    check("a staircase of bricks joins its two floors", gsr.regionOf(50, 59) >= 0 && gsr.regionOf(50, 59) === gsr.regionOf(200, 47), [gsr.regionOf(50, 59), gsr.regionOf(200, 47)]);
+    // a turn by blocker toward a deadly drop the gate is worked at costs a hold as well: the crowd turned with the
+    // worker would walk off it while the work is done. A ledge whose left end drops a step onto a dead-end floor
+    // and whose right end drops into the void, the exit across the void by a bridge of two: the lemmings head
+    // left off the hatch
+    const edge = F.makeLevel(400, 200, 100);
+    edge.fill(0, 100, 40, 160, 0); edge.fill(0, 0, 4, 200, PM.SOLID); // the dead-end floor at 160 on the left (a safe fall of 60, five builders back up), walled
+    edge.fill(200, 100, 240, 200, 0); edge.fill(200, 76, 400, 100, PM.SOLID); edge.fill(200, 76, 240, 200, 0); // the void from 200 to 240, the far floor at 76
+    edge.gadgets.push(F.makeExit(330, 76));
+    F.setSpawn(edge, [F.makeWindow(100, 60, -1)], 5, 5, 20);
+    const ge = R.build(edge, edge.physics, [], masks), te = ge.regions.find((r) => r.hatch);
+    const pe = te ? R.plan(ge, { region: te.id, dir: -1 }, { BUILDER: 9, BLOCKER: 2, BOMBER: 2 }, 1) : null;
+    check("a turn toward the deadly end for a bridge there: the turn costs four", pe && pe.steps[0].turn && pe.steps[0].gate.kind === "build" && pe.cost === 4 + pe.steps[0].gate.cost, pe && { cost: pe.cost, steps: pe.steps.map((st) => (st.turn ? "TURN+" : "") + st.gate.kind + ":" + st.gate.cost) });
   }
 
   console.log("a wall needs one basher, steel needs a climber");

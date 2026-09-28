@@ -10,8 +10,12 @@
  * its top; steel and a one-way wall's forbidden side forbid what they
  * forbid), a gap (built across, as many builders as its width and rise
  * need; a platformer flat; a jump over nine cells and up to five up), the floor
- * (dug through, unless steel), a wall built up by a staircase of builders or
- * blown open by a bomber when thin, a deadly drop cut short by a stoner's stone,
+ * (dug through, unless steel), a wall built up by a staircase of builders,
+ * bashed high up from a long staircase's top (a chamber in the wall) or
+ * blown open by a bomber when thin, a deadly drop cut short by a stoner's stone
+ * or by a landing pad of builders on the floor below (worked down there, by
+ * whoever went ahead) or by a miner's ramp off the edge that comes out of
+ * the terrain lower down,
  * a low wall jumped or stacked up, a ceiling
  * within reach shimmied along to where it ends. Water, fire and a trap
  * are ends too - deadly on foot, crossed above like a gap, water swum by a
@@ -21,7 +25,8 @@
  * it is worked and which way the lemming faces there.
  *
  * A blocker standing on a floor cuts it in two, with a bomber on it as the
- * gate between the halves; the graph is rebuilt when the terrain or the
+ * gate between the halves (none where its crater would go through the floor
+ * onto a deadly fall) and a builder's bridge over it; the graph is rebuilt when the terrain or the
  * blockers change.
  *
  * plan() is a Dijkstra over (region, heading): a lemming heading one way
@@ -44,6 +49,10 @@
   const BUILD_ACROSS = 6;      // cells one builder spans (12 bricks, 24 px)
   const BUILD_UP = 3;          // cells one builder rises (12 px)
   const MAX_BUILDERS = 6;
+  const SAFE_FALL = 61;        // pixels of fall a lemming surely survives (the engine's count starts at 3 and splats past 62)
+  const MAX_PAD = 3;           // builders in a landing pad under a deadly drop
+  const OVER_BLOCKER = 20;     // pixels before a blocker a builder starts from to pass over its field: the field's six pixels to its side, twelve for the six it rises over the feet, a brick's margin
+  const MAX_STAIR = 10;        // builders in a long staircase to a bash high up a wall (120 px of rise)
   const PLATFORM_ACROSS = 6;   // cells one platformer spans, flat
   const JUMP_ACROSS = 9;       // cells a jump covers (38 px, back at its level) before the fall
   const JUMP_UP = 4;           // cells a jump rises (18 px)
@@ -81,6 +90,25 @@
     const at = (cx, cy) => (cx < 0 || cy < 0 || cx >= cw || cy >= ch) ? 1 : kind[cx + cy * cw];
     const floor = new Uint8Array(cw * ch);
     for (let cy = 0; cy < ch - 1; cy++) for (let cx = 0; cx < cw; cx++) if (at(cx, cy) === 0 && at(cx, cy + 1) !== 0 && at(cx, cy - 1) === 0) floor[cx + cy * cw] = 1;
+    // ... and the floor the cells do not see: a builder's bricks, a pixel thick, fill no cell by half, and a
+    // staircase read by the cells is steps of one cell with nothing between them. A cell of air over a cell of air
+    // is floor all the same when every one of its columns has ground within the two cells under it, the most of
+    // them in the first - the walker stands on the bricks whatever the cells say
+    {
+      const phys1 = physics || level.physics;
+      const solid1 = (x, y) => x >= 0 && y >= 0 && x < w && y < h && (phys1[x + y * w] & PM.SOLID) !== 0;
+      for (let cy = 1; cy < ch - 1; cy++) for (let cx = 0; cx < cw; cx++) {
+        const i = cx + cy * cw;
+        if (floor[i] || floor[i + cw] || at(cx, cy) !== 0 || at(cx, cy + 1) !== 0 || at(cx, cy - 1) !== 0) continue; // (the cells' own floor a row down: the same ground)
+        let near = 0, n = 0, ok = true;
+        for (let x = cx * CELL; x < Math.min(w, (cx + 1) * CELL) && ok; x++) {
+          let y = cy * CELL; while (y < (cy + 3) * CELL && y < h && !solid1(x, y)) y++;
+          if (y < (cy + 1) * CELL || y >= (cy + 3) * CELL || y >= h) { ok = false; break; }
+          n++; if (y < (cy + 2) * CELL) near++;
+        }
+        if (ok && n && near * 2 >= n) floor[i] = 1;
+      }
+    }
     // slits: a gap narrower than a cell between two terrain pieces (a pixel or three), invisible to the cells, which
     // a walker falls into all the same - a floor cell with a pixel column whose ground lies more than eight pixels
     // under the cell's floor is no floor: the region ends there, in a drop as deep as the column goes
@@ -223,7 +251,7 @@
     /**
      * A miner's ramp as the engine digs it, from the lemming standing on pixel (x0, y0) heading dir: the miner's
      * mask taken out twice a cycle, two steps of two along and one down a cycle, the engine's own tests for steel
-     * (a turn) and for the ground gone under it (a fall). {region, fall} where the fall lands, {turn: true} at
+     * (a turn) and for the ground gone under it (a fall). {region, fall, drop} where the fall lands, {turn: true} at
      * steel, null off the level - or undefined without the masks (the cells' word stands then).
      */
     const rampCache = new Map();
@@ -245,11 +273,12 @@
         }
       };
       const fallFrom = (x, y) => {
+        const from = y;
         while (y < h && !has(x, y)) y++;
         if (y >= h) return null;
         const cx = Math.floor(x / CELL);
         let id = regionAt(cx, Math.floor((y - 1) / CELL)); if (id < 0) id = regionAt(cx, Math.floor((y - 1) / CELL) - 1);
-        return { region: id, fall: y - y0, x, y };
+        return { region: id, fall: y - y0, drop: y - from, x, y }; // fall: under the start; drop: the free fall from the ramp's end
       };
       let x = x0, y = y0, out = { turn: true };
       done: for (let cycle = 0; cycle < 40; cycle++) {
@@ -269,7 +298,7 @@
       return out;
     };
     /** The ground's top under pixel column px from cell row cy (the pixel the feet stand on), or -1. */
-    const groundTop = (px, cy) => { let y = cy * CELL; while (y < h && !solid(px, y)) y++; return y < h && y - cy * CELL <= CELL + 1 ? y : -1; };
+    const groundTop = (px, cy) => { let y = cy * CELL; while (y < h && !solid(px, y)) y++; return y < h && y - cy * CELL < 2 * CELL ? y : -1; };
     const buildFrom = (x0, y0, dir, k) => {
       const laid = new Set(); const has = (x, y) => solid(x, y) || laid.has(x + y * w);
       let x = x0, y = y0, bricks = 0;
@@ -307,6 +336,32 @@
       let id = regionAt(col, Math.floor((cy - 1) / CELL)); if (id < 0) id = regionAt(col, Math.floor((cy - 1) / CELL) - 1);
       return { region: id, fall: cy - y };
     };
+    /**
+     * The fall off a region's end at the pixels: from the last ground the walker stands on (the end cell's, followed
+     * a step at a time the end's way) down the column beyond it - {x, y0 (the feet at the edge), y (the ground's
+     * top under the fall), fall} or null (no ground under it).
+     */
+    const pixelFall = (ex, ey, dir) => {
+      let x = ex * CELL + 2, y = groundTop(x, ey);
+      if (y < 0) return null;
+      for (let n = 0; n < 3 * CELL; n++) {
+        const nx = x + dir; let ny = -1;
+        for (let yy = y - 6; yy <= y + 3; yy++) if (solid(nx, yy) && !solid(nx, yy - 1)) { ny = yy; break; }
+        if (ny < 0) break;
+        x = nx; y = ny;
+      }
+      const fx = x + dir; let fy = y;
+      if (fx < 0 || fx >= w) return null;
+      while (fy < h && !solid(fx, fy)) fy++;
+      return fy >= h ? null : { x: fx, y0: y, y: fy, fall: fy - y };
+    };
+    /** Does a bomber's crater at (x, y) go through the floor there onto a fall no one survives (or out of the level)? */
+    const craterDeadly = (x, y) => {
+      const depth = (masks && masks.bomber ? masks.bomber.height : 22) - 14; // the mask is laid fourteen pixels over the feet
+      for (let yy = y; yy < y + depth; yy++) if (yy >= h || !solid(x, yy) || (phys[x + yy * w] & PM.STEEL)) return yy >= h;
+      let fy = y + depth; while (fy < h && !solid(x, fy)) fy++;
+      return fy >= h || fy - y > SAFE_FALL;
+    };
     /** The floor a fall from (cx, cy) lands on: {cy, region} or null (off the level). */
     const landing = (cx, cy) => {
       for (let y = cy; y < ch; y++) {
@@ -340,7 +395,7 @@
       // the trigger may lie a few pixels under the floor it is walked on (a hill's exit): the nearest floor
       // cell from the trigger's bottom up to four cells above it
       const r = e.triggerRect, cx = Math.floor((r.x0 + r.x1) / 2 / CELL);
-      for (let cy = Math.min(ch - 1, Math.floor(r.y1 / CELL) + 1); cy >= Math.max(0, Math.floor(r.y0 / CELL) - 4); cy--) { const id = regionAt(cx, cy); if (id >= 0) { regions[id].exit = true; exitAt.push({ region: id, x: (r.x0 + r.x1) >> 1 }); break; } }
+      for (let cy = Math.min(ch - 1, Math.floor(r.y1 / CELL) + 1); cy >= Math.max(0, Math.floor(r.y0 / CELL) - 4); cy--) { const id = regionAt(cx, cy); if (id >= 0) { regions[id].exit = true; (regions[id].exitXs = regions[id].exitXs || []).push((r.x0 + r.x1) >> 1); exitAt.push({ region: id, x: (r.x0 + r.x1) >> 1 }); break; } }
     }
     for (const hd of level.gadgets.filter((gd) => gd.effectBase === "WINDOW")) {
       const l = landing(Math.floor(hd.triggerRect.x0 / CELL), Math.floor(hd.triggerRect.y0 / CELL));
@@ -349,6 +404,8 @@
     // the ends of every region, and the gates out of it
     const gates = [];
     const deadEnds = []; // tunnels a basher would dig into bedrock up to steel: regions in waiting (below)
+    const pads = []; // deadly drops a landing pad may cut short (below)
+    const highWalls = []; // walls taller than a staircase at their foot: a long staircase to a bash high up (below)
     const gate = (from, to, kind, skill, cost, cx, cy, dir, extra) => {
       const gt = Object.assign({ from, to, kind, skill, cost, x: cx * CELL + 2, y: cy * CELL + 2, dir }, extra || {});
       gt.id = gates.length; gates.push(gt); regions[from].gates.push(gt);
@@ -359,6 +416,9 @@
       for (const [side, dir] of [["left", -1], ["right", 1]]) {
         const ex = dir < 0 ? r.x0 : r.x1, ey = rowAt(ex);
         const nx = ex + dir;
+        // the level's side: a lemming walking out of it is lost - a drop with no bottom, not the wall the cells
+        // outside the level read as
+        if (nx < 0 || nx >= cw) { r.ends[side] = { kind: "drop", cells: Infinity, region: -1 }; continue; }
         const beyond = at(nx, ey);
         const blockedAt = (cx, cy) => cx >= 0 && cx < cw && ((cy >= 0 && blocked[cx + cy * cw]) || (cy + 1 < ch && blocked[cx + (cy + 1) * cw]) || (cy >= 1 && blocked[cx + (cy - 1) * cw]));
         const hz = hazardAt(nx, ey) || (at(nx, ey) === 0 ? hazardAt(nx, ey + 1) : 0);
@@ -454,7 +514,19 @@
           r.ends[side] = { kind: "blocker" };
           let beyondRegion = -1;
           for (let k = 1; k <= 2 && beyondRegion < 0; k++) for (const dy of [0, -1, 1]) { const id = regionAt(nx + dir * k, ey + dy); if (id >= 0 && id !== r.id) { beyondRegion = id; break; } }
-          if (beyondRegion >= 0) gate(r.id, beyondRegion, "unblock", "BOMBER", 1, nx, ey, 0, { twoWay: true });
+          // (not where the crater goes through the floor under it onto a deadly fall: the crowd would follow it down)
+          const bl = (blockers || []).find((b) => Math.floor(b.x / CELL) === nx && Math.abs(Math.floor((b.y - 1) / CELL) - ey) <= 1);
+          if (beyondRegion >= 0 && !(bl && craterDeadly(bl.x, bl.y))) gate(r.id, beyondRegion, "unblock", "BOMBER", 1, nx, ey, 0, { twoWay: true });
+          // over it: a builder from far enough before it that its bricks pass over the blocker's field (seven pixels
+          // over its feet), the walkers after it down beyond the blocker
+          if (beyondRegion >= 0 && bl) {
+            const px = bl.x - dir * OVER_BLOCKER;
+            let flat = regionAt(Math.floor(px / CELL), Math.floor((bl.y - 1) / CELL)) === r.id;
+            for (let x = px; flat && x !== bl.x; x += dir) if (!solid(x, bl.y) || solid(x, bl.y - 1)) flat = false;
+            const ends = flat ? buildFrom(px, bl.y, dir, 1) : [];
+            const st = ends.length === 1 && !ends[0].blocked ? walkOff(ends[0].x, ends[0].y, dir, ends[0].laid) : null;
+            if (st && st.region >= 0 && st.region !== r.id && st.fall <= SAFE_FALL) gate(r.id, st.region, "overblock", "BUILDER", 1, Math.floor(px / CELL), ey, dir, { builders: 1, px, py: bl.y });
+          }
         } else if (hz) {
           // water, fire or a trap on the way: deadly on foot; crossed above by a builder, a platformer or a jump
           r.ends[side] = { kind: hz === WATER ? "water" : hz === FIRE ? "fire" : "trap", once: hz === TRAPONCE };
@@ -476,8 +548,12 @@
           r.ends[side] = { kind: "drop", cells: l ? l.cells : Infinity, region: l ? l.region : -1 };
           if (l && l.hazard === WATER) { const to = swimOut(nx, l.cy, dir); if (to >= 0 && to !== r.id) gate(r.id, to, "swim", "SWIMMER", 1, ex, ey, dir, { perLemming: true }); }
           else if (l && l.region >= 0 && l.region !== r.id) {
-            if (l.cells <= SPLAT_CELLS) gate(r.id, l.region, "drop", null, 0, ex, ey, dir);
+            // the fall at the pixels, from the edge the walker steps off to the first ground under it: bricks the
+            // cells do not see (a landing pad) cut it short
+            const pf = l.cells > SPLAT_CELLS ? pixelFall(ex, ey, dir) : null;
+            if (l.cells <= SPLAT_CELLS || (pf && pf.fall <= SAFE_FALL)) gate(r.id, l.region, "drop", null, 0, ex, ey, dir);
             else {
+              if (pf) pads.push({ from: r.id, to: l.region, ex, ey, dir, pf });
               gate(r.id, l.region, "drop", "FLOATER", 1, ex, ey, dir, { perLemming: true });
               // a stoner off the edge: a stone in the fall's way, the drop cut into safe pieces for everyone after
               const stones = Math.ceil(l.cells / SPLAT_CELLS) - 1;
@@ -591,6 +667,7 @@
             }
             if (id >= 0 && id !== r.id) { gate(r.id, id, "raisedbash", "BASHER", cost, ex, ey, dir, { sequence: seq, builders: k, wallX, runUp: BUILD_ACROSS * CELL * k, feetY }); break; }
           }
+          if (!sideForbids && height > 2 * BUILD_UP) highWalls.push({ from: r.id, ex, ey, dir });
           // and away from it: a lemming turned at the wall builds back the way it came, a staircase up over its own
           // region to whatever floor its line meets (a slope across a cavity), as the crossings at a drop do
           {
@@ -697,7 +774,8 @@
       }
       // the shaft is the digger's own way down, a step at a time; for everyone after it is a fall of the shaft's
       // depth - deadly past the splat height, a floater's job then
-      if (dug) gate(r.id, dug.to, "dig", "DIGGER", 1, dug.cx, dug.cy, 0, { depth: dug.depth, deep: dug.depth > SPLAT_CELLS });
+      // (with its pixel: a shaft is the digger's nine pixels wide, and twenty pixels off it goes down a pillar's side)
+      if (dug) gate(r.id, dug.to, "dig", "DIGGER", 1, dug.cx, dug.cy, 0, { depth: dug.depth, deep: dug.depth > SPLAT_CELLS, px: dug.cx * CELL + 2, py: groundTop(dug.cx * CELL + 2, dug.cy) });
     }
     // a tunnel a basher digs into the bedrock up to steel is a floor of its own once dug, and what can be
     // done from it or into it is worth planning before the first stroke: it becomes a region in waiting,
@@ -713,8 +791,16 @@
       const v = { id, cells, x0: Math.min(...xs), x1: Math.max(...xs), ymin: t.ey, ymax: t.ey, exit: false, hatch: false, overhang: false, virtual: true, ends: { left: { kind: "wall" }, right: { kind: "wall" } }, gates: [] };
       regions.push(v);
       gate(t.from, id, "bash", "BASHER", 1, t.ex, t.ey, t.dir, { thickness: cells.length, twoWay: true, tunnel: true });
-      // its far end is the steel that stopped the bash: a climber goes up it to whatever floor is at its top
-      { let top = t.ey; while (top > 0 && at(t.far, top - 1) !== 0) top--; const topRegion = top >= 1 && at(t.far, top - 1) === 0 ? regionAt(t.far, top - 1) : -1; if (topRegion >= 0 && topRegion !== id) gate(id, topRegion, "climb", "CLIMBER", 1, t.far - t.dir, t.ey, t.dir, { perLemming: true, height: t.ey - top + 1 }); }
+      // its far end is the steel that stopped the bash: a climber goes up it to whatever floor is at its top - where
+      // the climber's column is open over the tunnel (a shaft); under the rock the tunnel was cut from there is no way up
+      {
+        let top = t.ey; while (top > 0 && at(t.far, top - 1) !== 0) top--;
+        const topRegion = top >= 1 && at(t.far, top - 1) === 0 ? regionAt(t.far, top - 1) : -1;
+        const bodyX = t.dir > 0 ? t.far * CELL - 1 : t.far * CELL + CELL;
+        let clear = topRegion >= 0 && topRegion !== id;
+        if (clear) for (let y = t.ey * CELL + CELL - 1 - 10; y >= top * CELL; y--) if (solid(bodyX, y)) { clear = false; break; }
+        if (clear) gate(id, topRegion, "climb", "CLIMBER", 1, t.far - t.dir, t.ey, t.dir, { perLemming: true, height: t.ey - top + 1 });
+      }
       // up through the roof, where it is thin enough for the blast (the tunnel itself ten pixels high)
       const ups = new Set();
       for (const j of cells) {
@@ -724,6 +810,106 @@
         if (y < 0 || roof === 0 || roof > 4 || solid(px, y)) continue;
         let above = -1; for (const dx of [0, -1, 1]) above = Math.max(above, regionAt(jx + dx, Math.floor(y / CELL)), regionAt(jx + dx, Math.floor(y / CELL) - 1));
         if (above >= 0 && above !== t.from && !ups.has(above) && false) { ups.add(above); gate(id, above, "bombup", "BOMBER", 1.5, jx, t.ey, 0); } // (no bomb-up, as above)
+      }
+    }
+    // a miner's ramp off the edge: a deadly drop is cut short by a miner given some way back from the edge, its
+    // ramp coming out of the terrain's side or underside lower down (the fall from there is the ramp's end to the
+    // ground), for the miner and for everyone after it walking down the ramp. The nearest start to the edge whose
+    // ramp comes out onto a floor within the safe fall, the ramp dug as the engine digs it.
+    for (const t of pads) {
+      const cx = Math.floor(t.pf.x / CELL);
+      const seen = new Set();
+      for (let k = 4; k <= 48; k += 2) {
+        const px = t.pf.x - t.dir * (k + 1);
+        if (px < 0 || px >= w) break;
+        let sy = Math.max(0, (t.ey - 1) * CELL); while (sy < h && !solid(px, sy)) sy++;
+        if (sy >= h || sy > (t.ey + 1) * CELL + 1) continue;
+        const rr = regionAt(Math.floor(px / CELL), Math.floor((sy - 1) / CELL));
+        if (rr !== t.from && !(rr >= 0 && regions[rr].alias === t.from)) break; // off the region's own floor: no further back
+        const sim = mineFrom(px, sy, t.dir);
+        if (!sim || sim.turn || sim.region < 0 || sim.region === t.from || sim.drop > SAFE_FALL || seen.has(sim.region)) continue;
+        seen.add(sim.region);
+        gate(t.from, sim.region, "mine", "MINER", 1, Math.floor(px / CELL), Math.floor((sy - 1) / CELL), t.dir, { offEdge: true, fall: sim.drop, px, py: sy });
+      }
+    }
+    // a landing pad: a drop too long by less than a staircase's height is cut short by bricks across the fall's
+    // column on the floor below - the stoner's stone with builders, but worked down there (`workIn`), by someone who
+    // went ahead by a way of its own (a floater): from the floor's pixel that puts the bricks over the column high
+    // enough, either way (against the fall's way the lemmings landing on it walk down it; with it, up it and off
+    // its top). Once it stands the fall measures short at the pixels and the drop is anyone's.
+    for (const t of pads) {
+      const need = t.pf.fall - SAFE_FALL, k = Math.ceil((need + 2) / 12);
+      if (k > MAX_PAD) continue;
+      const row = Math.floor((t.pf.y - 1) / CELL);
+      if (regionAt(Math.floor(t.pf.x / CELL), row) !== t.to) continue; // (the fall ends on the landing region's own floor)
+      for (const d of [-t.dir, t.dir]) {
+        const px = t.pf.x - d * 2 * need;
+        let flat = regionAt(Math.floor(px / CELL), row) === t.to;
+        for (let x = px; flat && x !== t.pf.x + d; x += d) if (!solid(x, t.pf.y) || solid(x, t.pf.y - 1)) flat = false;
+        if (!flat) continue;
+        const ends = buildFrom(px, t.pf.y, d, k);
+        if (ends.length !== k || ends[k - 1].blocked) continue;
+        // with the fall's way the start lies behind the landing: passed the right way after both ends have turned the worker
+        gate(t.from, t.to, "pad", "BUILDER", k, Math.floor(px / CELL), row, d, { builders: k, px, py: t.pf.y, workIn: t.to, dropDir: t.dir, dropX: t.pf.x, runIn: d === t.dir, bothEnds: d === t.dir });
+      }
+    }
+    // a bash high up a wall: an opening beyond it more than a builder or two over the floor (a chamber in the wall,
+    // a floor behind its upper part) is reached by a long staircase - k builders in a row from the floor's pixel
+    // that brings the last builder's shrug to the wall's face, twelve pixels up a builder - and a basher from its
+    // top. The staircase's top is a landing in waiting, as a tunnel is: reached by the k builders (a bridge like any
+    // other for the search: its first builder placed by the pixel, the next ones at each shrug, the crowd held
+    // behind), with the bash as its gate out. The run-up must be the region's own flat floor, the bricks laid by the
+    // builder's own rules, the tunnel free of steel and of arrows against it.
+    for (const t of highWalls) {
+      const r = regions[t.from], dir = t.dir;
+      const y0 = groundTop(t.ex * CELL + 2, t.ey);
+      if (y0 < 0) continue;
+      let faceX = t.ex * CELL + 2; for (let n = 0; n < 8 && faceX >= 0 && faceX < w && !solid(faceX, y0 - 3); n++) faceX += dir;
+      if (!solid(faceX, y0 - 3)) continue;
+      const against = (dir > 0 ? PM.ONEWAYLEFT : PM.ONEWAYRIGHT) | PM.ONEWAYDOWN | PM.ONEWAYUP;
+      const seen = new Set();
+      for (let k = 3; k <= MAX_STAIR && y0 - 12 * k >= 12; k++) {
+        const feetY = y0 - 12 * k;
+        // the tunnel from the wall's face at that height: out where its rows meet air, none where they meet steel
+        let out = -1;
+        for (let x = faceX; x >= 0 && x < w; x += dir) {
+          let air = 0, stop = false;
+          for (let yy = feetY - 9; yy <= feetY - 1; yy++) { const b = phys[x + yy * w]; if ((b & PM.STEEL) || ((b & PM.SOLID) && (b & against))) stop = true; if (!(b & PM.SOLID)) air++; }
+          if (stop) break;
+          if (air >= 4) { out = x; break; }
+        }
+        if (out < 0 || Math.abs(out - faceX) < 4) continue;
+        // the floor met there: a step up at most, or a fall short of the splat height
+        let gy = feetY - 5; while (gy < h && !solid(out + dir, gy)) gy++;
+        if (gy >= h || gy - feetY > SPLAT_CELLS * CELL) continue;
+        let to = -1; for (const dx of [1, 0, 2]) for (const row of [Math.floor((gy - 1) / CELL), Math.floor((gy - 1) / CELL) - 1]) if (to < 0) { const cand = regionAt(Math.floor(out / CELL) + dx * dir, row); if (cand >= 0 && cand !== r.id) to = cand; }
+        if (to < 0 || seen.has(to) || r.gates.some((gt) => gt.to === to && gt.dir === dir && gt.cost <= k + 1)) continue;
+        // the start: the pixel from which the k-th builder shrugs nearest the wall, unhindered on its way
+        // - or, the staircase under way (the graph rebuilt over its first bricks), the pixel its line started from:
+        // j builders of it stand (a brick's top on the line, twelve up a builder), the rest goes on from their top
+        let start = -1, j = 0;
+        for (let off = 2; off <= 8 && start < 0; off++) {
+          const px = faceX - dir * (24 * k + off);
+          j = 0;
+          if (groundTop(px, t.ey) !== y0) {
+            j = -1;
+            for (let n = k; n >= 1 && j < 0; n--) { const X = px + dir * 24 * n, Y = y0 - 12 * n; if (solid(X, Y) && !solid(X, Y - 1) && solid(X - 2 * dir, Y + 1) && !solid(X - 2 * dir, Y - 2)) j = n; }
+            if (j < 0) continue;
+          } else if (regionAt(Math.floor(px / CELL), Math.floor((y0 - 1) / CELL)) !== r.id) continue;
+          if (j < k) { const ends = buildFrom(px + dir * 24 * j, y0 - 12 * j, dir, k - j); if (ends.length !== k - j || ends[k - j - 1].blocked) continue; }
+          start = px;
+        }
+        if (start < 0) continue;
+        seen.add(to);
+        const topX = start + dir * 24 * k, vcx = Math.floor(topX / CELL), vcy = Math.floor((feetY - 1) / CELL);
+        const id = regions.length;
+        regions.push({ id, cells: [vcx + vcy * cw], x0: vcx, x1: vcx, ymin: vcy, ymax: vcy, exit: false, hatch: false, overhang: false, virtual: true, landing: true, alias: r.id, ends: { left: { kind: "wall" }, right: { kind: "wall" } }, gates: [] });
+        // the start is far back in the region: a lemming passes it heading the staircase's way coming from the far
+        // end only (`runIn`: see turnCost) - unless it lands behind the start heading that way, out of a hatch there
+        const hatchBehind = level.gadgets.some((gd) => gd.effectBase === "WINDOW" && (gd.flipLemming ? -1 : 1) === dir && (start - gd.triggerRect.x0) * dir > 8
+          && (() => { const l = landing(Math.floor(gd.triggerRect.x0 / CELL), Math.floor(gd.triggerRect.y0 / CELL)); return l && l.region === r.id; })());
+        gate(r.id, id, "buildup", "BUILDER", k, Math.floor(start / CELL), Math.floor((y0 - 1) / CELL), dir, { builders: k, fromStep: true, high: true, runIn: !hatchBehind && j === 0, px: start, py: y0 });
+        gate(id, to, "bash", "BASHER", 1, vcx, vcy, dir, { thickness: Math.ceil(Math.abs(out - faceX) / CELL), fall: Math.max(0, Math.floor((gy - feetY) / CELL)), high: true });
       }
     }
     // a staircase from inside a region, as the engine lays it: a builder given on a step of the floor (a brick's
@@ -888,13 +1074,26 @@
    * in its way (1), or a jump into an overhang the region has (1).
    */
   function turnCost(reg, d, gt, skills, climber) {
+    if (gt.bothEnds) { const ahead = reg.ends[gt.dir > 0 ? "right" : "left"]; if (!ahead || (ahead.kind !== "wall" && ahead.kind !== "blocker")) return { extra: Infinity, turn: false }; }
+    if (gt.runIn) {
+      // a gate worked from far back in the region, heading its way: whichever way the lemming heads now, it comes
+      // by that spot the right way only once the region's far end has turned it - or something set there has
+      const back = reg.ends[gt.dir > 0 ? "left" : "right"];
+      if (back && (back.kind === "wall" || back.kind === "blocker" || (back.kind === "force" && back.dir === gt.dir))) return { extra: 0, turn: false };
+    } else
     if (gt.dir === 0 || gt.dir === d) return { extra: 0, turn: false };
     // a wall ahead turns the lemming for nothing - not a climber, which goes over a wall it can climb
-    const ahead = reg.ends[d > 0 ? "right" : "left"];
+    const ahead = gt.runIn ? null : reg.ends[d > 0 ? "right" : "left"];
     const climbs = climber && ahead && ahead.kind === "wall" && reg.gates.some((g) => g.kind === "climb" && g.dir === d);
-    if (ahead && !reg.exit && !climbs && (ahead.kind === "wall" || ahead.kind === "blocker" || (ahead.kind === "force" && ahead.dir !== d))) return { extra: 0, turn: false };
+    // (in the exit's region the exit takes the lemming first - when it stands between the gate's spot and that end)
+    const exitInWay = reg.exit && (reg.exitXs || []).some((x) => (x - gt.x) * d > 0);
+    if (ahead && !exitInWay && !climbs && (ahead.kind === "wall" || ahead.kind === "blocker" || (ahead.kind === "force" && ahead.dir !== d))) return { extra: 0, turn: false };
     let extra = Infinity, how = null;
-    if (skills.BLOCKER > 0 && skills.BOMBER > 0) { extra = TURN_COST; how = "BLOCKER"; }
+    // a turn toward a deadly drop the gate is worked at: the crowd turned with the worker walks off it while the work
+    // is done, so the turn costs a hold as well (a second blocker and its bomber)
+    const far = reg.ends[gt.dir > 0 ? "right" : "left"];
+    const deadlyAhead = far && far.kind === "drop" && !(far.cells <= SPLAT_CELLS) && gt.kind !== "drop" && gt.kind !== "stone" && gt.kind !== "pad";
+    if (skills.BLOCKER > 0 && skills.BOMBER > 0) { extra = TURN_COST * (deadlyAhead ? 2 : 1); how = "BLOCKER"; }
     if (skills.STACKER > 0 && 1 < extra) { extra = 1; how = "STACKER"; }
     if (skills.JUMPER > 0 && reg.overhang && 1 < extra) { extra = 1; how = "JUMPER"; }
     return { extra, turn: extra !== Infinity, how };
@@ -930,10 +1129,14 @@
         let deepCost = 0;
         if (gt.deep && crowd && !crowd.lead) { const need = crowd.lacking && crowd.lacking.FLOATER !== undefined ? crowd.lacking.FLOATER : crowd.n !== undefined ? crowd.n : 1; if (need > (skills.FLOATER || 0)) continue; deepCost = need; }
         if (!free && gt.also && !(skills[gt.also] > 0)) continue;
-        const { extra, turn, how } = turnCost(reg, d, gt, skills, climber);
+        // a gate worked in the region it leads to (a landing pad) is nobody's from here until someone there has
+        // worked it: then it is the drop, the fall's way
+        if (gt.workIn !== undefined && !free) continue;
+        const way = gt.workIn !== undefined ? gt.dropDir : gt.dir;
+        const { extra, turn, how } = turnCost(reg, d, gt.workIn !== undefined ? { dir: way } : gt, skills, climber);
         if (extra === Infinity) continue;
         const cost = c + extra + (free ? 0 : gt.cost * per) + deepCost;
-        push(gt.to, gt.dir === 0 ? d : gt.dir, cost, { from: k, step: { gate: gt, dir: gt.dir === 0 ? d : gt.dir, turn, how } });
+        push(gt.to, way === 0 ? d : way, cost, { from: k, step: { gate: gt, dir: way === 0 ? d : way, turn, how } });
       }
     }
     return { dist, prev, key };
@@ -953,7 +1156,7 @@
     return key === null ? null : { cost, key };
   }
 
-  const TERRAIN = new Set(["bash", "bashup", "bashbomb", "bombup", "raisedbash", "mine", "dig", "build", "buildup", "bomb", "platform", "stack", "stone", "unblock", "disarm", "sacrifice"]);
+  const TERRAIN = new Set(["bash", "bashup", "bashbomb", "bombup", "raisedbash", "mine", "dig", "build", "buildup", "bomb", "platform", "stack", "stone", "unblock", "overblock", "pad", "disarm", "sacrifice"]);
 
   /**
    * The cheapest plan for every group of lemmings together: `groups` =
@@ -1001,7 +1204,14 @@
       const others = [];
       for (const g of taken) {
         if (g !== leadGroup) { others.push(g); continue; }
-        if (g.n > 1) { const lk = {}; for (const k of Object.keys(g.lacking)) lk[k] = Math.max(0, g.lacking[k] - (lead.lacking[k] || 0)); others.push({ region: g.region, dir: 0, n: g.n - 1, lacking: scaled(lk, g.n - 1), lem: g.lem }); }
+        if (g.n > 1) {
+          const lk = {}; for (const k of Object.keys(g.lacking)) lk[k] = Math.max(0, g.lacking[k] - (lead.lacking[k] || 0));
+          // the rest of the lead's group: heading either way once a wall (a blocker, a field) ahead turns it, else
+          // the way it heads (toward a drop it will take, whatever the lead does elsewhere)
+          const reg = graph.regions[g.region], ahead = g.dir && reg ? reg.ends[g.dir > 0 ? "right" : "left"] : null;
+          const turned = ahead && (ahead.kind === "wall" || ahead.kind === "blocker" || (ahead.kind === "force" && ahead.dir !== g.dir));
+          others.push({ region: g.region, dir: turned ? 0 : g.dir, n: g.n - 1, lacking: scaled(lk, g.n - 1), lem: g.lem });
+        }
       }
       // the lead through the gates of `order` in turn, then to an exit: its cost and steps, or null
       const leadWay = (order) => {
@@ -1010,10 +1220,11 @@
         for (const T of order) {
           if (T.followersOnly) return null; // not the lead's to take: it would turn back
           const sw = sweep(graph, pos, skills, lead, opened);
-          const reg = graph.regions[T.from];
+          const at = T.workIn !== undefined ? T.workIn : T.from; // (a landing pad is worked where it stands: the lead gets down there by its own way first)
+          const reg = graph.regions[at];
           let via = null;
           for (const d of [1, -1]) {
-            const k = sw.key(T.from, d);
+            const k = sw.key(at, d);
             if (!sw.dist.has(k)) continue;
             const { extra, turn, how } = turnCost(reg, d, T, skills, lead.lacking && lead.lacking.CLIMBER === 0);
             if (extra === Infinity) continue;
@@ -1024,7 +1235,7 @@
           cost += via.c;
           steps = steps.concat(stepsTo(sw, via.k), [{ gate: T, dir: T.dir, turn: via.turn, how: via.how }]);
           opened.add(T);
-          pos = { region: T.to, dir: T.dir };
+          pos = { region: T.workIn !== undefined ? T.workIn : T.to, dir: T.dir };
         }
         const rest = graph.regions[pos.region].exit ? { cost: 0, steps: [] } : exitCost(pos, lead, opened);
         if (!rest) return null;
@@ -1087,9 +1298,9 @@
       }
       // one gate opened, the nearest first (one gate per crossing, the cheapest); then, while it helps, one more on top of the best
       const sw0 = sweep(graph, start, skills, lead, null);
-      const near = (T) => { let d = Infinity; for (const dd of [1, -1]) { const k = sw0.key(T.from, dd); if (sw0.dist.has(k)) d = Math.min(d, sw0.dist.get(k)); } return d; };
+      const near = (T) => { let d = Infinity; for (const dd of [1, -1]) { const k = sw0.key(T.workIn !== undefined ? T.workIn : T.from, dd); if (sw0.dist.has(k)) d = Math.min(d, sw0.dist.get(k)); } return d; };
       const cheapest = new Map();
-      for (const T of terrain) { const ck = T.from + ">" + T.to + ":" + (T.dir || 0); if (!cheapest.has(ck) || cheapest.get(ck).cost > T.cost) cheapest.set(ck, T); }
+      for (const T of terrain) { const ck = T.from + ">" + T.to + ":" + (T.dir || 0) + (T.workIn !== undefined ? ":" + T.dropDir : ""); if (!cheapest.has(ck) || cheapest.get(ck).cost > T.cost) cheapest.set(ck, T); }
       const ranked = Array.from(cheapest.values()).map((T) => ({ T, d: near(T) })).filter((x) => isFinite(x.d)).sort((a, b) => a.d - b.d || a.T.cost - b.T.cost).slice(0, 48);
       let chosen = null;
       for (const { T, d } of ranked) { if (lb && d + T.cost >= lb.cost) break; const r = consider(evaluate([T])); if (r === lb && r) chosen = r; }

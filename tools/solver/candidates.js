@@ -67,7 +67,8 @@
     // - and, unless right on the spot, the entry's way is the gate's (a staircase up the wall on the left is not the
     // bridge to the right from the ledge it reaches, a step away)
     // - and a bridge of several builders is worked once they are all laid
-    const worked = (gt) => gt.sequence ? gt.sequence.every((it) => itemDone(it, plan)) : (gt.builders || 1) > 1 ? bridgeProgress(gt, plan, planned.graph ? planned.graph.gates : null).n >= gt.builders : (plan || []).some((e) => e.type === "assignment" && e.skill === gt.skill && Math.abs(e.x - gt.x) <= 24 && Math.abs(e.y - gt.y) <= 16 && (!gt.dir || e.dx === gt.dir || (Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)));
+    // - and a per-lemming gate (a floater's drop) by the lead's own entry alone: the one before it had its own
+    const worked = (gt) => gt.sequence ? gt.sequence.every((it) => itemDone(it, plan)) : (gt.builders || 1) > 1 ? bridgeProgress(gt, plan, planned.graph ? planned.graph.gates : null).n >= gt.builders : (plan || []).some((e) => e.type === "assignment" && e.skill === gt.skill && (!gt.perLemming || !planned.leadId || e.lemId === planned.leadId) && Math.abs(e.x - gt.x) <= 24 && Math.abs(e.y - gt.y) <= 16 && (!gt.dir || e.dx === gt.dir || (Math.abs(e.x - gt.x) <= 6 && Math.abs(e.y - gt.y) <= 6)));
     let li = 0;
     const take = (st) => { const k = gateKey(st.gate); if (!seen.has(k)) { seen.add(k); if (!worked(st.gate)) seq.push(st); } };
     for (const st of steps) {
@@ -143,7 +144,20 @@
     const steps = ctx.planned && ctx.planned.steps ? ctx.planned.steps : [];
     const graph = ctx.planned && ctx.planned.graph;
     const turnsIn = new Map(); // region -> the skill that turns the lemming there (a blocker, a stacker, a jump into an overhang)
-    for (const st of steps) if (st.turn) turnsIn.set(st.gate.from, st.how || "BLOCKER");
+    const workRegion = (gt) => (gt.workIn !== undefined ? gt.workIn : gt.from); // (a landing pad is worked in the region it leads to)
+    const turnGate = new Map(); // region -> the gate the turn there is for (the route macro takes the turn as that gate's first move)
+    for (const st of steps) if (st.turn) { turnsIn.set(workRegion(st.gate), st.how || "BLOCKER"); if (!turnGate.has(workRegion(st.gate))) turnGate.set(workRegion(st.gate), st.gate); }
+    // a turn for a gate worked from a pixel of its own far from the region's end (a long staircase's start, a landing
+    // pad's): behind that spot, or it is no turn for it - and short of the exit, where the region has one on the way
+    // (whoever comes is gone before it meets a blocker beyond it)
+    const turnBehind = new Map(); for (const st of steps) if (st.turn && (st.gate.runIn || st.gate.workIn !== undefined) && st.gate.px !== undefined) turnBehind.set(workRegion(st.gate), st.gate);
+    const behind = (region, x) => {
+      const gt = turnBehind.get(region);
+      if (!gt) return true;
+      if ((gt.px - x) * gt.dir < 8) return false;
+      for (const ea of (graph && graph.exitAt) || []) if (ea.region === region && (ea.x - gt.px) * -gt.dir > 0 && (ea.x - x) * -gt.dir < 12) return false;
+      return true;
+    };
     // lemmings with a free way out of their own: the planner's word, and whoever gets out in this very rollout
     // with nothing more done (the athlete that led the way in) - best left alone, no boosts
     const free = new Set(ctx.planned && ctx.planned.free ? ctx.planned.free : []);
@@ -152,12 +166,12 @@
     const nextGate = new Set();
     // the route's first gate, and the first of the other lane (a gate already worked - the bash under way - is none of them)
     { const route = planRoute(ctx.planned, ctx.plan); if (route.length) nextGate.add(route[0].gate); const other = route.find((st) => st.who !== route[0].who); if (other) nextGate.add(other.gate); }
-    let lastGate = null, lastItem = null; // the gate (and the sequence item) the last boost came from (a side channel for the candidate's record)
+    let lastGate = null, lastItem = null, lastTurn = false; // the gate (and the sequence item) the last boost came from (a side channel for the candidate's record)
     const progressMemo = new Map(); // a bridge gate's progress, once per node
     const dbgLem = typeof process !== "undefined" && process.env.NX_CAND_DEBUG;
     if (dbgLem) console.log("  debug: entries " + (ctx.plan || []).map((e) => e.skill + ">" + e.lemId + "@" + e.frame + " (" + e.x + "," + e.y + " " + e.dx + ")").join(" ") + "; free " + Array.from(free).join(",") + " nextGate " + Array.from(nextGate).map(gateKey).join(" ") + " route " + planRoute(ctx.planned, ctx.plan).map((st) => gateKey(st.gate)).join(" "));
     const planned = (c, e) => {
-      lastGate = null; lastItem = null;
+      lastGate = null; lastItem = null; lastTurn = false;
       const dbgSkill = typeof process !== "undefined" && process.env.NX_CAND_SKILL, dbgType = typeof process !== "undefined" && process.env.NX_CAND_EVENT;
       if (dbgLem && e && e.lemId === dbgLem && c.skill === (dbgSkill || "MINER") && e.type === (dbgType || "TICK")) console.log("  debug " + c.skill + " at " + e.type + " " + e.frame + " (" + e.x + "," + e.y + " dx " + e.dx + (e.climbing ? " climbing" : "") + ") free " + (free.size && free.has(e.lemId)) + " gates " + steps.filter((st) => st.gate.skill === c.skill).map((st) => gateKey(st.gate) + "@" + st.gate.x + "," + st.gate.y + " dir" + st.gate.dir + (nextGate.has(st.gate) ? "*" : "") + (st.before ? "(before)" : "")).join(" ") + " region " + (graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : "?"));
       if (!steps.length || !e) return 1;
@@ -166,7 +180,7 @@
       const isFree = free.size && e.lemId && free.has(e.lemId);
       // the plan wants a turn in a region: whatever does it there
       if (turnsIn.size && (c.skill === "BLOCKER" || c.skill === "STACKER" || c.skill === "JUMPER") && graph && e.type !== "FALL" && e.type !== "DEATH"
-        && turnsIn.get(Solver.Regions.regionOfLemming(graph, e.x, e.y)) === c.skill) return 2;
+        && turnsIn.get(Solver.Regions.regionOfLemming(graph, e.x, e.y)) === c.skill && behind(Solver.Regions.regionOfLemming(graph, e.x, e.y), e.x)) { lastGate = turnGate.get(Solver.Regions.regionOfLemming(graph, e.x, e.y)) || null; lastTurn = true; return 2; }
       for (const st of steps) {
         const gt = st.gate;
         if (gt.sequence) {
@@ -196,7 +210,7 @@
         // in the gate's region - or in no region the node's graph knows, the terrain having changed in the rollout
         // (a turn at a wall is at the wall whatever cell the foot of it belongs to - a step, the wall's own top)
         const er = graph ? Solver.Regions.regionOfLemming(graph, e.x, e.y) : -1;
-        const inRegion = !graph || er === gt.from || er < 0 || e.type === "TURN" || (graph.regions[gt.from] && graph.regions[gt.from].alias === er);
+        const inRegion = !graph || er === workRegion(gt) || er < 0 || e.type === "TURN" || (graph.regions[gt.from] && graph.regions[gt.from].alias === er);
         const atWall = gt.wallX !== undefined && Math.abs(e.x - gt.wallX) <= 20 && (gt.kind === "bashup" || gt.kind === "bashbomb" || gt.kind === "raisedbash" || Math.abs(e.y - gt.y) <= 16) && inRegion;
         if (gt.also && c.skill === gt.also && !atWall) continue; // the second skill of a two-skill gate works at the far wall only
         // a bomber's blast is placed where it stands: under a thin roof or at a thin wall, its feet within a few
@@ -319,9 +333,9 @@
         const orderWeight = e.type === "DEATH" ? 1 / (1 + 0.15 * deathOrder++) : 1;
         let n = 0;
         // the tier's cap on skills per event falls on the templates as the plan ranks them: a boosted one first
-        const boosted = templates.map(([skill, where, weight]) => ({ skill, where, weight, boost: planned({ skill }, e), gate: lastGate, item: lastItem }));
+        const boosted = templates.map(([skill, where, weight]) => ({ skill, where, weight, boost: planned({ skill }, e), gate: lastGate, item: lastItem, turn: lastTurn }));
         boosted.sort((a, b) => b.weight * b.boost - a.weight * a.boost);
-        for (const { skill, where, weight, boost, gate, item } of boosted) {
+        for (const { skill, where, weight, boost, gate, item, turn } of boosted) {
           if (!has(skill)) continue;
           if (PERM_BITS[skill] && (e.perms & PERM_BITS[skill])) continue;
           if (repeat && TERRAIN.has(skill) && e.type !== "DEATH") continue;
@@ -381,7 +395,7 @@
           for (const [frame, w, fx] of frames) {
             if (frame < 0) continue;
             const why = e.type + (e.cause ? ":" + e.cause : "") + (boost > 1 ? "!" : "");
-            push({ kind: "assign", lemId: rec.id, skill, frame, why, prior: prior * w * boost, gate: boost > 1 ? gate : undefined, itemX: boost > 1 && item ? item.x : undefined, x: fx !== undefined ? fx : e.x });
+            push({ kind: "assign", lemId: rec.id, skill, frame, why, prior: prior * w * boost, gate: boost > 1 ? gate : undefined, turn: boost > 1 && turn ? true : undefined, itemX: boost > 1 && item ? item.x : undefined, x: fx !== undefined ? fx : e.x });
             if (REPEATABLE.has(skill) && skillCounts[skill] > 1) {
               push({ kind: "repeat", lemId: rec.id, skill, frame, why: why + " x", prior: prior * w * 0.8 * boost });
               // and again with a dozen pixels' walk between: holes staggered, a staircase with landings
@@ -404,7 +418,7 @@
       const seenPx = new Set();
       for (const st of steps) {
         const gt = st.gate;
-        if (gt.px === undefined || !gt.skill || (gt.skill !== "BUILDER" && gt.skill !== "PLATFORMER") || (skillCounts[gt.skill] || 0) <= 0) continue;
+        if (gt.px === undefined || !gt.skill || (gt.skill !== "BUILDER" && gt.skill !== "PLATFORMER" && !gt.offEdge && gt.kind !== "dig") || (skillCounts[gt.skill] || 0) <= 0) continue;
         if (st.before) continue;
         if ((gt.builders || 1) > 1 && bridgeProgress(gt, ctx.plan, graph ? graph.gates : null).n >= 1) continue; // under way: the next builder's spot is the progress's
         for (const e of events) {
@@ -417,7 +431,7 @@
             if (ring[i][1] !== gt.px || Math.abs(ring[i][2] - gt.py) > 2) continue;
             const prev = i > 0 ? ring[i - 1] : null, next = i + 1 < ring.length ? ring[i + 1] : null;
             const dir = prev && prev[1] !== gt.px ? Math.sign(gt.px - prev[1]) : next && next[1] !== gt.px ? Math.sign(next[1] - gt.px) : 0;
-            if (dir !== gt.dir) continue;
+            if (gt.dir && dir !== gt.dir) continue;
             const frame = ring[i][0];
             const key = e.lemId + ":" + gt.id + ":" + frame;
             if (seenPx.has(key)) continue;
@@ -431,7 +445,7 @@
           // event has the pixel in its ring)
           if (hit || !game || (e.type !== "LAND" && e.type !== "TURN" && e.type !== "TICK" && e.type !== "SPAWN")) continue;
           const dir = e.type === "TURN" && !e.climbing ? -e.dx : e.dx;
-          if (dir !== gt.dir || Math.abs(e.y - gt.py) > 1) continue;
+          if ((gt.dir && dir !== gt.dir) || Math.abs(e.y - gt.py) > 1) continue;
           const d = (gt.px - e.x) * dir;
           if (d <= 0 || d > 40) continue;
           let flat = true;
@@ -472,7 +486,10 @@
       const keys = route.map((st) => gateKey(st.gate));
       let first = null;
       const want0 = route.length ? wantedSkill(route[0].gate, ctx.plan) : null;
-      if (keys.length) for (const c of out) if (c.kind === "assign" && c.gate && gateKey(c.gate) === keys[0] && c.skill === want0 && (!first || Solver.gateFit(c) > Solver.gateFit(first))) first = c;
+      if (keys.length) for (const c of out) if (c.kind === "assign" && c.gate && !c.turn && gateKey(c.gate) === keys[0] && c.skill === want0 && (!first || Solver.gateFit(c) > Solver.gateFit(first))) first = c;
+      // the gate wants a turn first and no moment heads its way yet: the turn is the route's first move (the latest
+      // moment that makes it: room left between the gate's work and the blocker for what comes after)
+      if (!first && keys.length && route[0].turn) for (const c of out) if (c.kind === "assign" && c.turn && c.gate && gateKey(c.gate) === keys[0] && c.skill === (route[0].how || "BLOCKER") && (!first || c.prior > first.prior || (c.prior === first.prior && c.frame > first.frame))) first = c;
       if (dbgLem) console.log("  debug plan macro: keys " + keys.join(" ") + " first " + (first ? first.skill + ">" + first.lemId + "@" + first.frame : "none") + " skilled steps " + steps.filter((st) => st.gate.skill && !st.gate.twin).length);
       if (first) push({ kind: "plan", frame: first.frame, why: "plan", prior: 3, first, keys });
     }

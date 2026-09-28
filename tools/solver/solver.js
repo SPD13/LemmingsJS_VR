@@ -125,7 +125,8 @@
       // its post), with the lemmings as they stand then - not at the rollout's end, where the worker who takes the
       // next gate may long have left, and not with the terrain the plan's later entries will make
       let after = null;
-      const changedAfter = planned && this._planVersion() !== this._graphVersion; // (the lead pass too: its builder stands on its bricks at the node)
+      // (with no plan at the node as well: a bridge one builder short of the stock has one once its builder has laid it)
+      const changedAfter = this._planVersion() !== this._graphVersion; // (the lead pass too: its builder stands on its bricks at the node)
       if (changedAfter) {
         const last = plan.length ? plan[plan.length - 1] : null;
         const done = last && last.type === "assignment" ? events.find((e) => e.lemId === last.lemId && e.frame > node.frame && (e.type === "WORK_END" || e.type === "SHRUG" || e.type === "BLOCK" || e.type === "EXIT")) : null;
@@ -214,6 +215,40 @@
      * The crowd held behind the lead: at `cand.frame` (a frame before the lead's first move) the lemming just
      * behind the lead - the same way, six to eighty pixels back - is made a blocker; the node carries the hold.
      */
+    /**
+     * Would any lemming come to the builder's side of a guard blocker `G` set behind builder `B` heading `dir` -
+     * one still to come, or elsewhere on its way round, landing or walking into the region ahead of the guard
+     * (the crowd's way in, or the hatch's drop), or already ahead of it in the region? It would pass the guard and
+     * follow the builder - lost, like the guard itself. More of them than the count can spare, and the guard is no
+     * use: true then (the trace says who).
+     */
+    _passer(planned, B, G, dir, target) {
+      const world = this.world, graph = planned && planned.graph, R = Solver.Regions;
+      if (!graph) return false;
+      const reg = R.regionOfLemming(graph, B.x, B.y);
+      const ahead = (x) => (x - G.x) * dir > 0;
+      // the crowd's way into the region: its route's gate in, the arrival a bridge's length past a builder's start
+      const into = (st) => st.gate.to === reg || (graph.regions[reg].alias !== undefined && st.gate.to === graph.regions[reg].alias);
+      const steps = planned.steps || [];
+      const st = reg >= 0 ? (steps.find((st) => st.who === "group" && into(st)) || steps.find(into)) : null;
+      const entryX = st ? st.gate.x + (st.gate.dir || 0) * (st.gate.builders ? 24 * st.gate.builders : 4) : null;
+      const hatch = world.level.gadgets.find((gd) => gd.effect === "WINDOW");
+      const entryAhead = entryX !== null && ahead(entryX);
+      const passers = [];
+      if (world.game.lemmingsToRelease > 0 && hatch && ahead(hatch.triggerRect.x0)) for (let n = 0; n < world.game.lemmingsToRelease; n++) passers.push("the hatch");
+      for (const L2 of world.game.lemmings) {
+        if (L2 === B || L2 === G || L2.removed || L2.action === Lemmix.BA.BLOCKING) continue;
+        const r2 = R.regionOfLemming(graph, L2.x, L2.y);
+        // in the region: ahead of the guard and between it and the builder, or heading back toward the guard (it
+        // bounces off the field toward the builder); past the builder and walking on, it is lost guard or no guard
+        if (r2 === reg ? ahead(L2.x) && ((B.x - L2.x) * dir > 0 || L2.dx === -dir) : entryAhead) passers.push(L2.identifier);
+      }
+      const spare = Solver.upperBound(world.game, this.analysis) - target - 1; // the guard is lost as well
+      const bad = passers.length > Math.max(0, spare);
+      if (bad && this.trace && this.log) this.log("  no guard " + G.identifier + " behind " + B.identifier + ": " + passers.join(", ") + " would come to its far side (" + passers.length + " to lose, " + Math.max(0, spare) + " to spare)" + (entryX !== null ? " (the way in at x" + entryX + ")" : ""));
+      return bad;
+    }
+
     _guard(node, cand, target, lemFilter) {
       const world = this.world;
       if (!this._goto(node)) { this.dropped.ended++; return null; }
@@ -299,7 +334,10 @@
       const chain = [];
       // a hold carried over from the node's own chain (a long route: the crowd stays held from edge to edge)
       let cur = node, held = node.held || null;
-      const longRoute = (n) => { const rt = Solver.planRoute(n.planned, n.plan); return rt.filter((st) => st.gate.skill && !st.gate.twin).length >= 3; };
+      // the crowd stays held while the route ahead has terrain still to be worked (a skilled gate the crowd cannot
+      // pass on its own): let go before that, it walks the bridges built so far and off the end of the next one, or
+      // off the edge a miner's ramp has yet to cut short
+      const longRoute = (n) => { const rt = Solver.planRoute(n.planned, n.plan); return rt.some((st) => st.gate.skill && !st.gate.twin && !st.gate.perLemming); };
       for (let i = 0; i < 6 && cur; i++) {
         // the route's next gate, from the node's own plan each time (the plan moves on with every gate taken):
         // the candidate's own pick for the first, then the best moment boosted for that gate among the child's
@@ -308,11 +346,13 @@
         if (i === 0) pick = cand.first;
         else {
           const route = Solver.planRoute(cur.planned, cur.plan);
-          if (!route.length) break;
+          if (!route.length) { if (this.trace && this.log) this.log("  macro: the route is done" + (cur.planned ? " (plan " + cur.planned.cost + ")" : " (no plan)")); break; }
           const key = Solver.gateKey(route[0].gate), want = Solver.wantedSkill(route[0].gate, cur.plan);
-          for (const c of cur.candidates || []) if (c.kind === "assign" && c.gate && Solver.gateKey(c.gate) === key && c.skill === want && (!pick || Solver.gateFit(c) > Solver.gateFit(pick))) pick = c;
+          for (const c of cur.candidates || []) if (c.kind === "assign" && c.gate && !c.turn && Solver.gateKey(c.gate) === key && c.skill === want && (!pick || Solver.gateFit(c) > Solver.gateFit(pick))) pick = c;
+          // (the gate wants a turn first: the turn is the move)
+          if (!pick && route[0].turn) for (const c of cur.candidates || []) if (c.kind === "assign" && c.turn && c.gate && Solver.gateKey(c.gate) === key && c.skill === (route[0].how || "BLOCKER") && (!pick || c.prior > pick.prior || (c.prior === pick.prior && c.frame > pick.frame))) pick = c;
         }
-        if (!pick) break;
+        if (!pick) { if (this.trace && this.log && i > 0) { const rt = Solver.planRoute(cur.planned, cur.plan); this.log("  macro: no moment for " + (rt.length ? Solver.gateKey(rt[0].gate) + " " + Solver.wantedSkill(rt[0].gate, cur.plan) + (rt[0].turn ? " (turn)" : "") : "an empty route")); } break; }
         if (!this._goto(cur)) break;
         // a bridge with a crowd close behind is a cliff while it is built (the followers walk off the bricks' end): the
         // one just behind the builder is made a blocker first, and bombed once the bridge stands
@@ -329,19 +369,44 @@
               const d = (B.x - L2.x) * B.dx; // behind the builder, the same way
               if (d >= 6 && d <= 80 && d < bestD) { bestD = d; bestL = L2; }
             }
+            // no guard where the lemmings still to come land on the builder's side of it (the crowd's way into the
+            // region, or the hatch's drop, ahead of the guard): they would pass it and follow the builder
+            // no guard where lemmings would come to the builder's side of it - one still to come, or elsewhere on
+            // its way round, landing or walking into the region ahead of the guard (the crowd's way in, or the
+            // hatch's drop), or already ahead of it in the region: they would pass it and follow the builder
+            if (bestL && this._passer(cur.planned, B, bestL, B.dx, target)) bestL = null;
             if (bestL && world.assign(bestL, "BLOCKER")) { guard = bestL.identifier; world.step(1); }
           }
         }
         if (pick.frame > world.frame) world.step(pick.frame - world.frame);
-        if (world.frame !== pick.frame) break;
+        if (world.frame !== pick.frame) { if (this.trace && this.log) this.log("  macro: the world stopped at " + world.frame + " before " + pick.skill + ">" + pick.lemId + "@" + pick.frame); break; }
         const L = world.lemmingById(pick.lemId);
-        if (!L || !world.assign(L, pick.skill)) break;
+        if (!L || !world.assign(L, pick.skill)) { if (this.trace && this.log) this.log("  macro: " + pick.skill + ">" + pick.lemId + "@" + pick.frame + " refused"); break; }
         world.step(1);
         let child = this._child(cur, Object.assign({}, pick, { why: pick.why + (guard ? " plan+hold(" + guard + "@" + (pick.frame - 1) + ")" : " plan") }), target, lemFilter, true);
         if (!child) break;
         chain.push(child);
-        if (child.dead || child.solved) break;
+        if (child.dead || child.solved) { if (this.trace && this.log && child.dead) this.log("  macro: dead (" + child.dead + ")"); break; }
         if (guard) held = { id: guard, builder: pick.lemId, frame: pick.frame };
+        // no one to guard with at the builder's start (the crowd still on its way round): the first to come into the
+        // region behind the builder while it builds is made the blocker where it comes in - a node of its own
+        if (bridge && !guard && !held && child.events && world.skillCounts().BLOCKER > 0 && world.skillCounts().BOMBER > 0 && pick.gate.dir) {
+          const R = Solver.Regions, graph = child.planned && child.planned.graph, dir = pick.gate.dir;
+          const done = child.events.find((e) => e.lemId === pick.lemId && e.frame > pick.frame && (e.type === "WORK_END" || e.type === "SHRUG"));
+          const reg = graph ? R.regionOfLemming(graph, pick.x, pick.y !== undefined ? pick.y : 0) : -1;
+          const late = graph && reg >= 0 ? child.events.find((e) => e.lemId && e.lemId !== pick.lemId && e.frame > pick.frame + 1 && (!done || e.frame < done.frame)
+            && e.type !== "DEATH" && e.type !== "FALL" && e.type !== "SPAWN" && (e.type === "TURN" ? -e.dx : e.dx) === dir && (pick.x - e.x) * dir >= 6 && (pick.x - e.x) * dir <= 120
+            && R.regionOfLemming(graph, e.x, e.y) === reg) : null;
+          if (late && this._goto(child)) {
+            world.step(late.frame - world.frame);
+            const G = world.lemmingById(late.lemId), B = world.lemmingById(pick.lemId);
+            if (G && B && world.frame === late.frame && !this._passer(child.planned, B, G, dir, target) && world.assign(G, "BLOCKER")) {
+              world.step(1);
+              const held2 = this._child(child, { kind: "assign", lemId: late.lemId, skill: "BLOCKER", frame: late.frame, why: "hold:guard late(" + pick.lemId + ")" }, target, lemFilter, true);
+              if (held2 && !held2.dead) { chain.push(held2); child = held2; held = { id: late.lemId, builder: pick.lemId, frame: pick.frame }; if (this.trace && this.log) this.log("  late guard: " + late.lemId + " at " + late.x + " f=" + late.frame); }
+            }
+          }
+        }
         // the crowd stays held while the route goes on over bridges (the next gate another bridge, taken by the same
         // hand as often as not); it is let go - the blocker bombed, a node of its own - once the next gate is no
         // bridge, or the chain ends
@@ -468,6 +533,8 @@
       const graph = this._graph;
       if (!graph) return null;
       const skills = this._skills();
+      // the lead pass: one lemming acts, so no turn by a blocker (it would be the lead itself, and stand there)
+      if (lemFilter && skills.BLOCKER) skills.BLOCKER = 0;
       // a blocker is spent unless a walker frees it: then it is a lemming of the region beside it, a walker dearer
       const walkers = skills.WALKER > 0;
       const blocking = game.lemmings.filter((L) => !L.removed && !L.cannotReceiveSkills && L.action === BLOCKING);
@@ -526,7 +593,7 @@
       }
       for (const L of one ? [one] : alive) {
         let r = -1;
-        if (onBridge.has(L)) r = onBridge.get(L).from;
+        if (onBridge.has(L)) { const bg = onBridge.get(L); r = bg.workIn !== undefined && !bg.landed ? bg.workIn : bg.from; }
         else if (L.action === CLIMBING || L.action === HOISTING) r = R.regionOfClimber(graph, L.x, L.y, L.dx); // on its way to the wall's top
         if (r < 0) r = R.regionOfLemming(graph, L.x, L.y);
         if (r < 0 && L.action === BLOCKING) r = Math.max(R.regionOfLemming(graph, L.x - R.CELL, L.y), R.regionOfLemming(graph, L.x + R.CELL, L.y));
@@ -596,11 +663,14 @@
       // follower's own climber at the seed) is never starved by a deep run of nodes
       // that look better - the score is the parent's, and a parent that saved two
       // lemmings outranks the seed whatever its followers' prospects
+      // - and one per seed at the top: a seeded root (the lead's way in, its crowd dying after it) scores over the
+      // bare root, whose own route is the crowd's, and would take every pop at that depth
       const open = new Map();
       let total = 0;
+      const heapKey = (node) => (node.depth === 0 ? -1 - node.id : node.depth);
       const pushEdges = (node) => {
-        let heap = open.get(node.depth);
-        if (!heap) { heap = new Heap((e) => e.f); open.set(node.depth, heap); }
+        let heap = open.get(heapKey(node));
+        if (!heap) { heap = new Heap((e) => e.f); open.set(heapKey(node), heap); }
         for (const c of node.candidates || []) { heap.push({ node, cand: c, f: node.score + 100 * c.prior * (this.noise ? 1 + this.noise * (this.rng() - 0.5) : 1) }); total++; }
         // the node's events and candidates have done their work: the edges hold what the
         // search still needs, and a long search keeps tens of thousands of nodes alive
@@ -611,7 +681,9 @@
       for (const seed of seeds) {
         this.world.reset(seed.plan);
         if (seed.frame > 0) this.world.step(seed.frame);
-        const node = this._makeNode(null, Solver.copyPlan(seed.plan), target, lemFilter, seed.frame === 0 && !seed.plan.length);
+        // (a seeded root is the bare root's state at frame 0 with a plan pending: never the bare root's twin)
+        const node = this._makeNode(null, Solver.copyPlan(seed.plan), target, lemFilter, seed.frame === 0 && !seed.plan.length, seed.plan.length > 0);
+        if (this.trace && this.log) this.log("  seed: " + (node ? "n" + node.id : "dropped") + " plan [" + seed.plan.map(planEntry).join(" ") + "]" + (node ? " -> saved " + node.outcome.saved + " lost " + node.outcome.lost + " plan " + (node.planned ? node.planned.cost : "-") + " candidates " + (node.candidates || []).length : ""));
         if (node) { node.isRoot = true; pushEdges(node); }
         if (this._done(target, lemFilter)) return this.best;
       }
@@ -621,15 +693,14 @@
       const pops = new Map();
       while (total > 0 && now() < (typeof deadline === "function" ? deadline() : deadline)) {
         if (this.onProgress && now() - this._lastReport > 1000) this.report();
-        let heap = null, bestKey = Infinity;
+        let heap = null, bestKey = Infinity, chosen = null;
         for (const [d, h] of open) {
           if (!h.size) continue;
-          const key = ((pops.get(d) || 0) + 1) * (1 + 0.25 * d);
-          if (key < bestKey) { bestKey = key; heap = h; pops.set(-1, d); }
+          const key = ((pops.get(d) || 0) + 1) * (1 + 0.25 * Math.max(0, d));
+          if (key < bestKey) { bestKey = key; heap = h; chosen = d; }
         }
         if (!heap) break;
-        const d = pops.get(-1);
-        pops.set(d, (pops.get(d) || 0) + 1);
+        pops.set(chosen, (pops.get(chosen) || 0) + 1);
         const edge = heap.pop();
         total--;
         if (this.best && edge.node.skillsUsed + 1 > this.best.skillsUsed && this.best.saved >= this.analysis.maxSavable) continue;

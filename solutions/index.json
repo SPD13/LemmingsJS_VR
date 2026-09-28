@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated": "2026-09-19T13:57:52.121Z",
+ "generated": "2026-09-28T16:03:00.256Z",
  "solverVersion": "0.1.0",
  "levels": {
   "LemmingsPlus_All_20201114/Holiday_Lemmings_Plus/Arctic/23_58_12_24.nxlv": {
@@ -12601,7 +12601,7 @@
    "optimal": false
   },
   "Lemmings_Redux/Gentle/Lemmings_in_the_attic.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Lemmings_in_the_attic.nxrp",
    "needed": 20,
    "count": 30,
@@ -12612,23 +12612,31 @@
     "steel",
     "water"
    ],
-   "expansions": 4644,
-   "elapsedMs": 108096
+   "expansions": 1955,
+   "elapsedMs": 112490,
+   "saved": 22,
+   "skillsUsed": 20,
+   "completionFrame": 2604,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Let's_be_careful_out_there.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Let's_be_careful_out_there.nxrp",
    "needed": 15,
    "count": 30,
-   "tier": 2,
+   "tier": 1,
    "solverVersion": "0.1.0",
    "maxSavable": 30,
    "features": [
     "steel",
     "water"
    ],
-   "expansions": 8653,
-   "elapsedMs": 108106
+   "expansions": 262,
+   "elapsedMs": 9360,
+   "saved": 21,
+   "skillsUsed": 7,
+   "completionFrame": 1953,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Let's_go_to_the_moon!.nxlv": {
    "status": "solved",
@@ -12702,7 +12710,7 @@
    "optimal": false
   },
   "Lemmings_Redux/Gentle/Pillar_talking.nxlv": {
-   "status": "unsolved",
+   "status": "solved",
    "file": "Lemmings_Redux/Gentle/Pillar_talking.nxrp",
    "needed": 8,
    "count": 10,
@@ -12710,8 +12718,12 @@
    "solverVersion": "0.1.0",
    "maxSavable": 10,
    "features": [],
-   "expansions": 11558,
-   "elapsedMs": 108053
+   "expansions": 2726,
+   "elapsedMs": 108569,
+   "saved": 8,
+   "skillsUsed": 10,
+   "completionFrame": 2735,
+   "optimal": false
   },
   "Lemmings_Redux/Gentle/Quest_for_Kieran.nxlv": {
    "status": "solved",

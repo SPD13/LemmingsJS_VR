@@ -822,6 +822,240 @@ the lead is out; recorded and verified (82 solutions, 0 mismatches).
 Regressions hold: Keep your hair 9, Snuggle 4, Up For A Walk 2 at tier 1,
 CindyLand 37/40 with 8 at tier 2.
 
+### Later (the /solve-next run after it): Lemmings in the attic - a bash high up a wall, by a long staircase
+
+*Lemmings in the attic* (Redux, Gentle: 30 lemmings, save 20, fifty
+builders): one large room, the hatch near its right wall, the floor's
+left end a drop out of the level, the exit in a chamber inside the right
+wall 88 px over the floor, a twelve-pixel wall before it and another
+inside it. By hand: a blocker on the left (the turn, and the crowd's
+hold), seven or eight builders from the pixel that brings the last shrug
+to the wall's face, a basher from the top, a second basher in the
+chamber - ten skills, 29 of 30. Unsolved at tiers 1 and 2, the lead pass
+without a way in. Two things:
+
+- **A false gate.** A tunnel bashed up to steel had a climb gate up the
+  steel "to whatever floor is at its top" with no look at the climber's
+  column: fifty pixels of brick over the tunnel here, and a cost-3 plan
+  (bash, climb, bash) both passes spent their time on. The gate wants the
+  column open over the tunnel now (a shaft).
+- **No bash higher than two builders at the wall's foot.** The raised
+  bash stood for one or two builders laid at the wall, staircases for six
+  at most. New (`highWalls` in regions.js): for a wall taller than that,
+  every height twelve pixels a builder up it (3 to `MAX_STAIR` = 10) is
+  tried for a tunnel - free of steel and of arrows against it - that comes
+  out on a floor (a step up at most, a fall short of the splat height);
+  the start is the floor's pixel from which the k-th builder shrugs
+  nearest the wall, the bricks laid by `buildFrom`. The staircase's top is
+  a **landing in waiting** (a virtual region, as a tunnel is, `alias` the
+  floor's region): a `buildup` gate of k builders into it with its start
+  pixel - so the search's bridge machinery carries it: the first builder
+  by the pixel, the next at each shrug, the guard - and an ordinary `bash`
+  gate out of it.
+- **The run-in** (`runIn`, `turnCost`): a gate worked from far back in
+  its region is passed the right way only by a lemming the region's far
+  end has turned - free when that end is a wall, a blocker or a force
+  field, a turn of its own (blocker and bomber) when it is a drop, and no
+  matter when the hatch lies behind the start heading that way. The
+  blocker for such a turn is boosted behind the start only.
+- **The staircase under way.** The graph rebuilt over the first bricks
+  lost the gate (its start pixel under a brick, the floor cut in two by
+  the staircase): plan none from the second builder on, the next builders
+  unboosted and given a few frames after the shrug, the staircase three
+  pixels along and its last builder turned back at the wall. The gate now
+  knows its own line: j builders standing (a brick's top on the line,
+  twelve up a builder), the rest simulated from their top, the gate kept
+  with its first pixel so `bridgeProgress` counts on.
+
+The lead pass finds the way in in under a hundred expansions - a builder
+at the left drop to the left wall for the turn (which also closes the
+drop), seven builders from the pixel each at the last one's shrug, the
+basher at the top, the basher in the chamber. **Solved at tier 2: 22/30
+with 20 skills, frame 2604** (83 solutions). Seven fixtures (64): the
+chamber's gate and cost, the hatch behind the start, the far end a wall,
+a drop, no blocker, the level solved with seven builders and a basher,
+no climb out of a tunnel under rock. Regressions hold (Builders will help
+you here 20/20 with 6 - it was 19/20 with 9 -, You need bashers 3, Keep
+your hair 9, Let's go to the moon 25/30, CindyLand 37/40 with 8 at tier 2).
+
+Open: the crowd. It walks up the staircase under construction and off its
+top (a splat once the sixth builder is laid); the crowd pass answers with
+a second staircase by another lemming and two floaters instead of a hold
+at the staircase's foot until the bash is through (twelve skills, 28 or
+29 saved), and tier 1 has no time for a crowd pass after the lead's
+(2800 frames a rollout). The next four Gentle levels tried at tier 1 with
+the new gate stay unsolved (Let's be careful out there, Pillar talking,
+Rainbow Island, The Crankshaft): the tool has solved its own level only
+so far.
+
+### Later (the /solve-next run after that): Let's be careful out there - a landing pad, the turn as the route's move, a bridge over a blocker
+
+*Let's be careful out there* (Redux, Gentle: 30 lemmings, save 15, ten
+floaters, twenty builders): the hatch over a platform (top y 74) whose
+right end is a 78 px fall - sixteen more than a lemming survives - onto
+the exit's floor, a floor eight pixels thick with both ends open onto the
+void; the platform's left end falls into water. Unsolved at tiers 1 and
+2: the lead pass is out with one floater, the crowd pass had nothing (a
+floater each is ten of the fifteen).
+
+By hand, in the engine (22 of 30, seven skills): a floater down and a
+blocker of it short of the exit; a second floater down, turned by it, two
+builders heading left from the pixel that puts their bricks seventeen
+pixels up across the fall's column - a **landing pad**, the fall cut to
+61 -; then a builder from the open floor between the pad and the
+blocker, over the blocker's head and down before the exit. What the
+engine said on the way: a bomber on that blocker blows through the thin
+floor and the crowd falls out of the level; a bridge started on the pad
+is blocked by the pad's own bricks; two builders over the blocker
+overshoot the exit.
+
+What was added:
+
+- **Falls at the pixels** (`pixelFall` in regions.js): a drop the cells
+  call deadly is measured from the edge the walker steps off to the first
+  ground under the column beyond it; 61 px or less (`SAFE_FALL`, from the
+  engine's count: it starts at 3 and splats past 62) is a free drop -
+  bricks the cells do not see count, so a pad that stands opens the drop.
+- **The pad gate** (`pad`, `workIn`): a drop too long by less than three
+  builders' rise gets a gate of k builders from the landing floor's pixel
+  that puts the bricks over the fall's column high enough, either way
+  (with the fall's way only where both ends of the floor turn the
+  worker), laid by `buildFrom` on flat floor of the landing region. It is
+  the first gate **worked in the region it leads to**: nobody's from
+  above until opened (`sweep`), the lead's by its own way down first
+  (`leadWay` reaches `workIn`, the floater its own cost), free for the
+  crowd after. The plan here: floater, turn, pad - cost 5, the crowd
+  riding it.
+- **The turn as the route's move.** A gate's turn by blocker was boosted
+  but no part of the route macro, so a route whose first gate wanted one
+  never started. The turn candidate now carries its gate (`turn`), stands
+  behind the gate's own pixel and short of an exit on the way
+  (`behind`), and is the macro's pick when no moment heads the gate's way
+  yet - the latest such moment, room left between the work and the
+  blocker. The first one down becomes the blocker, the next the worker.
+- **A per-lemming gate is worked by the lead's own entry** (`worked` in
+  planRoute): the first floater's entry at the drop made the route skip
+  the second lead's floater, and the macro stopped for want of a builder
+  on a floor nobody had reached.
+- **Over a blocker, and no bomber through a thin floor.** A blocker's end
+  gets an `overblock` gate - one builder from 20 px before it on flat
+  floor (the field's six pixels to its side, twelve for the six it rises
+  over the feet, a brick's margin; 18 works in the engine), walked off
+  beyond it - and loses its `unblock` bomber where the crater (the mask
+  laid fourteen over the feet) goes through the floor onto a deadly fall
+  or out of the level (`craterDeadly`).
+- The macro says in the trace why its chain ended (`macro: no moment for
+  <gate> <skill>`), which is how the per-lemming fault was found.
+
+**Solved at tier 1: 21/30 with 7 skills, frame 1953** (9.4 s; 84
+solutions) - one macro chain: floater, blocker, floater, the pad's two
+builders by the pixel and the shrug, a crowd member's builder over the
+blocker. No pen was needed (the bridge over the blocker stands before the
+crowd drifts to the floor's left end), so none was built: the search's
+hold candidates are there should a level want one. Seven fixtures (71):
+the pad gate and its pixel, the plan with the crowd riding it, no pad for
+a group on its own, the pad standing as a free drop, the level solved
+with a floater and two builders, a blocker on a thin floor over the void
+(over it, never bombed), on a thick floor (either). Regressions hold
+(Only floaters 10/10, Tailor-made for blockers 17/20 with 3, Builders
+will help you here 20/20 with 6, Keep your hair 29/30 with 9, Downwardly
+Mobile 20/20 with 1; A Block from Home 12/20 with 7 on this tree and on
+the committed solver alike - its stored 13/20 with 3 is an older
+solver's).
+
+Reach: the gates appear where the structure does (two pads on Catch more
+floaters, one on Konnichiwa Lemming-san, six high staircases on The
+Crankshaft) but none of the nine Gentle levels left solves at tier 1 yet.
+
+### Later (28 September): Pillar talking - a miner's ramp off a deadly edge, and the crowd's hold on the way
+
+*Pillar talking* (Redux, Gentle: 10 lemmings, save 8, nine builders, four
+miners, four diggers, two blockers and two bombers): the hatch over a bar
+whose right end steps down into a walled pen, its left end a fall out
+of the level; the exit far left on a platform over the void, reached
+from the right by a slope; between them a tall pillar whose top is two
+builders from the bar and whose left flank hangs 70 px over a lower
+slope. Unsolved at tiers 1 and 2: the lead pass had a way in with ten
+skills (a deep dig shaft off the pillar's top, fine for the lead, deadly
+for the crowd: no floaters) and the crowd pass 1400 dead nodes. By hand:
+from the pen two staircases back up to the bar, two builders to the
+pillar's top, a miner from twenty pixels back on its top, whose ramp
+comes out of the flank 16 px lower - the fall 56 -, then four builders
+along the bottom slopes to the exit's platform; a blocker behind the
+staircase builder holds the pen crowd, bombed once the way is built.
+
+What was added, in the order the level asked:
+
+- **A miner's ramp off a deadly edge** (`offEdge` mine gates, from the
+  `pads` list of deadly drops): a miner given some way back from the edge
+  comes out of the terrain's side or underside lower down, and the fall
+  from there (`drop` in `mineFrom`'s answer, the ramp's end to the ground)
+  is what everyone walking down the ramp falls - the nearest start whose
+  fall is within the safe 61, the ramp dug as the engine digs it, no
+  steel in it. The pixel is the gate's (`px`), placed by the ring.
+- **The lead pass plans without blockers** (`_plan` with `lemFilter`): a
+  turn by blocker in the lead's plan meant the lead itself, standing
+  there; the route macro took it as the plan's first move.
+- **A dig gate's pixel**: the candidate's twenty-pixel tolerance put the
+  digger over the pillar (a shaft nine pixels wide, down its side and out
+  of the level); dig gates carry `px`/`py` and take the `pixel!` moment.
+- **A heap per seed at the top** (`heapKey`): the seeded root (the lead's
+  way in, deadly for the crowd) scored over the bare root and took every
+  pop at depth 0, the bare root's own route (the crowd's) never tried.
+  Also a scratch slot in `pops` collided with the root's key.
+- **A turn toward a deadly drop costs a hold** (`deadlyAhead` in
+  `turnCost`): the crowd turned with the worker walks off the drop while
+  the work is done, so the turn is four (a second blocker and bomber),
+  which lets the pen route win a tie against the turn on the bar.
+- **Bricks are floor** (the second pass over `floor` in `build`): a
+  staircase a pixel thick fills no cell by half, and the cells read it as
+  steps of one cell with nothing between - the crowd's plan wanted the
+  bridge to the pillar built again, over the stock. A cell of air over a
+  cell of air is floor when every column has ground within the two cells
+  under it, the most in the first, and no floor of the cells' own stands
+  a row down. `groundTop` reaches the whole next cell.
+- **The hold stays while terrain is to be worked** (`longRoute`: any
+  skilled gate ahead, not three): released after the bridge, the crowd
+  walked to the pillar's edge before the ramp.
+- **Who a guard keeps out** (`_passer`): a blocker behind the builder
+  holds nobody who comes to its far side after - the hatch's drop, the
+  crowd's way into the region, a lemming there already heading back into
+  the field. Their count against the count's slack (the guard is lost as
+  well) decides; here N9 comes late and is the one to spare. A **late
+  guard** when nobody stands behind the builder as it starts: the first
+  to come into the region behind it, blocked where it comes in.
+- **The after-plan without a plan** (`changedAfter`): a node with no
+  plan (a bridge one builder over the stock) got none once its builder
+  had laid its bricks either; the plan at the action's end is taken
+  whether or not the node had one.
+- **The rest of the lead's group keeps its way** toward a drop (either
+  way only once a wall turns it), which found two pad fixtures wrong: a
+  pad's `cheapest` key carries its drop's way, and **the level's sides
+  are drops with no bottom**, not the walls the cells outside the level
+  read as. And a wall turns a lemming in the exit's region for nothing
+  when the exit does not stand between the gate's spot and that end
+  (`exitXs`).
+- The macro logs why a chain ends (the world stopped, refused, the route
+  done, dead) and each seed's node under --trace.
+
+**Solved at tier 2: 8/10 with 10 skills, frame 2735** (85 solutions):
+the two staircases, the guard N4 in the pen, two builders to the pillar,
+the miner off its top, four builders below, the guard bombed - one lost
+to the guard, one late walker. Not at tier 1: 130 expansions do not reach
+the ninth gate. Five fixtures (76): the ramp off a deadly edge and its
+fall, none through steel, the level solved with one miner (a follower
+close behind a miner passes it over the block's top: the fixture spaces
+them), a staircase of bricks joining its floors, a turn toward a deadly
+end costing four. Regressions: Builders will help you here 20/20 with 2
+(was 6), Snuggle up 20/20 with 4 (was 18/20 with 5), Keep your hair 29/30
+with 9, Now use miners 10/10 with 11, Tailor-made 17/20 with 3, Just dig
+10/10 with 1, Let's be careful 21/30 with 7; Get a little extra help
+12/20 with 5 at tier 1 and 14/20 with 4 at tier 2 (the committed solver
+15/20 with 7 at tier 1, the stored solution 20/20 with 6 from an older
+one): solved still, the count lower. Reach: The Crankshaft, Konnichiwa
+Lemming-san and Turn around, young lemmings! now have a lead in at tier
+1 (none before); none solves yet.
+
 ### What limits the solver now
 
 1. **Routes the graph does not hold.** Stacks And Stones, Climb Up Hang
@@ -831,7 +1065,10 @@ CindyLand 37/40 with 8 at tier 2.
    a step for a stoner, a shimmier let go at a chosen tooth).
 2. **Timing anchors.** A jump or a shimmy at a precise pixel is found by
    the sweep at tier 2 or 3, not at tier 1 (Jumping Lem Flash takes 81 s).
-3. **Cost.** A crowded level's rollout runs to the last spawn and beyond
+3. **The crowd pass at tier 1.** A route of eight or nine gates is not
+   followed in ten seconds when the crowd must be held on the way (Pillar
+   talking: tier 2 only).
+4. **Cost.** A crowded level's rollout runs to the last spawn and beyond
    unless every lemming is foretold; a stuck crowd is never foretold, so
    the levels where the crowd paces still afford a few hundred expansions
    at tier 1.
