@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "style": "flopsy_scrapbrain",
+  "generator": "tools/scenery-gen",
+  "texels_round": 2048,
+  "eye_m": 1.6,
+  "sky": {
+    "zenith": "#010606",
+    "high": "#1f2928",
+    "horizon": "#4f5755",
+    "below": "#3f4544",
+    "radius_m": 120,
+    "dither": true
+  },
+  "fog": {
+    "distance_m": 24,
+    "max": 0.94,
+    "mist": 0.5,
+    "mist_m": 2.5
+  },
+  "ground": {
+    "file": "ground.png",
+    "tile_m": 1.28,
+    "radius_m": 115,
+    "grade": 0.285,
+    "desat": 0.35
+  },
+  "layers": [
+    {
+      "name": "rubble",
+      "file": "layer-1-rubble.png",
+      "radius_m": 3.8,
+      "bottom_m": 0,
+      "height_m": 0.711,
+      "grade": 0.377,
+      "desat": 0.35,
+      "fade_top": 0
+    },
+    {
+      "name": "pillars",
+      "file": "layer-2-pillars.png",
+      "radius_m": 6.5,
+      "bottom_m": 0,
+      "height_m": 5.205,
+      "grade": 0.335,
+      "desat": 0.4,
+      "fade_top": 0
+    },
+    {
+      "name": "overhang",
+      "file": "layer-3-overhang.png",
+      "radius_m": 9.5,
+      "bottom_m": 5,
+      "height_m": 8.015,
+      "grade": 0.38,
+      "desat": 0.4,
+      "fade_top": 0.45
+    },
+    {
+      "name": "outcrops",
+      "file": "layer-4-outcrops.png",
+      "radius_m": 14,
+      "bottom_m": 0,
+      "height_m": 8.032,
+      "grade": 0.388,
+      "desat": 0.45,
+      "fade_top": 0
+    },
+    {
+      "name": "ridge",
+      "file": "layer-5-ridge.png",
+      "radius_m": 25,
+      "bottom_m": 0,
+      "height_m": 11.045,
+      "grade": 0.491,
+      "desat": 0.45,
+      "fade_top": 0
+    },
+    {
+      "name": "far",
+      "file": "layer-6-far.png",
+      "radius_m": 44,
+      "bottom_m": 0,
+      "height_m": 16.064,
+      "grade": 0.591,
+      "desat": 0.5,
+      "fade_top": 0
+    },
+    {
+      "name": "horizon",
+      "file": "layer-7-horizon.png",
+      "radius_m": 78,
+      "bottom_m": 0,
+      "height_m": 16.033,
+      "grade": 0.661,
+      "desat": 0.5,
+      "fade_top": 0
+    }
+  ]
+}
