@@ -5368,7 +5368,8 @@ Vfs.boot("", "setup.html", "game").then(function (booted) {
     if (!session) return;
     const game = session.game;
     if (dir) game.queueCmmand(dir > 0 ? new Lemmings.CommandReleaseRateIncrease(1) : new Lemmings.CommandReleaseRateDecrease(1));
-    if (game.gui && "rrHeld" in game.gui) game.gui.rrHeld = dir;
+    if (game.gui && game.gui.setRrHeld) game.gui.setRrHeld(dir);
+    else if (game.gui && "rrHeld" in game.gui) game.gui.rrHeld = dir;
     else if (game.gameGui) game.gameGui.deltaReleaseRate = dir;
   }
 

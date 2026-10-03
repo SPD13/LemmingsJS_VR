@@ -2320,7 +2320,8 @@ var Lemmings;
     class CommandSelectSkill {
         constructor(skill) {
             this.log = new Lemmings.LogHandler("CommandSelectSkill");
-            if (skill)
+            // 0 is a skill: the first cell of a Lemmix panel (the DOS skill types start at 1)
+            if (skill != null)
                 this.skill = skill;
         }
         getCommandKey() {

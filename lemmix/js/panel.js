@@ -136,7 +136,8 @@
         // (until then the canvas is black and there is nothing to emboss)
         reliefFromMasks: true, reliefMasks: null };
       game.panelLayout = this.layout;
-      this.rrHeld = 0;
+      this.rrHeld = 0;      // a release-rate button held down: -1, 0 or 1
+      this.rrNext = 0;      // when it next changes the rate (performance.now)
       this.held = null; // a frame back/forward half held down: {step, next}
       this.flatBackground = false; // the buttons on one plain colour instead of skill_panels.png
       this.icons = {};
@@ -420,8 +421,24 @@
       frame.mask.fill(1);
       this.display.drawFrame(frame, 0, 0);
       this.display.redraw();
-      // a held release-rate button keeps changing it
-      if (this.rrHeld) this.game.queueCmmand(this.rrHeld > 0 ? new Lemmings.CommandReleaseRateIncrease(1) : new Lemmings.CommandReleaseRateDecrease(1));
+    }
+
+    /**
+     * A release-rate button (or key) held down: one change on the press, then one per game
+     * tick once it has been held for HOLD_DELAY_MS - a click changes the rate once. (It used to
+     * change on every render, so the press's own render changed it a second time and any
+     * repaint while held changed it again.)
+     */
+    setRrHeld(dir, now) {
+      this.rrHeld = dir;
+      this.rrNext = (now === undefined ? performance.now() : now) + HOLD_DELAY_MS;
+    }
+
+    /** One game tick (Game.onGameTimerTick): a held release-rate button repeats. */
+    tick(now) {
+      if (!this.rrHeld) return;
+      if ((now === undefined ? performance.now() : now) < this.rrNext) return;
+      this.game.queueCmmand(this.rrHeld > 0 ? new Lemmings.CommandReleaseRateIncrease(1) : new Lemmings.CommandReleaseRateDecrease(1));
     }
 
     /** A held frame back/forward half repeats (CheckFrameSkip): the page polls this every frame. */
@@ -457,8 +474,8 @@
       } else if (what === "cpmreplay") {
         if (upper) game.toggleClearPhysics();
         else if (lower) game.requestLoadReplay();
-      } else if (what === "rrminus") { this.rrHeld = -1; game.queueCmmand(new Lemmings.CommandReleaseRateDecrease(1)); }
-      else if (what === "rrplus") { this.rrHeld = 1; game.queueCmmand(new Lemmings.CommandReleaseRateIncrease(1)); }
+      } else if (what === "rrminus") { this.setRrHeld(-1); game.queueCmmand(new Lemmings.CommandReleaseRateDecrease(1)); }
+      else if (what === "rrplus") { this.setRrHeld(1); game.queueCmmand(new Lemmings.CommandReleaseRateIncrease(1)); }
       else if (what === "pause") game.getGameTimer().toggle();
       else if (what === "nuke") {
         if (game.nukePrepared) { game.queueCmmand(new Lemmings.CommandNuke()); game.nukePrepared = false; }

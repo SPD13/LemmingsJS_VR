@@ -164,6 +164,7 @@
     }
 
     onGameTimerTick() {
+      if (this.gui && this.gui.tick) this.gui.tick(); // a held release-rate button repeats (panel.js)
       this.sim.update();
       for (const L of this.sim.lemmings) if (!L.game) L.game = this;
       // a state every ten seconds, the list thinned as it grows
